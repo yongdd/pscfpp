@@ -246,13 +246,21 @@ namespace Rp {
 
          if (converged){
             iStep_++;
+         } else{
+            Log::file() << "Step: "<< iTotalStep_
+                        << " failed to converge" << "\n";
+         }
 
-            if (Simulator<D,T>::hasRamp()) {
-               Simulator<D,T>::ramp().setParameters(iStep_);
-               updateState();
-            }
+         // Advance the ramp after every attempted step, including a
+         // failed one, so that the parameters reach their final values
+         // after the nStep planned steps
+         if (Simulator<D,T>::hasRamp()) {
+            Simulator<D,T>::ramp().setParameters(iTotalStep_ + 1);
+            updateState();
+         }
 
-            // Analysis (if any)
+         // Analysis (if any) of an accepted step
+         if (converged) {
             analyzerTimer.start();
             if (analyzerBaseInterval != 0) {
                if (analyzerManager().size() > 0) {
@@ -262,10 +270,6 @@ namespace Rp {
                }
             }
             analyzerTimer.stop();
-
-         } else{
-            Log::file() << "Step: "<< iTotalStep_
-                        << " failed to converge" << "\n";
          }
       }
 
