@@ -332,6 +332,18 @@ namespace Rp {
       */
       UnitCell<D> const & headerUnitCell() const;
 
+      /**
+      * Allow averaging kSq over Nyquist index signs only if invariant.
+      *
+      * Called after the space group is read. Forbids averaging kSq of
+      * wavevectors with Nyquist indices over the signs of these indices
+      * (see WaveList::allowNyquistAverage) if an operation of the group
+      * has a rotation matrix that is not a signed permutation (3- or
+      * 6-fold rotations in a hexagonal setting), because the average
+      * would then differ between the waves of a star.
+      */
+      void setNyquistAverage();
+
    };
 
    // Public inline member functions
