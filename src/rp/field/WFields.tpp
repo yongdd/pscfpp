@@ -137,7 +137,10 @@ namespace Rp {
       UTIL_CHECK(nMonomer_ > 0);
       UTIL_CHECK(nBasis > 0);
       UTIL_CHECK(!isAllocatedBasis_);
-      UTIL_CHECK(!hasData_);
+      // The fields may already hold data in r-grid form only (e.g., an
+      // external field read by READ_H_RGRID): readBasis, setBasis and
+      // setRGrid allocate the basis arrays on first use and then set
+      // all field values, as the Mask container does.
 
       nBasis_ = nBasis;
       basis_.allocate(nMonomer_);
@@ -405,6 +408,11 @@ namespace Rp {
    void WFields<D,T>::symmetrize()
    {
       UTIL_CHECK(hasData_);
+      if (!isAllocatedBasis_) {
+         Basis<D> const & basis = fieldIo().basis();
+         UTIL_CHECK(basis.isInitialized());
+         allocateBasis(basis.nBasis());
+      }
       fieldIo().convertRGridToBasis(rgrid_, basis_);
       fieldIo().convertBasisToRGrid(basis_, rgrid_);
       isSymmetric_ = true;
