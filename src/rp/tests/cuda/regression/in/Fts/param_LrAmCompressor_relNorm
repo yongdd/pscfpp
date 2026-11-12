@@ -1,0 +1,7 @@
+LrAmCompressor{
+   epsilon      1.0e-6
+   maxItr       50
+   maxHist      20
+   verbose      0
+   errorType    relNorm
+}
