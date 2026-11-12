@@ -1,0 +1,58 @@
+System{
+  Mixture{
+    nMonomer  2
+    monomers[
+              1.0
+              1.0
+    ]
+    nPolymer  1
+    Polymer{
+      type    linear
+      nBlock  2
+      blocks[
+              0  0.40
+              1  0.60
+      ]
+      phi     1.0
+    }
+    ds   0.01
+  }
+  Interaction{
+    chi(
+         1   0   8.0
+    )
+  }
+  Domain{
+    mesh           32
+    lattice        lamellar
+    groupName      P_-1
+  }
+  FilmEnvironment{
+    normalVecId        0
+    interfaceThickness 0.4
+    excludedThickness  0.5
+    chiBottom[
+                        0.0
+                        0.0
+    ]
+    chiTop[
+                        0.0
+                        0.0
+    ]
+  }
+  AmIteratorBasis{
+    epsilon      1.0e-9
+    maxItr       1000
+    maxHist      25
+    isFlexible   0
+  }
+  LinearSweep{
+    ns            3
+    baseFileName  out/FilmSweepWallChi_
+    nParameter    2
+    parameters[
+                  chi_bottom  0  +3.0
+                  chi_top     0  +3.0
+    ]
+  }
+}
