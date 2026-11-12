@@ -61,12 +61,15 @@ namespace Pscf
          }
       }
 
+      // The AM residual is defined with the inverse of chi. Throw an
+      // exception for a singular chi, rather than letting the GSL error
+      // handler abort the process.
       if (nMonomer() == 2) {
          double det = chi_(0,0)*chi_(1, 1) - chi_(0,1)*chi_(1,0);
          double norm = chi_(0,0)*chi_(0, 0) + chi_(1,1)*chi_(1,1)
                      + 2.0*chi_(0,1)*chi_(1,0);
-         if (fabs(det/norm) < 1.0E-8) {
-            UTIL_THROW("Singular chi matrix");
+         if (norm == 0.0 || fabs(det/norm) < 1.0E-8) {
+            UTIL_THROW("Singular chi matrix: AM iterators need an invertible chi");
          }
          chiInverse_(0,1) = -chi_(0,1)/det;
          chiInverse_(1,0) = -chi_(1,0)/det;
@@ -77,6 +80,9 @@ namespace Pscf
          LuSolver solver;
          solver.allocate(nMonomer());
          solver.computeLU(chi_);
+         if (solver.isSingular()) {
+            UTIL_THROW("Singular chi matrix: AM iterators need an invertible chi");
+         }
          solver.inverse(chiInverse_);
       }
 
@@ -92,6 +98,19 @@ namespace Pscf
          for (k = 0; k < nMonomer_; ++k) { //row
             p_(k,i) = p_(0,i);
          }
+      }
+
+      // The residual divides by sum = e^T chi^{-1} e, which can vanish
+      // for an invertible chi (e.g., zero diagonal, chi_AB = chi_BC = 10,
+      // chi_AC = 40). The AM residual is then undefined.
+      double maxAbsChi = 0.0;
+      for (i = 0; i < nMonomer_; ++i) {
+         for (j = 0; j < nMonomer_; ++j) {
+            if (fabs(chi_(i,j)) > maxAbsChi) maxAbsChi = fabs(chi_(i,j));
+         }
+      }
+      if (!(fabs(sum)*maxAbsChi > 1.0E-10)) {
+         UTIL_THROW("Sum of elements of inverse chi is zero: AM residual undefined for this chi");
       }
 
       for (i = 0; i < nMonomer_; ++i) { //row
