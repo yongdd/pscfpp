@@ -1,0 +1,56 @@
+System{
+  Mixture{
+     nMonomer  2
+     monomers  1.0  
+               1.0 
+     nPolymer  3
+     nSolvent  0
+     Polymer{
+        type    linear
+        nBlock  1
+        blocks  0  1.0
+        phi     0.45
+     }
+     Polymer{
+        type    linear
+        nBlock  1
+        blocks  1  1.0
+        phi     0.45
+     }
+     Polymer{
+        type    linear
+        nBlock  2
+        blocks  0  0.5
+                1  0.5
+        phi     0.1
+     }
+     vMonomer   1.0
+     ds   0.01
+  }
+  Interaction{
+     chi( 
+         0  1     6.0
+     )
+  }
+  Domain{
+     mode    Planar
+     xMin      0.0
+     xMax      8.0
+     nx        401
+  }
+  AmIterator{
+     epsilon   0.00000001
+     maxItr    1000
+  }
+  LinearSweep{
+     ns                2
+     baseFileName      out/blendPhi0Sweep
+     homogeneousMode   0
+     nParameter        3
+     parameters[
+        phi_polymer    0    0.05
+        phi_polymer    1    0.05
+        phi_polymer    2   -0.1
+     ]
+  }
+}
