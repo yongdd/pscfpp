@@ -11,6 +11,7 @@
 #include <rp/fts/brownian/BdStep.h>      // base class
 #include <pscf/field/RField.h>           // member
 #include <util/containers/DArray.h>      // member
+#include <util/containers/FSArray.h>     // member
 
 #include <pscf/backend/TmplDeclare.h>
 
@@ -69,6 +70,13 @@ namespace Rp {
 
       /**
       * Setup before simulation loop.
+      *
+      * If the system is still in the state in which the previous run
+      * of this stepper ended (same w fields and unit cell), the noise
+      * chain of that run is continued, so that a run split into several
+      * SIMULATE commands is the same as one run. Otherwise (first run,
+      * or w fields or unit cell changed since, e.g. by READ_W_RGRID or
+      * ANALYZE), a new chain is started.
       */
       void setup() override;
 
@@ -95,7 +103,7 @@ namespace Rp {
 
       // Private data members
 
-      // New field values
+      // New field values (after a step: the w fields at its end)
       DArray< RFieldT > w_;
 
       // Random displacements (A)
@@ -116,6 +124,14 @@ namespace Rp {
       // Prefactor of -dc_ in deterministic drift term
       double mobility_;
 
+      // Unit cell parameters at the end of the last step.
+      FSArray<double, 6> cellParameters_;
+
+      // True after a step: etaOld is the noise that entered the state
+      // at the end of that step, w_ holds the w fields of that state,
+      // and cellParameters_ its unit cell parameters.
+      bool hasChain_;
+
       // Private member functions
 
       RFieldT& etaNew(int i)
@@ -129,6 +145,12 @@ namespace Rp {
 
       /// Exchange pointer values for etaNew and etaOld.
       void exchangeOldNew();
+
+      /// Is the system in the state at the end of the last step?
+      bool isContinuation();
+
+      /// Store the w fields and unit cell at the end of a step.
+      void storeEndState();
 
    };
 

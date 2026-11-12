@@ -20,6 +20,8 @@
 
 #include <pscf/backend/VecRandom.h>
 #include <pscf/backend/VecOp.h>
+#include <pscf/backend/Reduce.h>
+#include <pscf/crystal/UnitCell.h>
 #include <pscf/math/IntVec.h>
 
 namespace Pscf {
@@ -39,7 +41,9 @@ namespace Rp {
       dwc_(),
       etaNewPtr_(nullptr),
       etaOldPtr_(nullptr),
-      mobility_(0.0)
+      mobility_(0.0),
+      cellParameters_(),
+      hasChain_(false)
    {  ParamComposite::setClassName("LmBdStep"); }
 
    /*
@@ -114,12 +118,55 @@ namespace Rp {
       }
       UTIL_CHECK(dwc_.capacity() == meshSize);
 
-      // Initialize pointers
-      etaOldPtr_ = &etaA_;
-      etaNewPtr_ = &etaB_;
+      // The LM step adds etaOld + etaNew, where etaOld is the noise of
+      // the previous step, which entered the current state. If the
+      // system is still in the state in which the previous run ended,
+      // keep etaOld, as an uninterrupted run would. Otherwise start a
+      // new chain with an old noise drawn here.
+      if (!isContinuation()) {
+         etaOldPtr_ = &etaA_;
+         etaNewPtr_ = &etaB_;
+         generateEtaNew();
+         exchangeOldNew();
+      }
+   }
 
-      generateEtaNew();
-      exchangeOldNew();
+   /*
+   * Is the system in the state at the end of the last step?
+   */
+   template <int D, class T>
+   bool LMBdStep<D,T>::isContinuation()
+   {
+      if (!hasChain_) return false;
+
+      // Compare unit cell parameters
+      UnitCell<D> const & cell = system().domain().unitCell();
+      if (cell.nParameter() != cellParameters_.size()) return false;
+      for (int i = 0; i < cell.nParameter(); ++i) {
+         if (cell.parameter(i) != cellParameters_[i]) return false;
+      }
+
+      // Compare w fields
+      const int nMonomer = system().mixture().nMonomer();
+      for (int i = 0; i < nMonomer; ++i) {
+         VecOp::subVV(dwc_, system().w().rgrid(i), w_[i]);
+         if (Reduce::maxAbs(dwc_) != 0.0) return false;
+      }
+      return true;
+   }
+
+   /*
+   * Store the w fields and unit cell at the end of a step.
+   */
+   template <int D, class T>
+   void LMBdStep<D,T>::storeEndState()
+   {
+      const int nMonomer = system().mixture().nMonomer();
+      for (int i = 0; i < nMonomer; ++i) {
+         VecOp::eqV(w_[i], system().w().rgrid(i));
+      }
+      cellParameters_ = system().domain().unitCell().parameters();
+      hasChain_ = true;
    }
 
    /*
@@ -179,6 +226,10 @@ namespace Rp {
          // Exchange old and new random fields
          exchangeOldNew();
       }
+
+      // After a failure, etaOld (the noise that entered the restored
+      // state) is kept. Store the state for the next setup().
+      storeEndState();
 
       return isConverged;
    }

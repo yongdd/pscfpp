@@ -83,6 +83,18 @@ index value \f$ i \f$, each grid position \f$ {\bf r} \f$ and each time
 step \f$ n \f$ from a Gaussian distribution of zero mean and variance 
 \f$ \overline{[g^{(n)}_{i}({\bf r})]^{2}} = \gamma \Delta V \f$.
 
+<b> Noise chain across commands </b>: 
+The noise \f$ g^{(n-1)} \f$ of the previous step is kept from one 
+SIMULATE command to the next if the system is still in the state in 
+which the previous command ended (the same w fields and unit cell), 
+so that a simulation split into several SIMULATE commands gives the 
+same trajectory as one SIMULATE command. A step whose compressor 
+fails to converge is discarded and keeps \f$ g^{(n-1)} \f$. The 
+first SIMULATE command, and a command that starts from fields or a 
+unit cell changed since the previous one (for example, by READ_W_RGRID 
+or ANALYZE), start a new chain with a new random 
+\f$ g^{(n-1)} \f$.
+
 \section rp_LMBdStep_parameter_sec Parameter file
 
 The only parameter need by this algorithm is a required parameter named 
