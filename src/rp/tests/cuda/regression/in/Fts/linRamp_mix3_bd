@@ -1,0 +1,19 @@
+BdSimulator{
+   seed            12345
+   LMBdStep{
+      mobility     1.0e-2
+   }
+   LrAmCompressor{
+      epsilon      1.0e-9
+      maxItr       300
+      maxHist      30
+      verbose      0
+   }
+   LinearRamp{
+      nParameter   2
+      parameters[
+         phi_polymer  1   0.05
+         phi_polymer  2  -0.04999999
+      ]
+   }
+}

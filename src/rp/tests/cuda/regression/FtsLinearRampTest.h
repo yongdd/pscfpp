@@ -52,6 +52,7 @@ public:
 
 TEST_BEGIN(FtsLinearRampTest)
 TEST_ADD(FtsLinearRampTest, testIdsOutOfRange)
+TEST_ADD(FtsLinearRampTest, testClosedPhiSum)
 TEST_END(FtsLinearRampTest)
 
 #endif
