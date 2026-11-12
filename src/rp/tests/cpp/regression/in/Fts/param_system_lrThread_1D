@@ -1,0 +1,29 @@
+System{
+  Mixture{
+    nMonomer  2
+    monomers[
+             1.0
+             1.5
+    ]
+    nPolymer  1
+    Polymer{
+      type    linear
+      nBlock  2
+      blocks[
+              0   0.25
+              1   0.75
+      ]
+      phi     1.0
+    }
+    ds   0.01
+  }
+  Interaction{
+    chi(
+        1   0   10.0
+    )
+  }
+  Domain{
+    mesh        16
+    lattice     lamellar
+  }
+}

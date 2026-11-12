@@ -1,0 +1,6 @@
+LrCompressor{
+   epsilon      1.0e-10
+   maxItr       40
+   verbose      1
+   errorType    max
+}

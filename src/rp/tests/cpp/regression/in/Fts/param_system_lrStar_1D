@@ -1,0 +1,36 @@
+System{
+  Mixture{
+    nMonomer  2
+    monomers[
+             1.0
+             1.5
+    ]
+    nPolymer  1
+    nSolvent  1
+    Polymer{
+      type    branched
+      nBlock  3
+      blocks[
+              0   0.3   0   3
+              1   0.4   1   3
+              0   0.2   2   3
+      ]
+      phi     0.8
+    }
+    Solvent{
+      monomerId  1
+      size       0.5
+      phi        0.2
+    }
+    ds   0.01
+  }
+  Interaction{
+    chi(
+        1   0   10.0
+    )
+  }
+  Domain{
+    mesh        16
+    lattice     lamellar
+  }
+}
