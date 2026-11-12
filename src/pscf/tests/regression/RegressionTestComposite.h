@@ -18,6 +18,8 @@
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
+#include "GpuVecRandomTest.h"
+#include "GpuFftTest.h"
 #endif
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
@@ -30,6 +32,8 @@ TEST_COMPOSITE_ADD_UNIT(CoreEdgeTest);
 TEST_COMPOSITE_ADD_UNIT(CoreFhMixtureTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
+TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);
+TEST_COMPOSITE_ADD_UNIT(GpuFftTest);
 #endif
 TEST_COMPOSITE_END
 
