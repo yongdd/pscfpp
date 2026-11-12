@@ -101,6 +101,20 @@ namespace Rp {
       void computeOmegaTotalArray(Array<RealT>& correlations);
 
       /**
+      * Compute total intramolecular correlation for the thread model.
+      *
+      * The result is the linear response of the total concentration to
+      * the pressure-like field in a homogeneous state, for the discrete
+      * contour steps and the integration rule of the MDE solver. It
+      * tends to the continuous-chain correlation as the contour step
+      * ds tends to zero, but differs from it where kSq*b*b*ds/6 is not
+      * small. Requires Gsq_ and the Correlation::Mixture setup.
+      *
+      * \param correlations  omega values on a k-space mesh (on host)
+      */
+      void computeThreadOmegaTotal(Array<RealT>& correlations);
+
+      /**
       * Get and store r-grid and kgrid-mesh dimensions.
       *
       * Results are stored in private member variables for later use.
@@ -110,11 +124,11 @@ namespace Rp {
       /**
       * Compute array of squared wavevectors.
       *
-      * The values are those of the kSq array of the WaveList, which 
-      * the MDE solver uses: |k|^2 of the minimum image, or, for a 
-      * wavevector with a Nyquist index, its average over the signs of 
-      * the Nyquist indices if the WaveList uses this average (see 
-      * WaveList::hasNyquistAverage). Results are stored in a private 
+      * The values are those of the kSq array of the WaveList, which
+      * the MDE solver uses: |k|^2 of the minimum image, or, for a
+      * wavevector with a Nyquist index, its average over the signs of
+      * the Nyquist indices if the WaveList uses this average (see
+      * WaveList::hasNyquistAverage). Results are stored in a private
       * member variable.
       */
       void computeGsq();

@@ -32,7 +32,7 @@ System{
       mobility  1.0E-3
     }
     LrCompressor{
-      epsilon      1.0e-9
+      epsilon      1.0e-10
       maxItr       300
       verbose      1
       errorType    norm
