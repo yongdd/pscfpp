@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+
+# Field files written by pscf_1d have header sections of different
+# lengths: w and c field files have nx and nm, files written by
+# WRITE_BLOCK_C have nx, n_block and n_solvent, and propagator slice
+# files (WRITE_Q_SLICE, WRITE_Q_TAIL) have only nx and one column
+# without a grid point index. Check that each kind is read completely
+# (all header lines, nx data rows with all columns) and that it is
+# written back with the same header and data.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import os
+import sys
+import tempfile
+from pscfpp.field import Field
+
+failures = []
+
+def check(condition, message):
+   if not condition:
+      raise AssertionError(message)
+
+def run(test):
+   try:
+      test()
+      print(test.__name__ + ': passed')
+   except Exception as e:
+      failures.append(test.__name__)
+      print(test.__name__ + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Header (label, value) pairs and data rows of a file, read directly:
+# a header line starts with a label, a data line with a number.
+def fileContents(filename):
+   header = []
+   rows = []
+   with open(filename) as f:
+      for line in f:
+         l = line.split()
+         if len(l) == 0:
+            continue
+         if l[0][0].isalpha():
+            header.append((l[0], int(l[1])))
+         else:
+            rows.append([float(x) for x in l])
+   return header, rows
+
+def checkField(f, header, rows, filename):
+   check(f.type == 'fd1d', filename + ': type ' + f.type)
+   check(list(f.header.items()) == header,
+         filename + ': header ' + str(f.header))
+   check(len(f.data) == f.header['nx'],
+         filename + ': len(data) = ' + str(len(f.data)))
+   for i in range(len(rows)):
+      row = [float(x) for x in f.data[i]]
+      check(row == rows[i], filename + ': data[' + str(i) + '] = '
+                            + str(f.data[i]))
+
+def checkFile(filename, labels, nColumn):
+   header, rows = fileContents(filename)
+   check([x[0] for x in header] == labels,
+         filename + ': labels in file ' + str(header))
+   for row in rows:
+      check(len(row) == nColumn, filename + ': row ' + str(row))
+   f = Field(filename)
+   checkField(f, header, rows, filename)
+
+   # Write, check the written file directly, and read it again
+   with tempfile.TemporaryDirectory() as dir:
+      name = os.path.join(dir, 'copy')
+      f.write(name)
+      header2, rows2 = fileContents(name)
+      check(header2 == header, 'written header ' + str(header2))
+      check(rows2 == rows, 'written data differ')
+      g = Field(name)
+      checkField(g, header, rows, 'copy of ' + filename)
+
+# WRITE_BLOCK_C file with a solvent: 2 blocks + 1 solvent
+def testBlockC():
+   checkFile('in/blockc_1d', ['nx', 'n_block', 'n_solvent'], 4)
+
+# WRITE_BLOCK_C file without solvent: 2 blocks
+def testBlockCNoSolvent():
+   checkFile('in/blockc_nosolvent_1d', ['nx', 'n_block', 'n_solvent'], 3)
+
+# WRITE_W file: 2 monomer types
+def testW():
+   checkFile('in/w_1d', ['nx', 'nm'], 3)
+
+# WRITE_Q_SLICE file: one column, no index
+def testQSlice():
+   checkFile('in/qslice_1d', ['nx'], 1)
+
+run(testBlockC)
+run(testBlockCNoSolvent)
+run(testW)
+run(testQSlice)
+
+if failures:
+   sys.exit(1)
