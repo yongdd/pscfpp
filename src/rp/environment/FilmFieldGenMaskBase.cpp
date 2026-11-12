@@ -14,6 +14,25 @@ namespace Rp
 
    using namespace Util;
 
+   namespace {
+
+      /*
+      * Are two lattice basis vectors orthogonal?
+      *
+      * The test is on the cosine of the angle between the vectors,
+      * |a.b| <= 1.0E-8 |a| |b|, so that it does not depend on the unit
+      * of length. Field file headers give angles with 11 significant
+      * digits, so a right angle read from a file has |cos| <= 5.0E-11.
+      */
+      template <int D>
+      bool isOrthogonal(RealVec<D> const & a, RealVec<D> const & b)
+      {
+         double ab = dot(a, b);
+         return (std::abs(ab) <= 1.0E-8*std::sqrt(dot(a, a)*dot(b, b)));
+      }
+
+   }
+
    // Explicit Specializations for checkLatticeVectors
    
    /*
@@ -36,8 +55,7 @@ namespace Rp
       a = systemLatticeVector(0);
       b = systemLatticeVector(1);
 
-      double gamma = dot(a,b);
-      if (std::abs(gamma) > 1e-8) { // Dot product between a and b should be 0
+      if (!isOrthogonal(a, b)) {
          UTIL_THROW("ERROR: Lattice basis vectors must be orthogonal");
       }
    } 
@@ -55,21 +73,21 @@ namespace Rp
       b = systemLatticeVector(1);
       c = systemLatticeVector(2);
 
-      double alpha, beta, gamma;
-      gamma = dot(a,b);
-      beta = dot(a,c);
-      alpha = dot(b,c);
+      // Right angles alpha (b,c), beta (a,c) and gamma (a,b)?
+      bool alphaOk = isOrthogonal(b, c);
+      bool betaOk = isOrthogonal(a, c);
+      bool gammaOk = isOrthogonal(a, b);
 
       if (normalVecId() == 0) {
-         if (std::abs(beta) > 1e-8 || std::abs(gamma) > 1e-8) {
+         if (!betaOk || !gammaOk) {
             UTIL_THROW("ERROR: beta and gamma must be 90 degrees");
          }
       } else if (normalVecId() == 1) {
-         if (std::abs(alpha) > 1e-8 || std::abs(gamma) > 1e-8) {
+         if (!alphaOk || !gammaOk) {
             UTIL_THROW("ERROR: alpha and gamma must be 90 degrees");
          }
       } else { // normalVecId == 2
-         if (std::abs(alpha) > 1e-8 || std::abs(beta) > 1e-8) {
+         if (!alphaOk || !betaOk) {
             UTIL_THROW("ERROR: alpha and beta must be 90 degrees");
          }
       }
