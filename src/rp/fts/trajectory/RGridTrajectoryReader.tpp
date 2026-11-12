@@ -63,7 +63,16 @@ namespace Rp {
    template <int D, class T>
    void RGridTrajectoryReader<D,T>::open(std::string filename)
    {
-      system().fileMaster().open(filename, inputfile_);
+      // The -i input prefix applies to the trajectory file, as to other
+      // input files. A name that already includes the prefix (as earlier
+      // versions required) is still accepted: it is opened as given when
+      // no file exists at the prefixed path.
+      try {
+         system().fileMaster().openInputFile(filename, inputfile_);
+      } catch (Exception& e) {
+         inputfile_.clear();
+         system().fileMaster().open(filename, inputfile_);
+      }
       allocate();
    }
 
