@@ -21,6 +21,7 @@
 #include "FtsStructureFactorTest.h"
 #include "FtsAnalyzePrefixTest.h"
 #include "ScftThermoRefTest.h"
+#include "CommandReadHTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -41,6 +42,7 @@ TEST_COMPOSITE_ADD_UNIT(FtsPerturbationTest);
 TEST_COMPOSITE_ADD_UNIT(FtsStructureFactorTest);
 TEST_COMPOSITE_ADD_UNIT(FtsAnalyzePrefixTest);
 TEST_COMPOSITE_ADD_UNIT(ScftThermoRefTest);
+TEST_COMPOSITE_ADD_UNIT(CommandReadHTest);
 TEST_COMPOSITE_END
 
 #endif
