@@ -11,8 +11,10 @@
 #include <util/containers/GArray.h>
 #include <util/containers/FArray.h>
 #include <util/containers/DMatrix.h>
+#include <util/misc/Log.h>
 
 #include <cmath>
+#include <vector>
 
 namespace Pscf
 {
@@ -79,8 +81,42 @@ namespace Pscf
 
       // Reading of parameter file is now complete
 
-      // Add edges to attached vertices
+      // Check that vertex ids are in range and that the blocks form an
+      // acyclic graph. With nBlock edges and nBlock + 1 vertices, an
+      // acyclic graph is also connected, i.e., a tree. makePlan() would
+      // not terminate for a graph with a cycle.
       int vertexId0, vertexId1;
+      {
+         std::vector<int> root(nVertex_);
+         for (int i = 0; i < nVertex_; ++i) {
+            root[i] = i;
+         }
+         int r0, r1;
+         for (int edgeId = 0; edgeId < nBlock_; ++edgeId) {
+            vertexId0 = edge(edgeId).vertexId(0);
+            vertexId1 = edge(edgeId).vertexId(1);
+            if (vertexId0 < 0 || vertexId0 >= nVertex_ ||
+                vertexId1 < 0 || vertexId1 >= nVertex_) {
+               Log::file() << "Block " << edgeId << " has vertex ids "
+                           << vertexId0 << " and " << vertexId1
+                           << ", but nVertex = " << nVertex_ << "\n";
+               UTIL_THROW("Vertex id out of range in polymer block");
+            }
+            r0 = vertexId0;
+            while (root[r0] != r0) r0 = root[r0];
+            r1 = vertexId1;
+            while (root[r1] != r1) r1 = root[r1];
+            if (r0 == r1) {
+               Log::file() << "Block " << edgeId << " (vertices "
+                           << vertexId0 << ", " << vertexId1
+                           << ") closes a loop\n";
+               UTIL_THROW("Polymer blocks do not form a tree (cycle)");
+            }
+            root[r1] = r0;
+         }
+      }
+
+      // Add edges to attached vertices
       Edge* edgePtr;
       for (int edgeId = 0; edgeId < nBlock_; ++edgeId) {
          edgePtr = &(edge(edgeId));
