@@ -932,7 +932,10 @@ namespace Rp {
          fft().inverseTransformUnsafe(tmpFieldsKGrid_[i],
                                       tmpFieldsRGrid_[i]);
       }
-      writeFieldsRGrid(outFileName, tmpFieldsRGrid_, tmpUnitCell);
+      // A pure transform needs no space group: write the group name only
+      // if the system has one (the header writer requires it otherwise)
+      writeFieldsRGrid(outFileName, tmpFieldsRGrid_, tmpUnitCell,
+                       hasGroup());
    }
 
    /*
@@ -946,9 +949,14 @@ namespace Rp {
       checkAllocateRGrid();
       checkAllocateKGrid();
       UnitCell<D> tmpUnitCell;
-      readFieldsRGrid(inFileName, tmpFieldsRGrid_, tmpUnitCell);
+      bool isSymmetric;
+      isSymmetric = readFieldsRGrid(inFileName, tmpFieldsRGrid_,
+                                    tmpUnitCell);
       convertRGridToKGrid(tmpFieldsRGrid_, tmpFieldsKGrid_);
-      writeFieldsKGrid(outFileName, tmpFieldsKGrid_, tmpUnitCell);
+      // A pure transform needs no space group: label the output with the
+      // group only if the input was symmetric and the system has a group
+      writeFieldsKGrid(outFileName, tmpFieldsKGrid_, tmpUnitCell,
+                       isSymmetric && hasGroup());
    }
 
    // Field Inspection
@@ -1172,8 +1180,9 @@ namespace Rp {
       isSymmetric = readFieldsRGrid(inFileName, tmpFieldsRGrid_,
                                     tmpUnitCell);
       scaleFieldsRGrid(tmpFieldsRGrid_, factor);
+      // The input header may name a group that this system lacks
       writeFieldsRGrid(outFileName, tmpFieldsRGrid_, tmpUnitCell,
-                       isSymmetric);
+                       isSymmetric && hasGroup());
    }
 
    // Computation of Estimated W Fields

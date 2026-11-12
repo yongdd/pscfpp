@@ -254,59 +254,92 @@ namespace Pscf {
          }
       }
 
-      // Reset nBasis = min(nBasisIn, fieldCapacity)
+      // Every star of this basis must have a slot in the fields arrays
+      UTIL_CHECK(fieldCapacity >= basis.nBasis());
+
+      // Read all nBasisIn lines of the file. A file written for a finer
+      // mesh has more lines than this basis has stars, and lines that
+      // do not match a star here are skipped, so the lines that do match
+      // can lie anywhere in the file.
       int nBasis = nBasisIn;
-      if (fieldCapacity < nBasisIn) {
-         nBasis = fieldCapacity;
-      }
 
       // Allocate temp arrays used to read in components
       DArray<double> temp, temp2;
       temp.allocate(nMonomer);
       temp2.allocate(nMonomer);
 
-      typename Basis<D>::Star const * starPtr;
-      typename Basis<D>::Star const * starPtr2;
+      typename Basis<D>::Star const * starPtr = nullptr;
+      typename Basis<D>::Star const * starPtr2 = nullptr;
       IntVec<D> waveIn, waveIn2;
-      int sizeIn, sizeIn2;
-      int starId, starId2;
-      int basisId, basisId2;
-      int waveId, waveId2;
+      int sizeIn = 0, sizeIn2 = 0;
+      int starId = -1, starId2 = -1;
+      int basisId = -1, basisId2 = -1;
+      int waveId = -1, waveId2 = -1;
 
       std::complex<double> coeff, phasor;
-      IntVec<D> waveMin, waveDft;
+      IntVec<D> waveDft;
       int nReversedPair = 0;
       bool waveExists, sizeMatches;
 
+      // Counters of skipped lines. A file written for a different mesh
+      // can contain lines that do not match a star of this basis.
+      int nNotMinimum = 0;   // wave is not a minimum image on this mesh
+      int nCancelled = 0;    // star is cancelled on this mesh
+      int nUnpaired = 0;     // open star here, but no partner line follows
+
+      // A line read ahead as a possible partner of an open star, that
+      // turned out not to be the partner, is kept for the next pass.
+      bool hasNext = false;
+
       // Loop over stars in input file to read field components
       int i = 0;
-      while (i < nBasis) {
+      while (i < nBasis || hasNext) {
 
-         // Read next line of data
-         for (int j = 0; j < nMonomer; ++j) {
-            in >> temp[j];        // field components
+         // Read next line of data (or take the line read ahead)
+         if (hasNext) {
+            for (int j = 0; j < nMonomer; ++j) {
+               temp[j] = temp2[j];
+            }
+            waveIn = waveIn2;
+            sizeIn = sizeIn2;
+            hasNext = false;
+         } else {
+            for (int j = 0; j < nMonomer; ++j) {
+               in >> temp[j];        // field components
+            }
+            in >> waveIn;            // wave of star
+            in >> sizeIn;            // # of waves in star
+            UTIL_CHECK(in.good());
+            ++i;
          }
-         in >> waveIn;            // wave of star
-         in >> sizeIn;            // # of waves in star
-         UTIL_CHECK(in.good());
-         ++i;
 
          sizeMatches = false;
          waveExists = false;
 
-         // Check if wavevector waveIn is a minimum image
-         waveMin = shiftToMinimum(waveIn, mesh.dimensions(), unitCell);
-         waveExists = (waveIn == waveMin);
+         // Check that waveIn is the minimum image that this basis uses
+         // for its DFT index. (The basis chose its minimum images with the
+         // cell it was built with; the cell in the file header can differ
+         // slightly, e.g., after a flexible-cell run or by rounding.)
+         waveDft = waveIn;
+         mesh.shift(waveDft);
+         waveId = basis.waveId(waveDft);
+         waveExists = (waveIn == basis.wave(waveId).indicesMin);
+         if (!waveExists) {
+            ++nNotMinimum;
+         }
 
          if (waveExists) {
 
             // Find the star containing waveIn
-            waveDft = waveIn;
-            mesh.shift(waveDft);
-            waveId = basis.waveId(waveDft);
             starId = basis.wave(waveId).starId;
             starPtr = &basis.star(starId);
-            UTIL_CHECK(!(starPtr->cancel));
+
+            // A wave with a component N/2 on this mesh can belong to a
+            // star that is cancelled here, but not on the writer's mesh.
+            if (starPtr->cancel) {
+               ++nCancelled;
+               continue;
+            }
             basisId = starPtr->basisId;
 
             if (starPtr->size == sizeIn) {
@@ -347,7 +380,17 @@ namespace Pscf {
 
             } else {
 
-               // Read the next line
+               // This star is open on this mesh. The file lists it with
+               // its partner (the inverse star) on the next line, unless
+               // the star was closed on the writer's mesh, where a wave
+               // with a component N/2 aliases with its inverse. Read the
+               // next line and check that it is the partner before using
+               // it. If not, skip this line and process the next one in
+               // the next pass.
+               if (i >= nBasisIn) {
+                  ++nUnpaired;
+                  continue;
+               }
                for (int j = 0; j < nMonomer; ++j) {
                   in >> temp2[j];          // components of field
                }
@@ -356,31 +399,49 @@ namespace Pscf {
                UTIL_CHECK(in.good());
                ++i;
 
-               // Check that waveIn2 is also in the 1st BZ
-               waveMin =
-                  shiftToMinimum(waveIn2, mesh.dimensions(), unitCell);
-               UTIL_CHECK(waveIn2 == waveMin);
-
-               // Identify the star containing waveIn2
+               bool isPartner = false;
                waveDft = waveIn2;
                mesh.shift(waveDft);
                waveId2 = basis.waveId(waveDft);
-               starId2 = basis.wave(waveId2).starId;
-               starPtr2 = &basis.star(starId2);
-               UTIL_CHECK(!(starPtr2->cancel));
-               basisId2 = starPtr2->basisId;
-               UTIL_CHECK(starPtr2->size == sizeIn2);
-               UTIL_CHECK(sizeIn == sizeIn2);
+               if (waveIn2 == basis.wave(waveId2).indicesMin) {
+
+                  // Identify the star containing waveIn2
+                  starId2 = basis.wave(waveId2).starId;
+                  starPtr2 = &basis.star(starId2);
+                  basisId2 = starPtr2->basisId;
+
+                  if (!(starPtr2->cancel) && starPtr2->size == sizeIn2
+                      && sizeIn == sizeIn2) {
+                     if (starPtr->invertFlag == 1) {
+                        isPartner = (starPtr2->invertFlag == -1)
+                                 && (starId2 == starId + 1)
+                                 && (basisId2 == basisId + 1)
+                                 && (starPtr->waveMin == waveIn)
+                                 && (starPtr2->waveMin == waveIn2);
+                     } else
+                     if (starPtr->invertFlag == -1) {
+                        IntVec<D> nVec;
+                        nVec.negate(waveIn);
+                        mesh.shift(nVec);
+                        nVec = basis.wave(basis.waveId(nVec)).indicesMin;
+                        isPartner = (starPtr2->invertFlag == 1)
+                                 && (starId == starId2 + 1)
+                                 && (basisId == basisId2 + 1)
+                                 && (waveId == starPtr->beginId)
+                                 && (waveIn2 == nVec);
+                     }
+                  }
+               }
+               if (!isPartner) {
+                  ++nUnpaired;
+                  hasNext = true;
+                  continue;
+               }
 
                if (starPtr->invertFlag == 1) {
 
                   // This is a pair of open stars written in the same
-                  // order as in this basis. Check preconditions:
-                  UTIL_CHECK(starPtr2->invertFlag == -1);
-                  UTIL_CHECK(starId2 == starId + 1);
-                  UTIL_CHECK(basisId2 == basisId + 1);
-                  UTIL_CHECK(starPtr->waveMin == waveIn);
-                  UTIL_CHECK(starPtr2->waveMin == waveIn2);
+                  // order as in this basis (checked above).
 
                   // Copy components for both stars into fields array
                   for (int j = 0; j < nMonomer; ++j) {
@@ -392,18 +453,7 @@ namespace Pscf {
                if (starPtr->invertFlag == -1) {
 
                   // This is a pair of open stars written in opposite
-                  // order from in this basis. Check preconditions:
-                  UTIL_CHECK(starPtr2->invertFlag == 1);
-                  UTIL_CHECK(starId == starId2 + 1);
-                  UTIL_CHECK(basisId == basisId2 + 1);
-                  UTIL_CHECK(waveId == starPtr->beginId);
-
-                  // Check that waveIn2 is negation of waveIn
-                  IntVec<D> nVec;
-                  nVec.negate(waveIn);
-                  nVec =
-                       shiftToMinimum(nVec, mesh.dimensions(), unitCell);
-                  UTIL_CHECK(waveIn2 == nVec);
+                  // order from in this basis (checked above).
 
                   /*
                   * Consider two related stars, C and D, that are listed
@@ -476,6 +526,17 @@ namespace Pscf {
          Log::file() << "\n";
          Log::file() << nReversedPair << " reversed pairs of open stars"
                      << " detected in readFieldsBasis\n";
+      }
+      if (nNotMinimum + nCancelled + nUnpaired > 0) {
+         Log::file() << "\n"
+            << "Warning: lines of the basis file without a matching star"
+            << " in this basis (ignored):\n"
+            << "  wave not a minimum image on this mesh : "
+            << nNotMinimum << "\n"
+            << "  star cancelled on this mesh           : "
+            << nCancelled << "\n"
+            << "  open star here, closed in the file    : "
+            << nUnpaired << "\n";
       }
 
    }
