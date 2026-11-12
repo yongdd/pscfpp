@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+
+# The WRITE_WAVES and WRITE_STARS commands of pscf_rpc and pscf_rpg
+# write the header of a periodic field file (without N_monomer), ending
+# with N_wave or N_basis, followed by one row per wave or star. Check
+# that the Field class reads these listings completely, with types
+# 'waves' and 'stars', and writes them back with the same header and
+# the same data rows. The inputs were written by pscf_rpc for a 1D
+# lamellar phase (P_-1), a 2D field with group p_g (complex wave
+# coefficients, open stars) and a 3D gyroid (I_a_-3_d, 8x8x8 mesh).
+# Also check that a basis field file is still read as such, and that a
+# space group file written by WRITE_GROUP is rejected with a message
+# that says what it is.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import os
+import sys
+import tempfile
+from pscfpp.field import Field
+
+failures = []
+
+def check(condition, message):
+   if not condition:
+      raise AssertionError(message)
+
+def run(test):
+   try:
+      test()
+      print(test.__name__ + ': passed')
+   except Exception as e:
+      failures.append(test.__name__)
+      print(test.__name__ + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Header labels and data lines of a listing file, read directly: label
+# and value lines alternate until the label lastLabel and its value.
+def fileContents(filename, lastLabel):
+   with open(filename) as f:
+      lines = f.read().split('\n')
+   labels = []
+   i = 0
+   while True:
+      labels.append(lines[i].split()[0])
+      if labels[-1] == 'format':
+         i += 1
+         continue
+      i += 2
+      if labels[-1] == lastLabel:
+         break
+   data = [l for l in lines[i:] if l.strip()]
+   return labels, lines[:i], data
+
+def checkListing(filename, type, lastLabel, nColumn):
+   labels, headerLines, data = fileContents(filename, lastLabel)
+   f = Field(filename)
+   check(f.type == type, filename + ': type ' + f.type)
+   check(list(f.header.keys()) == labels,
+         filename + ': header labels ' + str(list(f.header.keys())))
+   check(len(f.data) == f.header[lastLabel],
+         filename + ': len(data) = ' + str(len(f.data)))
+   check(len(f.data) == len(data),
+         filename + ': ' + str(len(data)) + ' data lines in file')
+   for i in range(len(data)):
+      values = data[i].split()
+      check(len(f.data[i]) == nColumn,
+            filename + ': data[' + str(i) + '] = ' + str(f.data[i]))
+      for j in range(nColumn):
+         check(float(f.data[i][j]) == float(values[j]),
+               filename + ': data[' + str(i) + '] = ' + str(f.data[i]))
+
+   # Write: same header (as tokens) and the same data lines
+   with tempfile.TemporaryDirectory() as dir:
+      name = os.path.join(dir, 'copy')
+      f.write(name)
+      labels2, headerLines2, data2 = fileContents(name, lastLabel)
+      check([l.split() for l in headerLines2]
+            == [l.split() for l in headerLines],
+            filename + ': written header differs')
+      check(data2 == data, filename + ': written data lines differ')
+      g = Field(name)
+      check(g.type == type, filename + ': type of copy ' + g.type)
+      check(g.header == f.header, filename + ': header of copy')
+      check(g.data == f.data, filename + ': data of copy')
+
+# Columns of WRITE_WAVES: i, waveId, D indices, starId, Re(c), Im(c)
+def testWaves():
+   checkListing('in/waves_1d', 'waves', 'N_wave', 1 + 5)
+   checkListing('in/waves_pg', 'waves', 'N_wave', 2 + 5)
+   checkListing('in/waves_gyr', 'waves', 'N_wave', 3 + 5)
+   f = Field('in/waves_pg')
+   check(min(r[-1] for r in f.data) < 0.0, 'no negative Im(c) in p_g')
+
+# Columns of WRITE_STARS: basisId, starId, size, beginId, endId,
+# starInvert, D indices
+def testStars():
+   checkListing('in/stars_1d', 'stars', 'N_basis', 6 + 1)
+   checkListing('in/stars_pg', 'stars', 'N_basis', 6 + 2)
+   checkListing('in/stars_gyr', 'stars', 'N_basis', 6 + 3)
+   f = Field('in/stars_pg')
+   check(sorted(set(r[5] for r in f.data)) == [-1, 0, 1],
+         'starInvert values in p_g')
+
+# A star listing with an N_monomer entry, as in the example of the
+# manual, is also a listing of stars
+def testStarsWithNMonomer():
+   with open('in/stars_gyr') as f:
+      lines = f.readlines()
+   i = lines.index('N_basis\n')
+   lines[i:i] = ['N_monomer\n', '          2\n']
+   with tempfile.TemporaryDirectory() as dir:
+      name = os.path.join(dir, 'stars')
+      with open(name, 'w') as f:
+         f.writelines(lines)
+      f = Field(name)
+      check(f.type == 'stars', 'type ' + f.type)
+      check(f.header['N_monomer'] == 2, 'N_monomer')
+      check(f.data == Field('in/stars_gyr').data, 'data')
+
+# A basis field file is still read as a basis field file
+def testBasis():
+   f = Field('../in/w.bf')
+   check(f.type == 'basis', 'type ' + f.type)
+   check(len(f.data) == f.header['N_basis'], 'len(data)')
+   check(isinstance(f.data[0][0], float), 'data[0] = ' + str(f.data[0]))
+
+# Field components may be written as integer literals, including zero.
+def testIntegerBasis():
+   for nMonomer in (2, 5):
+      f = Field('../in/w.bf')
+      f.header['N_monomer'] = nMonomer
+      f.header['dim'] = 1
+      f.header['crystal_system'] = 'lamellar'
+      f.header['N_cell_param'] = 1
+      f.header['cell_param'] = [1.0]
+      f.header['group_name'] = 'P_1'
+      f.header['N_basis'] = 1
+      f.data = [[0]*nMonomer + [0, 1]]
+      header = str(f).rsplit('\n', 2)[0]
+      data = ' '.join(str(x) for x in f.data[0]) + '\n'
+      with tempfile.TemporaryDirectory() as directory:
+         name = os.path.join(directory, 'integer.bf')
+         with open(name, 'w') as output:
+            output.write(header + '\n' + data)
+         g = Field(name)
+         check(g.type == 'basis', 'integer field misread as ' + g.type)
+         check(g.data == f.data, 'field values')
+
+# A space group file is not a field file
+def testGroup():
+   try:
+      Field('in/group_hex')
+   except Exception as e:
+      check('space group file' in str(e), 'message: ' + str(e))
+      return
+   raise AssertionError('no exception for a space group file')
+
+run(testWaves)
+run(testStars)
+run(testStarsWithNMonomer)
+run(testBasis)
+run(testIntegerBasis)
+run(testGroup)
+
+if failures:
+   sys.exit(1)
