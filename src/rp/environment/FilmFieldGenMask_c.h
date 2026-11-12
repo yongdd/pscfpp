@@ -122,9 +122,14 @@ namespace Rp {
       Rp::System<D,CPT> const & system() const;
 
       /**
-      * Get the space group name for this system.
+      * Does this system have a space group?
       */
-      std::string systemSpaceGroup() const;
+      bool systemHasSpaceGroup() const;
+
+      /**
+      * Get the space group of this system (if any).
+      */
+      SpaceGroup<D> const & systemSpaceGroup() const;
 
       /**
       * Get one of the lattice vectors for this system.
@@ -165,11 +170,17 @@ namespace Rp {
       return *sysPtr_; 
    }
 
-   // Get space group name for this system.
+   // Does this system have a space group?
    template <int D> inline 
-   std::string 
+   bool 
+   FilmFieldGenMask<D,CPT>::systemHasSpaceGroup() const
+   {  return system().domain().hasGroup(); }
+
+   // Get the space group of this system.
+   template <int D> inline 
+   SpaceGroup<D> const & 
    FilmFieldGenMask<D,CPT>::systemSpaceGroup() const
-   {  return system().domain().groupName(); }
+   {  return system().domain().group(); }
 
    // Get one of the lattice vectors for this system.
    template <int D> inline 

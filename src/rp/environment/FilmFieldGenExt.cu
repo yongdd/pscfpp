@@ -292,7 +292,11 @@ namespace Rp {
       UTIL_CHECK(normalVecId() >= 0);
       UTIL_CHECK(system().domain().unitCell().isInitialized());
       UTIL_CHECK(system().mask().hasData());
-      if ((system().hasIterator() && system().iterator().isSymmetric())) {
+
+      // The fields are invariant under the space group, if any (this is
+      // checked by checkCompatibility), with or without an Iterator
+      bool isSymmetric = system().domain().hasGroup();
+      if (isSymmetric) {
          UTIL_CHECK(system().domain().basis().isInitialized());
       }
 
@@ -331,7 +335,7 @@ namespace Rp {
           nMonomer, ThreadMesh::meshDims());
 
       // Pass h into the System
-      system().h().setRGrid(hFields, (system().hasIterator() && system().iterator().isSymmetric()));
+      system().h().setRGrid(hFields, isSymmetric);
    }
 
 }

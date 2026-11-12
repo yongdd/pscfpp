@@ -20,6 +20,7 @@ namespace Util {
 }
 namespace Pscf {
   struct ParameterType;
+  template <int D> class SpaceGroup;
 }
 
 
@@ -203,9 +204,14 @@ namespace Rp {
       virtual void compute() = 0;
 
       /**
-      * Get the space group name for this system.
+      * Does this system have a space group?
       */
-      virtual std::string systemSpaceGroup() const = 0;
+      virtual bool systemHasSpaceGroup() const = 0;
+
+      /**
+      * Get the space group of this system (if any).
+      */
+      virtual SpaceGroup<D> const & systemSpaceGroup() const = 0;
 
       /**
       * Get one of the lattice vectors for this system.

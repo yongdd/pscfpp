@@ -289,7 +289,10 @@ namespace Rp {
       UTIL_CHECK(normalVecId() >= 0);
       UTIL_CHECK(interfaceThickness() > 0);
       UTIL_CHECK(excludedThickness() > interfaceThickness());
-      if ((system().hasIterator() && system().iterator().isSymmetric())) {
+      // The mask is invariant under the space group, if any (this is
+      // checked by checkSpaceGroup), with or without an Iterator
+      bool isSymmetric = system().domain().hasGroup();
+      if (isSymmetric) {
          UTIL_CHECK(system().domain().basis().isInitialized());
       }
 
@@ -314,7 +317,7 @@ namespace Rp {
           excludedThickness(), normalVecId(), ThreadMesh::meshDims());
 
       // Store this mask in System
-      system().mask().setRGrid(rGrid,(system().hasIterator() && system().iterator().isSymmetric()));
+      system().mask().setRGrid(rGrid, isSymmetric);
 
       // Store lattice vector normal to film used to construct this mask
       normalVecCurrent_ = systemLatticeVector(normalVecId());

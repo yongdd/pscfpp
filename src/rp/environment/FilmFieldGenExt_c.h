@@ -105,9 +105,14 @@ namespace Rp {
       System<D,CPT> const & system() const;
 
       /**
-      * Get the space group name for this system.
+      * Does this system have a space group?
       */
-      std::string systemSpaceGroup() const;
+      bool systemHasSpaceGroup() const;
+
+      /**
+      * Get the space group of this system (if any).
+      */
+      SpaceGroup<D> const & systemSpaceGroup() const;
 
       /**
       * Get one of the lattice vectors for this system.

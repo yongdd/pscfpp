@@ -127,14 +127,12 @@ namespace Rp {
       // already been performed by the mask generator.
       if (hasSymmetricWalls()) return;
 
-      // Otherwise, walls are asymmetric, so the space group must not 
-      // have any operations that swap the two walls
-      std::string groupName = systemSpaceGroup();
-      SpaceGroup<D> group;
-      std::ifstream in;
+      // Without a space group, there is no symmetry to check
+      if (!systemHasSpaceGroup()) return;
 
-      // Open and read file containing space group's symmetry operations
-      readGroup(groupName, group);
+      // The walls are asymmetric, so the space group must not have
+      // any operations that swap the two walls
+      SpaceGroup<D> const & group = systemSpaceGroup();
 
       // Make sure all symmetry operations are allowed
       std::string msg = "Space group contains forbidden symmetry operations";

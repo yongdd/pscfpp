@@ -121,13 +121,11 @@ namespace Rp
    template <int D>
    void FilmFieldGenMaskBase<D>::checkSpaceGroup() const
    {
-      // Setup
-      std::string groupName = systemSpaceGroup();
-      SpaceGroup<D> group;
-      std::ifstream in;
+      // Without a space group, there is no symmetry to check
+      if (!systemHasSpaceGroup()) return;
 
-      // Open and read file containing space group's symmetry operations
-      readGroup(groupName, group);
+      // Space group of the system (as used to construct its basis)
+      SpaceGroup<D> const & group = systemSpaceGroup();
 
       // Make sure all symmetry operations are allowed
       int nv = normalVecId();

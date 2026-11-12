@@ -172,7 +172,11 @@ namespace Rp {
       UTIL_CHECK(normalVecId() >= 0);
       UTIL_CHECK(system().domain().unitCell().isInitialized());
       UTIL_CHECK(system().mask().hasData());
-      if ((system().hasIterator() && system().iterator().isSymmetric())) {
+
+      // The fields are invariant under the space group, if any (this is
+      // checked by checkCompatibility), with or without an Iterator
+      bool isSymmetric = system().domain().hasGroup();
+      if (isSymmetric) {
          UTIL_CHECK(system().domain().basis().isInitialized());
       }
 
@@ -227,16 +231,24 @@ namespace Rp {
       } 
 
       // Pass h into the System
-      system().h().setRGrid(hRGrid, (system().hasIterator() && system().iterator().isSymmetric()));
+      system().h().setRGrid(hRGrid, isSymmetric);
    }
 
    /*
-   * Get space group name for this system.
+   * Does this system have a space group?
    */
    template <int D>
-   std::string 
+   bool 
+   FilmFieldGenExt<D,CPT>::systemHasSpaceGroup() const
+   {  return system().domain().hasGroup(); }
+
+   /*
+   * Get the space group of this system.
+   */
+   template <int D>
+   SpaceGroup<D> const & 
    FilmFieldGenExt<D,CPT>::systemSpaceGroup() const
-   {  return system().domain().groupName(); }
+   {  return system().domain().group(); }
 
    /*
    * Get one of the lattice vectors for this system.
