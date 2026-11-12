@@ -818,6 +818,8 @@ namespace Pscf {
             UTIL_CHECK(i == nNyquist_);
             nyquistRanks_d_.allocate(nNyquist_);
             nyquistRanks_d_ = ranks; // copy to device memory
+            nyquistImages_h_.allocate(D*nNyquist_);
+            nyquistImages_d_.allocate(D*nNyquist_);
          }
       }
 
@@ -964,17 +966,15 @@ namespace Pscf {
       // Images and kSq of wavevectors with a Nyquist index, if averaged
       if (averageNyquist_ && nNyquist_ > 0) {
          IntVec<D> const & d = mesh().dimensions();
-         HostSendArray<int,CUT> images_h(D*nNyquist_);
          IntVec<D> image;
          for (int i = 0; i < nNyquist_; ++i) {
             image = shiftToMinimumNyquist(nyquistWaves_h_[i], d, 
                                           unitCell());
             for (int j = 0; j < D; ++j) {
-               images_h[i + j*nNyquist_] = image[j];
+               nyquistImages_h_[i + j*nNyquist_] = image[j];
             }
          }
-         BackendArray<int,CUT> images(D*nNyquist_);
-         images = images_h;
+         nyquistImages_d_ = nyquistImages_h_; // copy to device memory
          GridDims dims;
          for (int j = 0; j < 3; ++j) {
             dims.n[j] = (j < D) ? d[j] : 1;
@@ -983,8 +983,8 @@ namespace Pscf {
          ThreadArray::setThreadsLogical(nNyquist_, nBlocksN, nThreadsN);
          _setNyquistImages<D><<<nBlocksN, nThreadsN>>>
             (minImages_.cArray(), kSq_.cArray(), kBasis.cArray(),
-             nyquistRanks_d_.cArray(), images.cArray(), nNyquist_, 
-             kSize_, dims);
+             nyquistRanks_d_.cArray(), nyquistImages_d_.cArray(),
+             nNyquist_, kSize_, dims);
          cudaErrorCheck( cudaGetLastError() );
       }
 

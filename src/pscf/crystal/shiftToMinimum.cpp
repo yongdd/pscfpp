@@ -155,18 +155,15 @@ namespace Pscf {
       }
 
       /*
-      * Minimum image of r among the images r + s[j]*d[j]*e_j + 
-      * s[k]*d[k]*e_k (s[j], s[k] integers), with r[i] = 0 for the 
-      * third direction i. 
-      *
-      * The image is moved by the Voronoi-relevant vectors of the 2D 
-      * lattice of image shifts in directions j and k (Selling reduction 
-      * of the superbase d[j]*e_j, d[k]*e_k, -(d[j]*e_j + d[k]*e_k)), as 
-      * in descendToMinimum, so the result is the largest minimum image.
+      * Voronoi-relevant vectors of the 2D lattice of image shifts in
+      * directions j and k: +-v_a for the obtuse superbase v_0, v_1, v_2
+      * obtained by Selling reduction of d[j]*e_j, d[k]*e_k and
+      * -(d[j]*e_j + d[k]*e_k), as in imageShiftNeighbors.
       */
       template <int D>
-      void planeMinimum(IntVec<D>& r, IntVec<D> const & d, int j, int k,
-                        UnitCell<D> const & cell, double epsilon)
+      void planeNeighbors(IntVec<D> const & d, int j, int k,
+                          UnitCell<D> const & cell,
+                          FSArray<IntVec<D>, 14>& nb)
       {
          // Superbase of the plane lattice of image shifts
          FArray<IntVec<D>, 3> v;
@@ -208,14 +205,86 @@ namespace Pscf {
             }
          }
 
-         // Voronoi-relevant vectors +-v_a, then descent
-         FSArray<IntVec<D>, 14> nb;
+         // Voronoi-relevant vectors +-v_a
+         nb.clear();
          IntVec<D> w;
          for (int a = 0; a < 3; ++a) {
             nb.append(v[a]);
             w.negate(v[a]);
             nb.append(w);
          }
+      }
+
+      /*
+      * Plane neighbors (see planeNeighbors) of the last mesh and cell
+      * used by this thread, for the plane normal to each direction i
+      * (shiftToMinimumNyquist is called once per wavevector, and the
+      * waves of the three Nyquist planes alternate).
+      */
+      template <int D>
+      struct PlaneNeighborCache
+      {
+         IntVec<D> d;
+         double kBasis[D][D];
+         FSArray<IntVec<D>, 14> neighbors[D];
+         bool hasPlane[D];
+         bool isValid;
+
+         PlaneNeighborCache()
+          : isValid(false)
+         {}
+      };
+
+      /*
+      * Plane neighbors for the directions j and k normal to i (D = 3),
+      * computed once per mesh, cell and plane.
+      */
+      template <int D>
+      FSArray<IntVec<D>, 14> const &
+      cachedPlaneNeighbors(IntVec<D> const & d, int i, int j, int k,
+                           UnitCell<D> const & cell)
+      {
+         thread_local PlaneNeighborCache<D> cache;
+         bool same = cache.isValid && (cache.d == d);
+         for (int m = 0; same && m < D; ++m) {
+            for (int n = 0; n < D; ++n) {
+               if (cache.kBasis[m][n] != cell.kBasis(m)[n]) same = false;
+            }
+         }
+         if (!same) {
+            cache.d = d;
+            for (int m = 0; m < D; ++m) {
+               for (int n = 0; n < D; ++n) {
+                  cache.kBasis[m][n] = cell.kBasis(m)[n];
+               }
+               cache.hasPlane[m] = false;
+            }
+            cache.isValid = true;
+         }
+         if (!cache.hasPlane[i]) {
+            planeNeighbors<D>(d, j, k, cell, cache.neighbors[i]);
+            cache.hasPlane[i] = true;
+         }
+         return cache.neighbors[i];
+      }
+
+      /*
+      * Minimum image of r among the images r + s[j]*d[j]*e_j +
+      * s[k]*d[k]*e_k (s[j], s[k] integers), with r[i] = 0 for the
+      * third direction i.
+      *
+      * The image is moved by the Voronoi-relevant vectors of the 2D
+      * lattice of image shifts in directions j and k (see
+      * planeNeighbors), as in descendToMinimum, so the result is the
+      * largest minimum image.
+      */
+      template <int D>
+      void planeMinimum(IntVec<D>& r, IntVec<D> const & d,
+                        int i, int j, int k,
+                        UnitCell<D> const & cell, double epsilon)
+      {
+         FSArray<IntVec<D>, 14> const & nb
+                             = cachedPlaneNeighbors<D>(d, i, j, k, cell);
          descendWith<D>(r, nb, cell, epsilon);
       }
 
@@ -429,7 +498,7 @@ namespace Pscf {
       UTIL_CHECK(i >= 0 && j >= 0 && k >= 0);
       IntVec<D> r = u;
       r[i] = 0;
-      planeMinimum<D>(r, d, j, k, cell, 1.0E-8);
+      planeMinimum<D>(r, d, i, j, k, cell, 1.0E-8);
       r[i] = u[i];
       return r;
    }

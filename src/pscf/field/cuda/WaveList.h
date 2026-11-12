@@ -70,8 +70,8 @@ namespace Pscf {
    * stored image is the one that minimizes this average, as in the CPU 
    * class WaveList<D,CPT> (see its documentation). These images are 
    * computed on the host (shiftToMinimumNyquist) and copied to the 
-   * device. The average is not used if it has been forbidden by 
-   * allowNyquistAverage(false), as is done for space groups with 3- or 
+   * device. The average is not used if it has been forbidden by
+   * allowNyquistAverage(false), as is done for space groups with 3- or
    * 6-fold rotations in a hexagonal setting (see allowNyquistAverage).
    *
    * \ingroup Pscf_Field_Cuda_Module
@@ -125,14 +125,14 @@ namespace Pscf {
       *
       * By default, kSq of a wavevector with a Nyquist index is averaged
       * over the signs of its Nyquist indices if the lattice system has a
-      * variable angle. The average is invariant only under symmetry 
-      * operations whose rotation matrices are signed permutations; the 
-      * owner of a space group with other operations should therefore 
-      * forbid it. kSq is then the minimum-image |k|^2 for all 
+      * variable angle. The average is invariant only under symmetry
+      * operations whose rotation matrices are signed permutations; the
+      * owner of a space group with other operations should therefore
+      * forbid it. kSq is then the minimum-image |k|^2 for all
       * wavevectors. See WaveList<D,CPT>::allowNyquistAverage.
       *
-      * If this changes whether kSq is averaged, minimum images, kSq, 
-      * dKSq and the sorted waves are marked as outdated. 
+      * If this changes whether kSq is averaged, minimum images, kSq,
+      * dKSq and the sorted waves are marked as outdated.
       *
       * \pre allocate() must have been called.
       *
@@ -461,7 +461,7 @@ namespace Pscf {
       /**
       * Ranks of the wavevectors that have a Nyquist index (device).
       *
-      * Allocated, with capacity nNyquist_, only if the lattice system 
+      * Allocated, with capacity nNyquist_, only if the lattice system
       * has a variable angle and nNyquist_ > 0.
       */
       BackendArray<int,CUT> nyquistRanks_d_;
@@ -474,6 +474,22 @@ namespace Pscf {
       * rank nyquistRanks_d_[i].
       */
       DArray< IntVec<D> > nyquistWaves_h_;
+
+      /**
+      * Images of the wavevectors with a Nyquist index (host buffer).
+      *
+      * Allocated with nyquistRanks_d_, with capacity D*nNyquist_.
+      * Component j of the image of wavevector i is element
+      * i + j*nNyquist_.
+      */
+      HostSendArray<int,CUT> nyquistImages_h_;
+
+      /**
+      * Images of the wavevectors with a Nyquist index (device).
+      *
+      * Allocated with nyquistRanks_d_, same layout as nyquistImages_h_.
+      */
+      BackendArray<int,CUT> nyquistImages_d_;
 
       /**
       * Wavevector ranks, sorted in ascending wavevector magnitude.
