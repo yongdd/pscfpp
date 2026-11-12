@@ -197,5 +197,28 @@ namespace R1 {
    void AmIterator::outputToLog()
    {}
 
+   /*
+   * Norm of P w + e/S, the field that the residual compares with the
+   * interaction field chi phi.
+   */
+   double AmIterator::relNormReference(DArray<double> const & state)
+   {
+      const int nm = mixture().nMonomer();
+      const int nx = domain().nx();
+      const double shift = 1.0/interaction_.sumChiInverse();
+      double normSq = 0.0;
+      double value;
+      for (int i = 0; i < nm; ++i) {
+         for (int k = 0; k < nx; ++k) {
+            value = shift;
+            for (int j = 0; j < nm; ++j) {
+               value += interaction_.p(i,j)*state[j*nx + k];
+            }
+            normSq += value*value;
+         }
+      }
+      return sqrt(normSq);
+   }
+
 }
 }

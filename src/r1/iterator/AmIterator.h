@@ -121,6 +121,23 @@ namespace R1 {
       */
       void outputToLog() override;
 
+      /**
+      * Norm of the reference vector for the "relNorm" error type.
+      *
+      * The residual is the difference chi phi - (P w + e/S) of two
+      * fields, in which e is the vector of ones, S is the sum of the
+      * elements of the inverse chi matrix and P is the matrix that
+      * removes the component of w along e. The reference vector is
+      * P w + e/S, which equals the interaction field chi phi at a
+      * solution. It does not contain the component of w along e (the
+      * pressure field), which enters the residual only through phi: a
+      * diverged pressure field, for which the Crank-Nicolson step leaves
+      * phi bounded, would otherwise make the error arbitrarily small.
+      *
+      * \param state  current state vector (w fields)
+      */
+      double relNormReference(DArray<double> const & state) override;
+
    };
 
 } // namespace R1

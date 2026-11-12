@@ -118,9 +118,12 @@ the scalar error, depending on the value of the identifier errorType.
     maximum of the absolute magnitude of the elements of the residual 
     vector (the L infinity norm of the residual vector).
 
-  - If errorType == norm, then the scalar error is take to be the ratio 
-    of the L2 norm of the residual vector to the L2 norm of the w field, 
-    as in Stasiak and Matsen, Eur. Phys, Journel E, 2012. 
+  - If errorType == relNorm (the default), then the scalar error is
+    taken to be the ratio of the L2 norm of the residual vector to the
+    L2 norm of a reference field, which is equal to the interaction
+    field at a solution, as described
+    \ref r1_AmIterator_relNorm_sec "below". (Stasiak and Matsen,
+    Eur. Phys. J. E, 2011, divide by the L2 norm of the w fields.)
 
 \section r1_AmIterator_residual_sec Residual definition
 
@@ -149,6 +152,7 @@ as
 \f[
   R_{ai} = \sum_{j=0}^{N_{m}-1} 
            \left ( \chi_{ij} \phi_{aj} - P_{ij}w_{aj} \right ) 
+           - \frac{1}{S}
   \quad.
 \f]
 where \f$ P_{ij} \f$ is an element of an idempotent 
@@ -158,13 +162,42 @@ expressed in matrix notation as
   P  = I
   - \frac{\epsilon \epsilon^{T} \chi^{-1} }
         { \epsilon^{T} \chi^{-1} \epsilon }
- \quad.
+ \quad,
 \f]
+and \f$ S = \epsilon^{T} \chi^{-1} \epsilon \f$.
 Here, \f$ I \f$ is the identity matrix,
 \f$ \chi^{-1} \f$ is the matrix inverse of the \f$\chi\f$ matrix, 
 and \f$\epsilon\f$ is a \f$ N_{m} \f$-component column vector with 
 elements given by \f$ \epsilon_{i} = 1 \f$ for all 
 \f$ i = 0, \ldots, N_{m}-1 \f$.
+
+\section r1_AmIterator_relNorm_sec Reference field of the relNorm error
+
+The residual defined above is the difference
+\f$ R_{ai} = \sum_{j} \chi_{ij}\phi_{aj} - Q_{ai} \f$ of the
+interaction field and the field
+\f[
+  Q_{ai} = \sum_{j=0}^{N_{m}-1} P_{ij}w_{aj} + \frac{1}{S}
+  \quad.
+\f]
+If errorType == relNorm, the scalar error is the ratio
+\f$ |{\bf R}|/|{\bf Q}| \f$ of the L2 norms of the residual vector
+and of this reference field. At a solution, \f$ Q_{ai} \f$ is equal
+to the interaction field \f$ \sum_{j} \chi_{ij}\phi_{aj} \f$.
+
+Because \f$ P\epsilon = 0 \f$, the reference field does not depend
+on the part of the w fields along \f$ \epsilon \f$, i.e., on a field
+\f$ \xi_{a} \f$ added to \f$ w_{ia} \f$ for all monomer types i,
+which plays the role of a pressure field. This part enters the residual
+only through the volume fractions. Where a field is very large, the
+Crank-Nicolson step used to solve the modified diffusion equation
+multiplies the propagator by a factor of magnitude close to 1 (rather
+than by a factor near \f$ e^{-w \Delta s} \f$), so an iteration in
+which this part of the w fields diverges gives bounded volume fractions
+and residuals. A ratio to the norm of the w fields could then fall
+below epsilon at a state that is far from a solution. The reference
+field is also unaffected by the shift of the w fields in a closed
+system, described below.
 
 \section r1_AmIterator_closed_sec Closed systems (canonical ensemble)
 
