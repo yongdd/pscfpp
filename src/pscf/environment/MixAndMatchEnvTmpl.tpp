@@ -144,6 +144,14 @@ namespace Pscf {
          a1.append(a2[i]);
       }
 
+      // Route these parameters through this Environment, so that
+      // setParameter() below calls reset() and the fields are
+      // regenerated. (Generators registered themselves as modifiers,
+      // and a change made directly through them was never seen.)
+      for (int i = 0; i < a1.size(); i++) {
+         a1[i].modifierPtr = this;
+      }
+
       return a1;
    }
 

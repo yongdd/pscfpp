@@ -223,8 +223,10 @@ namespace Rp {
    {
       success = true;
       if (name == "chi_top") {
+         UTIL_CHECK(ids[0] >= 0 && ids[0] < chiTop_.capacity());
          chiTop_[ids[0]] = value;
       } else if (name == "chi_bottom") {
+         UTIL_CHECK(ids[0] >= 0 && ids[0] < chiBottom_.capacity());
          chiBottom_[ids[0]] = value;
       } else {
          success = false;
@@ -242,8 +244,10 @@ namespace Rp {
    {
       success = true;
       if (name == "chi_top") {
+         UTIL_CHECK(ids[0] >= 0 && ids[0] < chiTop_.capacity());
          return chiTop_[ids[0]];
       } else if (name == "chi_bottom") {
+         UTIL_CHECK(ids[0] >= 0 && ids[0] < chiBottom_.capacity());
          return chiBottom_[ids[0]];
       } else {
          success = false;
