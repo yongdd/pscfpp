@@ -62,9 +62,39 @@ namespace Rp {
       void readParameters(std::istream &in) override;
 
       /**
+      * Setup before the beginning of each simulation run.
+      *
+      * Calls McMove::setup() and zeros the counters of BD steps.
+      */
+      void setup() override;
+
+      /**
       * Generate a short BD simulation.
+      *
+      * The move is always accepted. A move in which the compressor
+      * failed to converge in at least one BD step is also counted as
+      * failed (see nFail()).
       */
       bool move() override;
+
+      /**
+      * Output statistics of the BD steps (at the end of a simulation).
+      */
+      void output() override;
+
+      /**
+      * Number of BD steps attempted since the last setup.
+      */
+      long nBdStep() const
+      {  return nBdStep_; }
+
+      /**
+      * Number of BD steps in which the compressor failed to converge.
+      *
+      * Such a step leaves the state unchanged.
+      */
+      long nBdStepFail() const
+      {  return nBdStepFail_; }
 
       /**
       * Do dc derivative components need to be saved before a step?
@@ -127,6 +157,12 @@ namespace Rp {
 
       // Number of BD steps per MC move.
       double nStep_;
+
+      // Number of BD steps attempted since the last setup.
+      long nBdStep_;
+
+      // Number of failed BD steps since the last setup.
+      long nBdStepFail_;
 
       // Private member functions
 

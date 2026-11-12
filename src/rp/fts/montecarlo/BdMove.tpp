@@ -22,6 +22,7 @@
 #include <pscf/backend/VecRandom.h>
 #include <pscf/backend/VecOp.h>
 #include <pscf/math/IntVec.h>
+#include <util/misc/Log.h>
 
 namespace Pscf {
 namespace Rp {
@@ -40,7 +41,9 @@ namespace Rp {
       dwc_(),
       etaNewPtr_(nullptr),
       etaOldPtr_(nullptr),
-      mobility_(0.0)
+      mobility_(0.0),
+      nBdStep_(0),
+      nBdStepFail_(0)
    {  ParamComposite::setClassName("BdMove"); }
 
    /*
@@ -69,6 +72,17 @@ namespace Rp {
       dwc_.allocate(meshDimensions);
    }
 
+   /*
+   * Setup before a simulation run.
+   */
+   template <int D, class T>
+   void BdMove<D,T>::setup()
+   {
+      McMoveT::setup();
+      nBdStep_ = 0;
+      nBdStepFail_ = 0;
+   }
+
    template <int D, class T>
    bool BdMove<D,T>::move()
    {
@@ -85,8 +99,11 @@ namespace Rp {
       UTIL_CHECK(simulator().hasDc());
 
       // Run BD simulation of nStep steps
+      bool hasFailedStep = false;
       for (int i=0; i < nStep_; ++i) {
-         bdStep();
+         if (!bdStep()) {
+            hasFailedStep = true;
+         }
       }
       McMoveT::attemptMoveTimer_.stop();
 
@@ -109,7 +126,12 @@ namespace Rp {
          simulator().computeHamiltonian();
       }
 
+      // The move is always accepted. Count it also as failed if the
+      // compressor failed in any of its BD steps.
       McMoveT::incrementNAccept();
+      if (hasFailedStep) {
+         McMoveT::incrementNFail();
+      }
       McMoveT::totalTimer_.stop();
 
       return true;
@@ -214,6 +236,7 @@ namespace Rp {
 
       // Enforce incompressibility (also solves MDE repeatedly)
       int compress = simulator().compressor().compress();
+      ++nBdStep_;
 
       // Accept move or restore state
       UTIL_CHECK(system().w().hasData());
@@ -225,7 +248,12 @@ namespace Rp {
          simulator().computeCc();
          simulator().computeDc();
          simulator().computeHamiltonian();
+
+         // Exchange old and new random fields. The new noise of this
+         // step is the old noise of the next step.
+         exchangeOldNew();
       } else {
+         ++nBdStepFail_;
          simulator().restoreState();
          UTIL_CHECK(system().w().hasData());
          UTIL_CHECK(!system().c().hasData());
@@ -242,12 +270,30 @@ namespace Rp {
          if (!simulator().hasDc()) {
             simulator().computeDc();
          }
+
+         // Keep etaOld, the noise that entered the restored state (or
+         // the first noise of the move), as LMBdStep does: the next
+         // step pairs it with a new etaNew. The new noise of the failed
+         // trial never entered the state; pairing the next step with it
+         // would give that step only half of the noise variance.
       }
 
-      // Exchange old and new random fields
-      exchangeOldNew();
+      return (compress == 0);
+   }
 
-      return true;
+   /*
+   * Output statistics of the BD steps.
+   */
+   template <int D, class T>
+   void BdMove<D,T>::output()
+   {
+      Log::file() << "BdMove: " << nBdStep_ << " BD steps, "
+                  << nBdStepFail_ << " failed";
+      if (nBdStep_ > 0) {
+         double rate = double(nBdStepFail_)/double(nBdStep_);
+         Log::file() << " (fail rate " << rate << ")";
+      }
+      Log::file() << std::endl;
    }
 
    /*

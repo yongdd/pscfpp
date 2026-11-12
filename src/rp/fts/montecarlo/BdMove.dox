@@ -26,6 +26,14 @@ Each step of the BdMove algorithm runs a short BD simulation, using
 the Leimkuler-Matthews BD step algorithm that is also used by the
 \ref rp_LMBdStep_page BD step algorithm.
 
+If the compressor fails to converge in a BD step, the step is 
+discarded: the state before the step is restored, and the next step 
+pairs the noise that entered that state with a new random noise, as 
+in an LMBdStep. The move statistics written at the end of a simulation
+count a move as accepted (BdMove always accepts the result), and also 
+as failed if the compressor failed in any of its BD steps. A separate 
+line gives the numbers of attempted and failed BD steps.
+
 \section rp_BdMove_parameter_sec Parameter file
 
 The only parameters needed by this algorithm are the "probability" 
