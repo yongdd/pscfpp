@@ -17,6 +17,7 @@
 #include "CoreFhMixtureTest.h"
 #include "CoreGroupInputTest.h"
 #include "CoreKSqOverflowTest.h"
+#include "CoreBasisOutputTest.h"
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
@@ -35,6 +36,7 @@ TEST_COMPOSITE_ADD_UNIT(CoreEdgeTest);
 TEST_COMPOSITE_ADD_UNIT(CoreFhMixtureTest);
 TEST_COMPOSITE_ADD_UNIT(CoreGroupInputTest);
 TEST_COMPOSITE_ADD_UNIT(CoreKSqOverflowTest);
+TEST_COMPOSITE_ADD_UNIT(CoreBasisOutputTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
 TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);
