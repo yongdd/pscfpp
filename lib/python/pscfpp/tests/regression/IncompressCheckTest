@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+
+# The script Incompress_check.py of the example rpc/scf/compress/bcc
+# prints the sum over all grid points of |c_0 + c_1 - 1| for the r-grid
+# file out/c_rf. A field written without a space group (as after
+# COMPRESS) has no group_name entry, so its header is two lines shorter
+# than that of a field with a space group. Run the script on such a
+# file, in which the first two grid points have the largest errors, and
+# on the same file with a group_name entry, and compare the printed sum
+# with the sum over all rows of the file. Also check that the script
+# fails for a file with a missing row.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+import pscfpp
+
+failures = []
+
+def check(condition, message):
+   if not condition:
+      raise AssertionError(message)
+
+def run(test):
+   try:
+      test()
+      print(test.__name__ + ': passed')
+   except Exception as e:
+      failures.append(test.__name__)
+      print(test.__name__ + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Root directory of the package source tree
+testDir = os.path.dirname(os.path.abspath(__file__))
+root = os.path.abspath(os.path.join(testDir, '..', '..', '..', '..', '..'))
+script = os.path.join(root, 'examples', 'rpc', 'scf', 'compress', 'bcc',
+                      'Incompress_check.py')
+
+# Directory that contains the pscfpp package
+packageDir = os.path.dirname(os.path.dirname(os.path.abspath(pscfpp.__file__)))
+
+# Lines of the input file, the index of the first data line, and the
+# sum over all data rows of |sum of the row - 1|
+with open('in/c_nogroup.rf') as f:
+   lines = f.readlines()
+first = [x.strip() for x in lines].index('mesh') + 2
+exact = 0.0
+for line in lines[first:]:
+   exact += abs(sum([float(x) for x in line.split()]) - 1.0)
+
+# Write lines to out/c_rf in a temporary directory, run the script there,
+# and return the exit status and the output
+def runScript(lines):
+   with tempfile.TemporaryDirectory() as dir:
+      os.mkdir(os.path.join(dir, 'out'))
+      with open(os.path.join(dir, 'out', 'c_rf'), 'w') as f:
+         f.writelines(lines)
+      shutil.copy(script, dir)
+      env = dict(os.environ)
+      path = env.get('PYTHONPATH', '')
+      env['PYTHONPATH'] = packageDir + (os.pathsep + path if path else '')
+      result = subprocess.run([sys.executable, 'Incompress_check.py'],
+                              cwd=dir, env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE,
+                              universal_newlines=True, timeout=120)
+   return result.returncode, result.stdout
+
+def checkSum(lines):
+   status, output = runScript(lines)
+   check(status == 0, 'exit status ' + str(status))
+   value = float(output.split()[-1])
+   check(abs(value - exact) < 1.0E-12*exact,
+         'sum ' + repr(value) + ', expected ' + repr(exact))
+
+# No group_name entry (13 header lines)
+def testNoGroupName():
+   check(first == 13, 'header lines ' + str(first))
+   checkSum(lines)
+
+# With a group_name entry (15 header lines)
+def testGroupName():
+   i = [x.strip() for x in lines].index('N_monomer')
+   checkSum(lines[:i] + ['group_name\n', '          P_1\n'] + lines[i:])
+
+# A missing grid point is an error
+def testMissingRow():
+   status, output = runScript(lines[:-1])
+   check(status != 0, 'no error for a missing row, output ' + output)
+
+run(testNoGroupName)
+run(testGroupName)
+run(testMissingRow)
+
+if failures:
+   sys.exit(1)
