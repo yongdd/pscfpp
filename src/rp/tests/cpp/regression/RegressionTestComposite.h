@@ -37,6 +37,7 @@
 #include "FtsAnalyzeChiTest.h"
 #include "FtsRelNormTest.h"
 #include "ScftLongChainTest.h"
+#include "ScftContourStepTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -73,6 +74,7 @@ TEST_COMPOSITE_ADD_UNIT(FtsLmBdStepSplitTest);
 TEST_COMPOSITE_ADD_UNIT(FtsAnalyzeChiTest);
 TEST_COMPOSITE_ADD_UNIT(FtsRelNormTest);
 TEST_COMPOSITE_ADD_UNIT(ScftLongChainTest);
+TEST_COMPOSITE_ADD_UNIT(ScftContourStepTest);
 TEST_COMPOSITE_END
 
 #endif
