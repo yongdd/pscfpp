@@ -62,6 +62,19 @@ namespace Pscf {
    * properties as being outdated, indicating that they are outdated and
    * thus must be recalculated before the next use.
    *
+   * Nyquist planes: for a lattice system with a variable angle, kSq of a
+   * wavevector with a Nyquist index (an index d/2 along a direction with
+   * an even number d of grid points) is the average of |k|^2 over the 
+   * images that differ only in the signs of the Nyquist indices (see 
+   * ksqNyquist), and the image stored in minImages() is the one that 
+   * minimizes this average (see shiftToMinimumNyquist). The minimum 
+   * |k|^2 of such a wavevector, used otherwise, switches between these
+   * images where a cell angle passes through 90 degrees, so that kSq and
+   * the free energy would have a kink there. With the average, kSq is 
+   * smooth there, and dKSq is its derivative. For all other wavevectors, 
+   * and for all wavevectors of other lattice systems, kSq is |k|^2 of 
+   * the minimum image.
+   *
    * \ingroup Pscf_Field_Cpp_Module
    */
    template <int D>
@@ -433,6 +446,9 @@ namespace Pscf {
 
       /// Will this WaveList be used for real-valued fields?
       bool isRealField_;
+
+      /// Average kSq over the signs of Nyquist indices (variable angles)?
+      bool averageNyquist_;
 
       /// Pointer to associated UnitCell<D> object
       UnitCell<D> const * unitCellPtr_;

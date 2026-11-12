@@ -64,6 +64,14 @@ namespace Pscf {
    * properties as being outdated, indicating that they are outdated and
    * thus must be recalculated before the next use.
    *
+   * Nyquist planes: for a lattice system with a variable angle, kSq of a
+   * wavevector with a Nyquist index is the average of |k|^2 over the 
+   * images that differ only in the signs of the Nyquist indices, and its
+   * stored image is the one that minimizes this average, as in the CPU 
+   * class WaveList<D,CPT> (see its documentation). These images are 
+   * computed on the host (shiftToMinimumNyquist) and copied to the 
+   * device.
+   *
    * \ingroup Pscf_Field_Cuda_Module
    */
    template <int D>
@@ -419,6 +427,23 @@ namespace Pscf {
       DArray<bool> implicitInverse_h_;
 
       /**
+      * Ranks of the wavevectors that have a Nyquist index (device).
+      *
+      * Allocated, with capacity nNyquist_, only if averageNyquist_ is
+      * true and nNyquist_ > 0.
+      */
+      BackendArray<int,CUT> nyquistRanks_d_;
+
+      /**
+      * Wavevectors that have a Nyquist index, as k-grid positions (host).
+      *
+      * Allocated, with capacity nNyquist_, only if averageNyquist_ is
+      * true and nNyquist_ > 0. Element i corresponds to rank 
+      * nyquistRanks_d_[i].
+      */
+      DArray< IntVec<D> > nyquistWaves_h_;
+
+      /**
       * Wavevector ranks, sorted in ascending wavevector magnitude.
       *
       * For i > j, kSq_[sortedIds_[i]] >= kSq_[sortedIds_[j]].
@@ -498,6 +523,12 @@ namespace Pscf {
 
       /// Will this WaveList be used for real-valued fields?
       bool isRealField_;
+
+      /// Number of wavevectors that have a Nyquist index (if averaged).
+      int nNyquist_;
+
+      /// Average kSq over the signs of Nyquist indices (variable angles)?
+      bool averageNyquist_;
 
       /// Pointer to associated UnitCell<D> object.
       UnitCell<D> const * unitCellPtr_;

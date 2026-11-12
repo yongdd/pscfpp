@@ -176,8 +176,8 @@ public:
       iter.setDimensions(kMeshDims2);
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimum(temp, mesh2.dimensions(), cell2);
-         val = cell2.ksq(vec);
+         vec = shiftToMinimumNyquist(temp, mesh2.dimensions(), cell2);
+         val = ksqNyquist(vec, mesh2.dimensions(), cell2);
          
          TEST_ASSERT(vec == minImages[iter.rank()]);
          TEST_ASSERT(abs(val - ksq[iter.rank()]) < tolerance_);
@@ -212,8 +212,8 @@ public:
       iter.setDimensions(kMeshDims3);
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimum(temp, mesh3.dimensions(), cell3);
-         val = cell3.ksq(vec);
+         vec = shiftToMinimumNyquist(temp, mesh3.dimensions(), cell3);
+         val = ksqNyquist(vec, mesh3.dimensions(), cell3);
 
          TEST_ASSERT(vec == minImages[iter.rank()]);
          TEST_ASSERT(abs(val - ksq[iter.rank()]) < tolerance_);
@@ -383,8 +383,8 @@ public:
          RField<2,CPT> const & dksq = wavelist.dKSq(n);
          for (iter.begin(); !iter.atEnd(); ++iter) {
             pos = iter.position();
-            vec = shiftToMinimum(pos, mesh2.dimensions(), cell2);
-            val = cell2.dksq(vec, n);
+            vec = shiftToMinimumNyquist(pos, mesh2.dimensions(), cell2);
+            val = dksqNyquist(vec, mesh2.dimensions(), cell2, n);
             if (pos[1] != 0) {
                if (mesh2.dimension(1) - pos[1] > mesh2.dimension(1)/2){
                   val *= 2.0;
@@ -412,8 +412,8 @@ public:
          RField<3,CPT> const & dksq = wavelist.dKSq(n);
          for (iter.begin(); !iter.atEnd(); ++iter) {
             pos = iter.position();
-            vec = shiftToMinimum(pos, mesh3.dimensions(), cell3);
-            val = cell3.dksq(vec, n);
+            vec = shiftToMinimumNyquist(pos, mesh3.dimensions(), cell3);
+            val = dksqNyquist(vec, mesh3.dimensions(), cell3, n);
             if (pos[2] != 0) {
                if (mesh3.dimension(2) - pos[2] > mesh3.dimension(2)/2){
                   val *= 2.0;
@@ -528,14 +528,14 @@ public:
       iter.setDimensions(mesh3.dimensions());
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimum(temp, mesh3.dimensions(), cell3);
-         val = cell3.ksq(vec);
+         vec = shiftToMinimumNyquist(temp, mesh3.dimensions(), cell3);
+         val = ksqNyquist(vec, mesh3.dimensions(), cell3);
 
          TEST_ASSERT(vec == minImages[iter.rank()]);
          TEST_ASSERT(abs(val - ksq[iter.rank()]) < tolerance_);
 
          for (int i = 0; i < cell3.nParameter(); i++) {
-            val = cell3.dksq(vec, i);
+            val = dksqNyquist(vec, mesh3.dimensions(), cell3, i);
             TEST_ASSERT(abs(val - dksq[i][iter.rank()]) < tolerance_);
          }
       }

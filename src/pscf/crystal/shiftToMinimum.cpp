@@ -97,10 +97,9 @@ namespace Pscf {
       * The CUDA WaveList kernels implement the same steps.
       */
       template <int D>
-      void descendToMinimum(IntVec<D>& r, IntVec<D> const & d,
-                            UnitCell<D> const & cell, double epsilon)
+      void descendWith(IntVec<D>& r, FSArray<IntVec<D>, 14> const & nb,
+                       UnitCell<D> const & cell, double epsilon)
       {
-         FSArray<IntVec<D>, 14> const & nb = cachedNeighbors<D>(d, cell);
          const int n = nb.size();
          double Gsq = cell.ksq(r);
          IntVec<D> u;
@@ -130,6 +129,94 @@ namespace Pscf {
                }
             }
          }
+      }
+
+      /*
+      * Move image r to a minimum image, by the image shift neighbors
+      * of the mesh (see descendWith).
+      */
+      template <int D>
+      void descendToMinimum(IntVec<D>& r, IntVec<D> const & d,
+                            UnitCell<D> const & cell, double epsilon)
+      {
+         FSArray<IntVec<D>, 14> const & nb = cachedNeighbors<D>(d, cell);
+         descendWith<D>(r, nb, cell, epsilon);
+      }
+
+      /*
+      * Is the wave index vi on a Nyquist plane of a mesh dimension di?
+      */
+      inline bool isNyquistIndex(int vi, int di)
+      {
+         if (di % 2 != 0) return false;
+         int r = vi % di;
+         if (r < 0) r += di;
+         return (2*r == di);
+      }
+
+      /*
+      * Minimum image of r among the images r + s[j]*d[j]*e_j + 
+      * s[k]*d[k]*e_k (s[j], s[k] integers), with r[i] = 0 for the 
+      * third direction i. 
+      *
+      * The image is moved by the Voronoi-relevant vectors of the 2D 
+      * lattice of image shifts in directions j and k (Selling reduction 
+      * of the superbase d[j]*e_j, d[k]*e_k, -(d[j]*e_j + d[k]*e_k)), as 
+      * in descendToMinimum, so the result is the largest minimum image.
+      */
+      template <int D>
+      void planeMinimum(IntVec<D>& r, IntVec<D> const & d, int j, int k,
+                        UnitCell<D> const & cell, double epsilon)
+      {
+         // Superbase of the plane lattice of image shifts
+         FArray<IntVec<D>, 3> v;
+         v[1] = IntVec<D>(0);
+         v[1][j] = d[j];
+         v[2] = IntVec<D>(0);
+         v[2][k] = d[k];
+         v[0].negate(v[1]);
+         v[0] -= v[2];
+
+         // Selling reduction (2D step, as in imageShiftNeighbors)
+         int iter = 0;
+         for (;;) {
+            double norm = 0.0;
+            for (int a = 0; a < 3; ++a) {
+               norm += kDot<D>(v[a], v[a], cell);
+            }
+            double pMax = 1.0E-12*norm;
+            int aMax = -1;
+            int bMax = -1;
+            for (int a = 0; a < 3; ++a) {
+               for (int b = a + 1; b < 3; ++b) {
+                  double p = kDot<D>(v[a], v[b], cell);
+                  if (p > pMax) {
+                     pMax = p;
+                     aMax = a;
+                     bMax = b;
+                  }
+               }
+            }
+            if (aMax < 0) break;
+            int c = 3 - aMax - bMax;
+            v[c] += v[aMax];
+            v[c] += v[aMax];
+            v[aMax].negate();
+            ++iter;
+            if (iter > 10000) {
+               UTIL_THROW("Selling reduction of image shifts did not converge");
+            }
+         }
+
+         // Voronoi-relevant vectors +-v_a, then descent
+         FSArray<IntVec<D>, 14> nb;
+         IntVec<D> w;
+         for (int a = 0; a < 3; ++a) {
+            nb.append(v[a]);
+            w.negate(v[a]);
+            nb.append(w);
+         }
+         descendWith<D>(r, nb, cell, epsilon);
       }
 
    }
@@ -226,6 +313,154 @@ namespace Pscf {
       descendToMinimum<3>(r, d, cell, epsilon);
       return r;
    }
+
+   /*
+   * Does any component of v lie on a Nyquist plane?
+   */
+   template <int D>
+   bool hasNyquistIndex(IntVec<D> const & v, IntVec<D> const & d)
+   {
+      for (int i = 0; i < D; ++i) {
+         if (isNyquistIndex(v[i], d[i])) return true;
+      }
+      return false;
+   }
+
+   /*
+   * Square magnitude averaged over the signs of the Nyquist indices.
+   */
+   template <int D>
+   double ksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
+                     UnitCell<D> const & cell)
+   {
+      // Average of |k|^2 over the sign reversals of the Nyquist indices:
+      // the cross terms that contain a Nyquist index cancel, so this is
+      // |k|^2 of the other components plus |k|^2 of each Nyquist one.
+      IntVec<D> u = v;
+      bool hasNyquist = false;
+      for (int i = 0; i < D; ++i) {
+         if (isNyquistIndex(v[i], d[i])) {
+            u[i] = 0;
+            hasNyquist = true;
+         }
+      }
+      if (!hasNyquist) return cell.ksq(v);
+      double value = cell.ksq(u);
+      IntVec<D> w;
+      for (int i = 0; i < D; ++i) {
+         if (isNyquistIndex(v[i], d[i])) {
+            w = IntVec<D>(0);
+            w[i] = v[i];
+            value += cell.ksq(w);
+         }
+      }
+      return value;
+   }
+
+   /*
+   * Derivative of ksqNyquist with respect to cell parameter n.
+   */
+   template <int D>
+   double dksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
+                      UnitCell<D> const & cell, int n)
+   {
+      IntVec<D> u = v;
+      bool hasNyquist = false;
+      for (int i = 0; i < D; ++i) {
+         if (isNyquistIndex(v[i], d[i])) {
+            u[i] = 0;
+            hasNyquist = true;
+         }
+      }
+      if (!hasNyquist) return cell.dksq(v, n);
+      double value = cell.dksq(u, n);
+      IntVec<D> w;
+      for (int i = 0; i < D; ++i) {
+         if (isNyquistIndex(v[i], d[i])) {
+            w = IntVec<D>(0);
+            w[i] = v[i];
+            value += cell.dksq(w, n);
+         }
+      }
+      return value;
+   }
+
+   /*
+   * Image of v that minimizes ksqNyquist.
+   */
+   template <int D>
+   IntVec<D> shiftToMinimumNyquist(IntVec<D> const & v,
+                                   IntVec<D> const & d,
+                                   UnitCell<D> const & cell)
+   {
+      // Images of the components in (-d/2, d/2], Nyquist directions
+      IntVec<D> u;
+      int nNyquist = 0;
+      for (int i = 0; i < D; ++i) {
+         int r = v[i] % d[i];
+         if (r < 0) r += d[i];
+         if (2*r > d[i]) r -= d[i];
+         u[i] = r;
+         if (2*r == d[i]) ++nNyquist;
+      }
+      if (nNyquist == 0) return shiftToMinimum(v, d, cell);
+
+      // ksqNyquist is |k|^2 of the other components plus a constant, 
+      // so the other components take their minimum image in the 
+      // lattice of image shifts of their directions. With at most one
+      // other direction, this is the image of smallest magnitude.
+      if (D - nNyquist < 2) return u;
+
+      // D = 3 with one Nyquist direction i: minimum in plane (j, k)
+      UTIL_CHECK(D == 3);
+      UTIL_CHECK(nNyquist == 1);
+      int i = -1;
+      int j = -1;
+      int k = -1;
+      for (int m = 0; m < D; ++m) {
+         if (2*u[m] == d[m]) {
+            i = m;
+         } else if (j < 0) {
+            j = m;
+         } else {
+            k = m;
+         }
+      }
+      UTIL_CHECK(i >= 0 && j >= 0 && k >= 0);
+      IntVec<D> r = u;
+      r[i] = 0;
+      planeMinimum<D>(r, d, j, k, cell, 1.0E-8);
+      r[i] = u[i];
+      return r;
+   }
+
+   template bool hasNyquistIndex<1>(IntVec<1> const &, IntVec<1> const &);
+   template bool hasNyquistIndex<2>(IntVec<2> const &, IntVec<2> const &);
+   template bool hasNyquistIndex<3>(IntVec<3> const &, IntVec<3> const &);
+
+   template double ksqNyquist<1>(IntVec<1> const &, IntVec<1> const &,
+                                 UnitCell<1> const &);
+   template double ksqNyquist<2>(IntVec<2> const &, IntVec<2> const &,
+                                 UnitCell<2> const &);
+   template double ksqNyquist<3>(IntVec<3> const &, IntVec<3> const &,
+                                 UnitCell<3> const &);
+
+   template double dksqNyquist<1>(IntVec<1> const &, IntVec<1> const &,
+                                  UnitCell<1> const &, int);
+   template double dksqNyquist<2>(IntVec<2> const &, IntVec<2> const &,
+                                  UnitCell<2> const &, int);
+   template double dksqNyquist<3>(IntVec<3> const &, IntVec<3> const &,
+                                  UnitCell<3> const &, int);
+
+   template IntVec<1> shiftToMinimumNyquist<1>(IntVec<1> const &,
+                                              IntVec<1> const &,
+                                              UnitCell<1> const &);
+   template IntVec<2> shiftToMinimumNyquist<2>(IntVec<2> const &,
+                                              IntVec<2> const &,
+                                              UnitCell<2> const &);
+   template IntVec<3> shiftToMinimumNyquist<3>(IntVec<3> const &,
+                                              IntVec<3> const &,
+                                              UnitCell<3> const &);
 
    /*
    * Voronoi-relevant vectors of the lattice of image shifts.

@@ -34,6 +34,7 @@ namespace Pscf {
       hasdKSq_(false),
       isSorted_(false),
       isRealField_(isRealField),
+      averageNyquist_(false),
       unitCellPtr_(nullptr),
       meshPtr_(nullptr)
    {}
@@ -62,6 +63,10 @@ namespace Pscf {
       // Local copies of properties
       int nParams = unitCell().nParameter();
       IntVec<D> const & meshDimensions = mesh().dimensions();
+
+      // Average kSq over the signs of Nyquist indices if the lattice
+      // system has a variable angle (see class documentation)
+      averageNyquist_ = hasVariableAngle<D>(unitCell().lattice());
 
       // Compute kMeshDimensions_ and kSize_
       if (isRealField_) {
@@ -130,13 +135,20 @@ namespace Pscf {
       UTIL_CHECK(unitCell().isInitialized());
       UTIL_CHECK(minImages_.capacity() == kSize_);
 
+      IntVec<D> const & d = mesh().dimensions();
       MeshIterator<D> kItr(kMeshDimensions_);
       int rank;
       for (kItr.begin(); !kItr.atEnd(); ++kItr) {
          rank = kItr.rank();
-         minImages_[rank] = shiftToMinimum(kItr.position(), 
-                                           mesh().dimensions(), unitCell());
-         kSq_[rank] = unitCell().ksq(minImages_[rank]);
+         if (averageNyquist_ && hasNyquistIndex(kItr.position(), d)) {
+            minImages_[rank] = shiftToMinimumNyquist(kItr.position(), 
+                                                     d, unitCell());
+            kSq_[rank] = ksqNyquist(minImages_[rank], d, unitCell());
+         } else {
+            minImages_[rank] = shiftToMinimum(kItr.position(), 
+                                              d, unitCell());
+            kSq_[rank] = unitCell().ksq(minImages_[rank]);
+         }
       }
 
       hasMinImages_ = true;
@@ -165,11 +177,16 @@ namespace Pscf {
       UTIL_CHECK(unitCell().isInitialized());
 
       // Compute kSq_
+      IntVec<D> const & d = mesh().dimensions();
       MeshIterator<D> kItr(kMeshDimensions_);
       int rank;
       for (kItr.begin(); !kItr.atEnd(); ++kItr) {
          rank = kItr.rank();
-         kSq_[rank] = unitCell().ksq(minImages_[rank]);
+         if (averageNyquist_ && hasNyquistIndex(minImages_[rank], d)) {
+            kSq_[rank] = ksqNyquist(minImages_[rank], d, unitCell());
+         } else {
+            kSq_[rank] = unitCell().ksq(minImages_[rank]);
+         }
       }
       
       hasKSq_ = true;
@@ -194,13 +211,18 @@ namespace Pscf {
       UTIL_CHECK(unitCell().lattice() != UnitCell<D>::Null);
       UTIL_CHECK(unitCell().isInitialized());
 
+      IntVec<D> const & d = mesh().dimensions();
       MeshIterator<D> kItr(kMeshDimensions_);
       int i, rank;
       for (i = 0 ; i < unitCell().nParameter(); ++i) {
          RField<D,CPT>& dksq = dKSq_[i];
          for (kItr.begin(); !kItr.atEnd(); ++kItr) {
             rank = kItr.rank();
-            dksq[rank] = unitCell().dksq(minImages_[rank], i);
+            if (averageNyquist_ && hasNyquistIndex(minImages_[rank], d)) {
+               dksq[rank] = dksqNyquist(minImages_[rank], d, unitCell(), i);
+            } else {
+               dksq[rank] = unitCell().dksq(minImages_[rank], i);
+            }
             if (isRealField_) {
                if (implicitInverse_[rank]) {
                   dksq[rank] *= 2.0;

@@ -8,6 +8,7 @@
 #include <pscf/backend/cuda/cudaTypes.h>
 #include <pscf/crystal/shiftToMinimum.h>
 #include <pscf/crystal/UnitCell.h>
+#include <pscf/crystal/hasVariableAngle.h>
 
 #include <pscf/backend/cuda/HostRecvArray.h>
 #include <pscf/mesh/Mesh.h>
@@ -47,7 +48,9 @@ public:
 
    /*
    * Compare the device minimum images and kSq with shiftToMinimum and
-   * UnitCell::ksq, for all wavevectors of a mesh.
+   * UnitCell::ksq, for all wavevectors of a mesh (with 
+   * shiftToMinimumNyquist and ksqNyquist for lattice systems with a
+   * variable angle, which differ only for Nyquist wavevectors).
    */
    template <int D>
    void checkMinimumImages(UnitCell<D> const & cell, IntVec<D> const & d)
@@ -66,16 +69,27 @@ public:
       minImages_h = wavelist.minImages_d();
       ksq_h = wavelist.kSq();
 
+      // For lattice systems with a variable angle, wavevectors with a
+      // Nyquist index have the image and kSq of shiftToMinimumNyquist
+      // and ksqNyquist (equal to shiftToMinimum and ksq for the others)
+      bool averageNyquist = hasVariableAngle<D>(cell.lattice());
       IntVec<D> temp, vec;
+      double ksq;
       MeshIterator<D> iter;
       iter.setDimensions(kDims);
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimum(temp, d, cell);
+         if (averageNyquist) {
+            vec = shiftToMinimumNyquist(temp, d, cell);
+            ksq = ksqNyquist(vec, d, cell);
+         } else {
+            vec = shiftToMinimum(temp, d, cell);
+            ksq = cell.ksq(vec);
+         }
          for (int i = 0; i < D; ++i) {
             TEST_ASSERT(vec[i] == minImages_h[iter.rank() + i*kSize]);
          }
-         TEST_ASSERT(fabs(cell.ksq(vec) - ksq_h[iter.rank()]) < tolerance_);
+         TEST_ASSERT(fabs(ksq - ksq_h[iter.rank()]) < tolerance_);
       }
    }
 
@@ -83,7 +97,9 @@ public:
    * Minimum images on every 2D lattice system, including square and
    * hexagonal cells with many images of equal |k|, on even and odd
    * meshes. The 32 images of each wavevector are reduced within one
-   * warp: the device images must equal those of shiftToMinimum.
+   * warp: the device images must equal those of shiftToMinimum
+   * (except for the Nyquist wavevectors of the rhombic and oblique
+   * cells, whose images are computed on the host).
    */
    void testComputeMinimumImages2DLattices()
    {

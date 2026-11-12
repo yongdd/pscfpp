@@ -64,6 +64,78 @@ namespace Pscf {
                             UnitCell<3> const & cell);
 
    /**
+   * Does any index of a DFT wavevector lie on a Nyquist plane?
+   *
+   * Index v[i] is a Nyquist index if d[i] is even and v[i] is congruent
+   * to d[i]/2 modulo d[i]. The images of such a wavevector with v[i] 
+   * and -v[i] are then equivalent (they differ by v[i] - (-v[i]), a 
+   * multiple of d[i]).
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param v  integer indices of a wavevector
+   * \param d  dimensions of the discrete Fourier transform grid
+   */
+   template <int D>
+   bool hasNyquistIndex(IntVec<D> const & v, IntVec<D> const & d);
+
+   /**
+   * Square magnitude |k|^2, averaged over the signs of Nyquist indices.
+   *
+   * Returns the average of |k|^2 over the images of v obtained by 
+   * reversing the signs of any subset of its Nyquist indices (see
+   * hasNyquistIndex). This treats each Nyquist component symmetrically,
+   * as a standing wave: the cross terms of |k|^2 that contain a Nyquist
+   * index cancel. The result is equal for all these images, and equal 
+   * to UnitCell::ksq(v) if v has no Nyquist index or if the reciprocal 
+   * basis vectors of the Nyquist directions are orthogonal to the others.
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param v  integer indices of a wavevector
+   * \param d  dimensions of the discrete Fourier transform grid
+   * \param cell  UnitCell
+   */
+   template <int D>
+   double ksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
+                     UnitCell<D> const & cell);
+
+   /**
+   * Derivative of ksqNyquist with respect to a unit cell parameter.
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param v  integer indices of a wavevector
+   * \param d  dimensions of the discrete Fourier transform grid
+   * \param cell  UnitCell
+   * \param n  index of the unit cell parameter
+   */
+   template <int D>
+   double dksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
+                      UnitCell<D> const & cell, int n);
+
+   /**
+   * Returns the image of a DFT wavevector that minimizes ksqNyquist.
+   *
+   * If v has no Nyquist index, this is shiftToMinimum(v, d, cell). 
+   * Otherwise, the Nyquist indices are set to +d[i]/2, and the other 
+   * indices to the (largest) minimum image of their components in the
+   * lattice of image shifts of their own directions, on which 
+   * ksqNyquist then depends.
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param v  integer indices of a wavevector
+   * \param d  dimensions of the discrete Fourier transform grid
+   * \param cell  UnitCell
+   * \return  integer indices of the image
+   */
+   template <int D>
+   IntVec<D> shiftToMinimumNyquist(IntVec<D> const & v, 
+                                   IntVec<D> const & d,
+                                   UnitCell<D> const & cell);
+
+   /**
    * Voronoi-relevant vectors of the lattice of image shifts.
    *
    * The lattice of image shifts is spanned by the vectors d[i]*e_i, in
