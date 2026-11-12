@@ -399,6 +399,24 @@ namespace Rp {
       gsl_matrix* Avecs = gsl_matrix_alloc(nMonomer, nMonomer);
       int error;
       error = gsl_eigen_symmv(A, Avals, Avecs, work);
+
+      // Copy the eigenvalues and eigenvectors, and free the GSL objects
+      // before any check below can throw (this function is called at
+      // every step of a ramp that changes chi).
+      DArray<double> evals;
+      DMatrix<double> evecs;
+      evals.allocate(nMonomer);
+      evecs.allocate(nMonomer, nMonomer);
+      for (i = 0; i < nMonomer; ++i) {
+         evals[i] = gsl_vector_get(Avals, i);
+         for (j = 0; j < nMonomer; ++j) {
+            evecs(i, j) = gsl_matrix_get(Avecs, i, j);
+         }
+      }
+      gsl_matrix_free(A);
+      gsl_eigen_symmv_free(work);
+      gsl_vector_free(Avals);
+      gsl_matrix_free(Avecs);
       UTIL_CHECK(error == 0);
 
       // Requirements:
@@ -411,7 +429,7 @@ namespace Rp {
       k = 0;           // re-ordered index for non-null eigenvalue
       double val;
       for (i = 0; i < nMonomer; ++i) {
-         val = gsl_vector_get(Avals, i);
+         val = evals[i];
          if (std::abs(val) < 1.0E-8) {
             ++nNull;
             iNull = i;
@@ -420,7 +438,7 @@ namespace Rp {
             chiEvals_[k] = val;
             UTIL_CHECK(val < 0.0);
             for (j = 0; j < nMonomer; ++j) {
-               chiEvecs_(k, j) = gsl_matrix_get(Avecs, j, i);
+               chiEvecs_(k, j) = evecs(j, i);
             }
             if (chiEvecs_(k, 0) < 0.0) {
                for (j = 0; j < nMonomer; ++j) {
@@ -437,7 +455,7 @@ namespace Rp {
       i = nMonomer - 1;
       chiEvals_[i] = 0.0;
       for (j = 0; j < nMonomer; ++j) {
-         chiEvecs_(i, j) = gsl_matrix_get(Avecs, j, iNull);
+         chiEvecs_(i, j) = evecs(j, iNull);
       }
       if (chiEvecs_(i, 0) < 0) {
          for (j = 0; j < nMonomer; ++j) {
