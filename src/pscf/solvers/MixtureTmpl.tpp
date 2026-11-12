@@ -36,7 +36,7 @@ namespace Pscf
    PolymerSpecies<WT> const & 
    MixtureTmpl<PT,ST,WT>::polymerSpecies(int id) const
    {
-      UTIL_CHECK(id < nPolymer_);
+      UTIL_CHECK(id >= 0 && id < nPolymer_);
       return polymers_[id];
    }
 
@@ -47,7 +47,7 @@ namespace Pscf
    SolventSpecies<WT> const & 
    MixtureTmpl<PT,ST,WT>::solventSpecies(int id) const
    {
-      UTIL_CHECK(id < nSolvent_);
+      UTIL_CHECK(id >= 0 && id < nSolvent_);
       return solvents_[id];
    }
 

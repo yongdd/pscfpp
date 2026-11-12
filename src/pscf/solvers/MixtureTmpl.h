@@ -160,28 +160,28 @@ namespace Pscf
    template <class PT, class ST, typename WT>
    inline PT& MixtureTmpl<PT,ST,WT>::polymer(int id)
    {  
-      UTIL_CHECK(id < nPolymer_);
+      UTIL_CHECK(id >= 0 && id < nPolymer_);
       return polymers_[id];
    }
 
    template <class PT, class ST, typename WT>
    inline PT const & MixtureTmpl<PT,ST,WT>::polymer(int id) const
    {  
-      UTIL_CHECK(id < nPolymer_);
+      UTIL_CHECK(id >= 0 && id < nPolymer_);
       return polymers_[id];
    }
 
    template <class PT, class ST, typename WT>
    inline ST& MixtureTmpl<PT,ST,WT>::solvent(int id)
    {  
-      UTIL_CHECK(id < nSolvent_);
+      UTIL_CHECK(id >= 0 && id < nSolvent_);
       return solvents_[id]; 
    }
 
    template <class PT, class ST, typename WT>
    inline ST const & MixtureTmpl<PT,ST,WT>::solvent(int id) const
    {  
-      UTIL_CHECK(id < nSolvent_);
+      UTIL_CHECK(id >= 0 && id < nSolvent_);
       return solvents_[id]; 
    }
 
