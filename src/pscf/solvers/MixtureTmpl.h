@@ -61,6 +61,21 @@ namespace Pscf
       */
       void readParameters(std::istream& in) override;
 
+      /**
+      * Rescale the volume fractions of a closed mixture to add up to 1.
+      *
+      * Precondition: every species is closed (isCanonical() is true).
+      *
+      * Throws an Exception if the sum of the volume fractions differs
+      * from 1 by more than 1.0E-5. Otherwise, if it differs from 1 by
+      * more than 1.0E-12, divides every volume fraction by the sum.
+      * Called by readParameters, and by sweeps and ramps after they
+      * change volume fractions.
+      *
+      * \return sum of the volume fractions before rescaling
+      */
+      WT normalizePhi();
+
       /// \name Accessors 
       ///@{
 

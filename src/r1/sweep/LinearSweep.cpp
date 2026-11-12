@@ -71,9 +71,20 @@ namespace R1 {
    {
       // Update the system parameter values
       double newVal;
+      bool hasPhi = false;
       for (int i = 0; i < nParameter_; ++i) {
          newVal = parameters_[i].initial() + s*parameters_[i].change();
          parameters_[i].update(newVal);
+         if (parameters_[i].type() == "phi_polymer" 
+             || parameters_[i].type() == "phi_solvent") 
+         {  hasPhi = true; }
+      }
+
+      // If every species is closed, the changes in volume fractions
+      // cancel only to within the tolerance of readParameters. Rescale
+      // the volume fractions to add up to 1, as on input.
+      if (hasPhi && mixture().isCanonical()) {
+         mixture().normalizePhi();
       }
    }
 

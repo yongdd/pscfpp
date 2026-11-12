@@ -130,39 +130,55 @@ namespace Pscf
       }
 
       // If every species is closed, the volume fractions must add up
+      // to 1 (see normalizePhi)
+      if (Composition<WT>::isCanonical()) {
+         WT sum = normalizePhi();
+         if (std::abs(sum - 1.0) > 1.0E-12) {
+            Log::file() << "Sum of species volume fractions = " << sum
+                        << ", rescaled to 1\n";
+         }
+      }
+
+   }
+
+   /*
+   * Rescale the volume fractions of a closed mixture to add up to 1.
+   */
+   template <class PT, class ST, typename WT>
+   WT MixtureTmpl<PT,ST,WT>::normalizePhi()
+   {
+      // If every species is closed, the volume fractions must add up
       // to 1. The SCFT iterators remove the homogeneous part of the
       // residual in this case, so they never test incompressibility at
       // k = 0 and would converge to a state with a total concentration
       // equal to the sum of the volume fractions.
-      if (Composition<WT>::isCanonical()) {
-         WT sum = 0.0;
-         for (int i = 0; i < nPolymer_; ++i) {
-            sum += polymer(i).phi();
-         }
-         for (int i = 0; i < nSolvent_; ++i) {
-            sum += solvent(i).phi();
-         }
-         if (std::abs(sum - 1.0) > 1.0E-5) {
-            Log::file() << "Sum of species volume fractions = " << sum
-                        << "\n";
-            UTIL_THROW("Volume fractions of a closed mixture must add up to 1");
-         }
-         // Within the tolerance (e.g., 1/3 written as 0.333333), rescale
-         // to a sum of exactly 1: the FTS compressors keep the k = 0
-         // residual, which would otherwise stay at |sum - 1|
-         if (std::abs(sum - 1.0) > 1.0E-12) {
-            const double s = std::real(sum);
-            Log::file() << "Sum of species volume fractions = " << sum
-                        << ", rescaled to 1\n";
-            for (int i = 0; i < nPolymer_; ++i) {
-               polymer(i).setPhi(std::real(polymer(i).phi())/s);
-            }
-            for (int i = 0; i < nSolvent_; ++i) {
-               solvent(i).setPhi(std::real(solvent(i).phi())/s);
-            }
-         }
+      UTIL_CHECK(Composition<WT>::isCanonical());
+      WT sum = 0.0;
+      for (int i = 0; i < nPolymer_; ++i) {
+         sum += polymer(i).phi();
+      }
+      for (int i = 0; i < nSolvent_; ++i) {
+         sum += solvent(i).phi();
+      }
+      if (std::abs(sum - 1.0) > 1.0E-5) {
+         Log::file() << "Sum of species volume fractions = " << sum
+                     << "\n";
+         UTIL_THROW("Volume fractions of a closed mixture must add up to 1");
       }
 
+      // Within the tolerance (e.g., 1/3 written as 0.333333), rescale
+      // to a sum of exactly 1: the FTS compressors keep the k = 0
+      // residual, which would otherwise stay at |sum - 1|
+      if (std::abs(sum - 1.0) > 1.0E-12) {
+         const double s = std::real(sum);
+         for (int i = 0; i < nPolymer_; ++i) {
+            polymer(i).setPhi(std::real(polymer(i).phi())/s);
+         }
+         for (int i = 0; i < nSolvent_; ++i) {
+            solvent(i).setPhi(std::real(solvent(i).phi())/s);
+         }
+      }
+      return sum;
    }
 
 }

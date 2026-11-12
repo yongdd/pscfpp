@@ -110,6 +110,13 @@ namespace Rp {
    void MixtureModifier<D,T>::setVMonomer(double vMonomer)
    {  mixture().setVmonomer(vMonomer); }
 
+   /*
+   * Rescale the volume fractions of a closed mixture to add up to 1.
+   */
+   template <int D, class T>
+   void MixtureModifier<D,T>::normalizePhi()
+   {  mixture().normalizePhi(); }
+
    // Other public non-const functions
 
    /*

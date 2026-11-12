@@ -141,6 +141,15 @@ namespace Rp {
       */
       void setVMonomer(double vMonomer);
 
+      /**
+      * Rescale the volume fractions of a closed mixture to add up to 1.
+      *
+      * Precondition: every species is closed. See 
+      * MixtureTmpl::normalizePhi. Sweeps and ramps that change volume
+      * fractions call this function after setting them.
+      */
+      void normalizePhi();
+
       ///@}
 
       /**

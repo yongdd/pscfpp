@@ -5,6 +5,7 @@
 #include <rp/fts/simulator/Simulator.h>
 #include <rp/system/System.h>
 #include <rp/solvers/Mixture.h>
+#include <rp/solvers/MixtureModifier.h>
 #include <util/global.h>
 
 namespace Pscf {
@@ -69,6 +70,7 @@ namespace Rp {
 
       // Update the system parameter values
       double newVal;
+      bool hasPhi = false;
       for (int i = 0; i < nParameter_; ++i) {
          newVal = parameters_[i].initial() + s*parameters_[i].change();
          parameters_[i].update(newVal);
@@ -78,6 +80,19 @@ namespace Rp {
             Ramp<D,T>::simulator().analyzeChi();
          }
 
+         if (parameters_[i].type() == "phi_polymer" ||
+             parameters_[i].type() == "phi_solvent")
+         {  hasPhi = true; }
+
+      }
+
+      // If every species is closed, the changes in volume fractions
+      // cancel only to within the tolerance of readParameters. Rescale
+      // the volume fractions to add up to 1, as on input: the FTS
+      // compressors could not otherwise remove the k = 0 residual.
+      System<D,T>& system = Ramp<D,T>::simulator().system();
+      if (hasPhi && system.mixture().isCanonical()) {
+         system.mixtureModifier().normalizePhi();
       }
    }
 
