@@ -14,6 +14,8 @@
 #include <pscf/backend/cuda/VecOp.h>
 #include <util/global.h>
 
+#include <cstdint>
+
 /*
 * A note about const_casts:
 * 
@@ -114,11 +116,17 @@ namespace Pscf {
          }
       }
 
-      // Reallocate kFieldCopy_ array if necessary
+      // Reallocate kFieldCopy_ and rFieldCopy_ arrays if necessary
       if (kFieldCopy_.isAllocated()) {
          if (kFieldCopy_.capacity() != kSize_) {
             kFieldCopy_.deallocate();
             kFieldCopy_.allocate(meshDimensions);
+         }
+      }
+      if (rFieldCopy_.isAllocated()) {
+         if (rFieldCopy_.capacity() != rSize_) {
+            rFieldCopy_.deallocate();
+            rFieldCopy_.allocate(meshDimensions);
          }
       }
 
@@ -139,15 +147,24 @@ namespace Pscf {
       UTIL_CHECK(isSetup_);
       UTIL_CHECK(rField.capacity() == rSize_);
       UTIL_CHECK(kField.capacity() == kSize_);
-      
+      UTIL_CHECK(isAligned(kField.cArray()));
+
+      // cuFFT rejects misaligned real input (see rFieldCopy_): copy it
+      cudaReal const * rPtr = rField.cArray();
+      if (!isAligned(rPtr)) {
+         RField<D,CUT>& copy = rFieldCopy();
+         VecOp::eqV(copy, rField);
+         rPtr = copy.cArray();
+      }
+
       // Perform transform
       // (See note at top of file explaining this use of const_cast)
       cufftResult result;
       #ifdef SINGLE_PRECISION
-      result = cufftExecR2C(rcfPlan_, const_cast<cudaReal*>(rField.cArray()), 
+      result = cufftExecR2C(rcfPlan_, const_cast<cudaReal*>(rPtr),
                             kField.cArray());
       #else
-      result = cufftExecD2Z(rcfPlan_, const_cast<cudaReal*>(rField.cArray()), 
+      result = cufftExecD2Z(rcfPlan_, const_cast<cudaReal*>(rPtr),
                             kField.cArray());
       #endif
       if (result != CUFFT_SUCCESS) {
@@ -172,17 +189,30 @@ namespace Pscf {
       UTIL_CHECK(kField.capacity() == kSize_);
       UTIL_CHECK(rField.meshDimensions() == meshDimensions_);
       UTIL_CHECK(kField.meshDimensions() == meshDimensions_);
+      UTIL_CHECK(isAligned(kField.cArray()));
+
+      // cuFFT rejects misaligned real output (see rFieldCopy_): write the
+      // result to an aligned copy, then copy it to rField
+      bool isAlignedOut = isAligned(rField.cArray());
+      cudaReal* rPtr = rField.cArray();
+      if (!isAlignedOut) {
+         rPtr = rFieldCopy().cArray();
+      }
 
       cufftResult result;
       #ifdef SINGLE_PRECISION
-      result = cufftExecC2R(criPlan_, kField.cArray(), rField.cArray());
+      result = cufftExecC2R(criPlan_, kField.cArray(), rPtr);
       #else
-      result = cufftExecZ2D(criPlan_, kField.cArray(), rField.cArray());
+      result = cufftExecZ2D(criPlan_, kField.cArray(), rPtr);
       #endif
       if (result != CUFFT_SUCCESS) {
          UTIL_THROW( "Failure in cufft complex-to-real inverse transform");
       }
-   
+
+      if (!isAlignedOut) {
+         VecOp::eqV(rField, rFieldCopy_);
+      }
+
    }
 
    /*
@@ -268,6 +298,31 @@ namespace Pscf {
          UTIL_THROW( "Failure in cufft complex-to-complex inverse transform");
       }
    
+   }
+
+   // Private functions for misaligned real data
+
+   /*
+   * Is this address aligned to the size of a complex element?
+   */
+   template <int D>
+   bool FFT<D,CUT>::isAligned(void const * ptr)
+   {
+      return (reinterpret_cast<std::uintptr_t>(ptr) % sizeof(cudaComplex))
+             == 0;
+   }
+
+   /*
+   * Allocate rFieldCopy_ if necessary and return it.
+   */
+   template <int D>
+   RField<D,CUT>& FFT<D,CUT>::rFieldCopy() const
+   {
+      if (!rFieldCopy_.isAllocated()) {
+         rFieldCopy_.allocate(meshDimensions_);
+      }
+      UTIL_CHECK(rFieldCopy_.capacity() == rSize_);
+      return rFieldCopy_;
    }
 
    // Static function

@@ -10,6 +10,7 @@
 
 #include <pscf/backend/cuda/CUT.h>  // class template argument
 #include "RFieldDft.h"              // member
+#include "RField.h"                 // member
 #include <pscf/math/IntVec.h>       // member
 
 #include <util/global.h>
@@ -207,6 +208,17 @@ namespace Pscf {
       /// Private RFieldDft<D,CUT> k-space array work space
       mutable RFieldDft<D,CUT> kFieldCopy_;
 
+      /**
+      * Private RField<D,CUT> r-space work space for misaligned data.
+      *
+      * cuFFT rejects real input or output that is not aligned to the
+      * size of a complex element. A field that is a slice of a larger
+      * array, such as one contour step of a propagator, starts i*rSize_
+      * elements after the array, which is misaligned for odd rSize_ and
+      * odd i. Such data is copied through this array.
+      */
+      mutable RField<D,CUT> rFieldCopy_;
+
       /// Number of points in r-space grid
       int rSize_;
 
@@ -229,6 +241,16 @@ namespace Pscf {
       * Make cuFFT plans all transform types.
       */
       void makePlans();
+
+      /**
+      * Is this address aligned as cuFFT requires (complex element size)?
+      */
+      static bool isAligned(void const * ptr);
+
+      /**
+      * Allocate rFieldCopy_ if necessary and return it.
+      */
+      RField<D,CUT>& rFieldCopy() const;
 
    };
 

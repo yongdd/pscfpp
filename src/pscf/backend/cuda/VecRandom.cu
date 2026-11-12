@@ -178,14 +178,29 @@ namespace Pscf {
          setSeed(0);
       }
 
+      // cuRAND generates normal values in pairs (even counts only).
+      // For odd n, generate n-1 values in place and take the last one
+      // from a separately generated pair.
       int n = data.capacity();
-      if (n % 2 == 1) {
-         UTIL_THROW("normal() requires array size to be an even number.");
-      }
+      int nEven = n - (n % 2);
 
       curandStatus_t status;
-      status = curandGenerateNormal(gen_, data.cArray(), n, mean, stddev);
-      errorCheck(status);
+      if (nEven > 0) {
+         status = curandGenerateNormal(gen_, data.cArray(), nEven,
+                                       mean, stddev);
+         errorCheck(status);
+      }
+      if (nEven < n) {
+         if (!spareFloat_.isAllocated()) {
+            spareFloat_.allocate(2);
+         }
+         status = curandGenerateNormal(gen_, spareFloat_.cArray(), 2,
+                                       mean, stddev);
+         errorCheck(status);
+         cudaErrorCheck( cudaMemcpy(data.cArray() + nEven,
+                                    spareFloat_.cArray(), sizeof(float),
+                                    cudaMemcpyDeviceToDevice) );
+      }
    }
 
    /*
@@ -199,15 +214,29 @@ namespace Pscf {
          setSeed(0);
       }
 
+      // cuRAND generates normal values in pairs (even counts only).
+      // For odd n, generate n-1 values in place and take the last one
+      // from a separately generated pair.
       int n = data.capacity();
-      if (n % 2 == 1) {
-         UTIL_THROW("normal() requires array size to be an even number.");
-      }
+      int nEven = n - (n % 2);
 
       curandStatus_t status;
-      status = curandGenerateNormalDouble(gen_, data.cArray(),
-                                          n, mean, stddev);
-      errorCheck(status);
+      if (nEven > 0) {
+         status = curandGenerateNormalDouble(gen_, data.cArray(),
+                                             nEven, mean, stddev);
+         errorCheck(status);
+      }
+      if (nEven < n) {
+         if (!spareDouble_.isAllocated()) {
+            spareDouble_.allocate(2);
+         }
+         status = curandGenerateNormalDouble(gen_, spareDouble_.cArray(),
+                                             2, mean, stddev);
+         errorCheck(status);
+         cudaErrorCheck( cudaMemcpy(data.cArray() + nEven,
+                                    spareDouble_.cArray(), sizeof(double),
+                                    cudaMemcpyDeviceToDevice) );
+      }
    }
 
    /*
