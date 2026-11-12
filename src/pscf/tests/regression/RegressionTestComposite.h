@@ -15,6 +15,7 @@
 #include "CorePolymerTopologyTest.h"
 #include "CoreEdgeTest.h"
 #include "CoreFhMixtureTest.h"
+#include "CoreGroupInputTest.h"
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
@@ -30,6 +31,7 @@ TEST_COMPOSITE_ADD_UNIT(CoreAmbdInteractionTest);
 TEST_COMPOSITE_ADD_UNIT(CorePolymerTopologyTest);
 TEST_COMPOSITE_ADD_UNIT(CoreEdgeTest);
 TEST_COMPOSITE_ADD_UNIT(CoreFhMixtureTest);
+TEST_COMPOSITE_ADD_UNIT(CoreGroupInputTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
 TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);
