@@ -68,8 +68,21 @@ namespace Pscf
       *
       * \param inv inverse of matrix A (output)
       */  
-      void inverse (Matrix<double>& inv); 
- 
+      void inverse (Matrix<double>& inv);
+
+      /**
+      * Is the matrix of the last computeLU numerically singular?
+      *
+      * Returns true if the smallest absolute pivot of the LU
+      * decomposition is not larger than epsilon times the largest
+      * absolute element of the matrix A, or if A is zero. Call this
+      * before solve() or inverse(): the GSL routines used there call
+      * the GSL error handler, which aborts, for a singular matrix.
+      *
+      * \param epsilon relative tolerance
+      */
+      bool isSingular(double epsilon = 1.0E-10) const;
+
    private:
 
       /// RHS vector of Ax=b.
@@ -89,6 +102,9 @@ namespace Pscf
 
       /// Sign of permutation in LU decomposition.
       int signum_;
+
+      /// Largest absolute element of the matrix of the last computeLU.
+      double maxAbsA_;
 
       /// Number of rows and columns in matrix.
       int n_;

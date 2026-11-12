@@ -7,13 +7,16 @@
 
 #include "LuSolver.h"
 #include <gsl/gsl_linalg.h>
+#include <cmath>
 
 namespace Pscf
 {
   
    LuSolver::LuSolver()
     : luPtr_(0),
+      gMatInverse_(0),
       permPtr_(0),
+      maxAbsA_(0.0),
       n_(0)
    {
       // Initialize gs_vector b_ 
@@ -68,13 +71,31 @@ namespace Pscf
 
       int i, j;
       int k = 0;
+      maxAbsA_ = 0.0;
       for (i = 0; i < n_;  ++i) {
          for (j = 0; j < n_; ++j) {
             luPtr_->data[k] = A(i,j);
+            if (std::abs(A(i,j)) > maxAbsA_) {
+               maxAbsA_ = std::abs(A(i,j));
+            }
             ++k;
          }
       }
       gsl_linalg_LU_decomp(luPtr_, permPtr_, &signum_);
+   }
+
+   /*
+   * Is the matrix of the last computeLU numerically singular?
+   */
+   bool LuSolver::isSingular(double epsilon) const
+   {
+      UTIL_CHECK(n_ > 0);
+      if (maxAbsA_ == 0.0) return true;
+      for (int i = 0; i < n_; ++i) {
+         double pivot = std::abs(gsl_matrix_get(luPtr_, i, i));
+         if (!(pivot > epsilon*maxAbsA_)) return true;
+      }
+      return false;
    }
 
    /*

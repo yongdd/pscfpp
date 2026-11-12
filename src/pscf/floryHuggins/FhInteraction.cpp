@@ -17,15 +17,17 @@ namespace Pscf {
    * Constructor.
    */
    FhInteraction::FhInteraction()
-    : nMonomer_(0)
+    : nMonomer_(0),
+      hasChiInverse_(false)
    {  setClassName("FhInteraction"); }
 
    /*
    * Copy constructor.
    */
    FhInteraction::FhInteraction(FhInteraction const & other)
-    : nMonomer_(0)
-   {  
+    : nMonomer_(0),
+      hasChiInverse_(false)
+   {
       setClassName("FhInteraction"); 
       if (other.nMonomer() > 0) {
          setNMonomer(other.nMonomer());
@@ -37,8 +39,9 @@ namespace Pscf {
    * Constructor, copy from from Pscf::Interaction
    */
    FhInteraction::FhInteraction(Interaction const & other)
-    : nMonomer_(0)
-   {  
+    : nMonomer_(0),
+      hasChiInverse_(false)
+   {
       UTIL_CHECK(other.nMonomer() > 0);
       setClassName("FhInteraction"); 
       setNMonomer(other.nMonomer());
@@ -115,12 +118,16 @@ namespace Pscf {
       UTIL_CHECK(chi_.isAllocated());
       UTIL_CHECK(chiInverse_.isAllocated());
 
+      // A singular chi is valid input (e.g., one zero chi parameter in
+      // a 3-monomer system). The inverse is then left undefined, and
+      // chiInverse() throws if it is requested.
+      hasChiInverse_ = false;
       if (nMonomer() == 2) {
          double det = chi_(0,0)*chi_(1, 1) - chi_(0,1)*chi_(1,0);
          double norm = chi_(0,0)*chi_(0, 0) + chi_(1,1)*chi_(1,1)
                      + 2.0*chi_(0,1)*chi_(1,0);
-         if (fabs(det/norm) < 1.0E-8) {
-            UTIL_THROW("Singular chi matrix");
+         if (norm == 0.0 || fabs(det/norm) < 1.0E-8) {
+            return;
          }
          chiInverse_(0,1) = -chi_(0,1)/det;
          chiInverse_(1,0) = -chi_(1,0)/det;
@@ -131,8 +138,12 @@ namespace Pscf {
          LuSolver solver;
          solver.allocate(nMonomer());
          solver.computeLU(chi_);
+         if (solver.isSingular()) {
+            return;
+         }
          solver.inverse(chiInverse_);
       }
+      hasChiInverse_ = true;
 
    }
 
@@ -243,6 +254,8 @@ namespace Pscf {
                             Array<double>& c, double& xi)
    const
    {
+      // This uses the inverse of chi, which is undefined if chi is singular
+      UTIL_CHECK(hasChiInverse_);
       double sum1 = 0.0;
       double sum2 = 0.0;
       int i, j;
@@ -268,6 +281,8 @@ namespace Pscf {
    FhInteraction::computeXi(Array<double> const & w, double& xi)
    const
    {
+      // This uses the inverse of chi, which is undefined if chi is singular
+      UTIL_CHECK(hasChiInverse_);
       double sum1 = 0.0;
       double sum2 = 0.0;
       int i, j;

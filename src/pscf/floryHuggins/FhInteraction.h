@@ -174,10 +174,17 @@ namespace Pscf {
       /**
       * Return one element of the inverse chi matrix.
       *
+      * \throw Exception if hasChiInverse() is false (singular chi).
+      *
       * \param i row index
       * \param j column index
       */
       double chiInverse(int i, int j) const;
+
+      /**
+      * Is the chi matrix invertible, so that chiInverse() is valid?
+      */
+      bool hasChiInverse() const;
 
       /**
       * Get number of monomer types.
@@ -195,8 +202,11 @@ namespace Pscf {
       /// Number of monomers
       int nMonomer_;
 
+      /// Is chi invertible (is chiInverse_ valid)?
+      bool hasChiInverse_;
+
       /**
-      * Compute the inverse of the chi matrix.
+      * Compute the inverse of the chi matrix, if chi is not singular.
       * Must be called after making any changes to the chi matrix.
       */
       void updateMembers();
@@ -217,7 +227,13 @@ namespace Pscf {
    {  return chi_(i, j); }
 
    inline double FhInteraction::chiInverse(int i, int j) const
-   {  return chiInverse_(i, j); }
+   {
+      UTIL_CHECK(hasChiInverse_);
+      return chiInverse_(i, j);
+   }
+
+   inline bool FhInteraction::hasChiInverse() const
+   {  return hasChiInverse_; }
 
 } // namespace Pscf
 #endif
