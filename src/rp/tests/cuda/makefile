@@ -30,6 +30,7 @@ clean-outputs:
 	-cd $(TEST_CUDA_DIR)/system; $(MAKE) clean-outputs
 	-cd $(TEST_CUDA_DIR)/sweep; $(MAKE) clean-outputs
 	-cd $(TEST_CUDA_DIR)/fts; $(MAKE) clean-outputs
+	-cd $(TEST_CUDA_DIR)/regression; $(MAKE) clean-outputs
 
 clean:
 	rm -f $(TEST)
@@ -42,6 +43,7 @@ clean:
 	-cd $(TEST_CUDA_DIR)/system; $(MAKE) clean
 	-cd $(TEST_CUDA_DIR)/sweep; $(MAKE) clean
 	-cd $(TEST_CUDA_DIR)/fts; $(MAKE) clean
+	-cd $(TEST_CUDA_DIR)/regression; $(MAKE) clean
 	rm -f $(TEST_CUDA_DIR)/*/Test
 	rm -f $(TEST_CUDA_DIR)/*.ou $(TEST_CUDA_DIR)/*.du
 	rm -f $(TEST_CUDA_DIR)/*/*.ou $(TEST_CUDA_DIR)/*/*.du

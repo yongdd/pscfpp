@@ -10,6 +10,7 @@
 #include "sweep/SweepTestComposite.h"
 #include "environment/EnvironmentTestComposite.h"
 #include "fts/FtsTestComposite.h"
+#include "regression/RegressionTestComposite.h"
 
 #include <util/param/BracketPolicy.h>
 #include <util/global.h>
@@ -21,6 +22,7 @@ addChild(new SystemTestComposite, "system/");
 addChild(new SweepTestComposite, "sweep/");
 addChild(new EnvironmentTestComposite, "environment/");
 addChild(new FtsTestComposite, "fts/");
+addChild(new RegressionTestComposite, "regression/");
 TEST_COMPOSITE_END
 
 using namespace Pscf;
