@@ -1,0 +1,20 @@
+BdSimulator{
+   seed            1234567
+   LMBdStep{
+      mobility     0.02
+   }
+   LrAmCompressor{
+      epsilon      1.0e-8
+      maxItr       200
+      maxHist      20
+      verbose      0
+      errorType    rms
+   }
+   AnalyzerManager{
+      baseInterval    1
+      BinaryStructureFactor{
+         interval          1
+         outputFileName    out/FtsStructureFactor
+      }
+   }
+}

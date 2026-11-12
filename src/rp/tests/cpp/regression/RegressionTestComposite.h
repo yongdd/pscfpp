@@ -17,6 +17,7 @@
 #include "FtsCompressorTest.h"
 #include "FtsMcSimulatorTest.h"
 #include "FtsPerturbationTest.h"
+#include "FtsStructureFactorTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -33,6 +34,7 @@ TEST_COMPOSITE_ADD_UNIT(FtsBdSimulatorTest);
 TEST_COMPOSITE_ADD_UNIT(FtsCompressorTest);
 TEST_COMPOSITE_ADD_UNIT(FtsMcSimulatorTest);
 TEST_COMPOSITE_ADD_UNIT(FtsPerturbationTest);
+TEST_COMPOSITE_ADD_UNIT(FtsStructureFactorTest);
 TEST_COMPOSITE_END
 
 #endif
