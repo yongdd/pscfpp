@@ -1,0 +1,58 @@
+System{
+  polymerModel bead
+  Mixture{
+    nMonomer 2
+    monomers[
+             0.2236067977
+             0.2236067977
+    ]
+    nPolymer 2
+    nSolvent 1
+    Polymer{
+      type linear
+      nBlock 2
+      blocks[
+              0  8
+              1  12
+      ]
+      phi 0.8
+    }
+    Polymer{
+      type linear
+      nBlock 1
+      blocks[
+              0  10
+      ]
+      phi 0.1
+    }
+    Solvent{
+      monomerId 1
+      size 2.0
+      phi 0.1
+    }
+  }
+  Interaction{
+    chi(
+         1   0   1.0
+    )
+  }
+  Domain{
+    mesh 48
+    lattice lamellar
+    groupName P_-1
+  }
+  FilmEnvironment{
+    normalVecId 0
+    interfaceThickness 0.2
+    excludedThickness 0.4
+    fBulk -0.0529271879341
+    chiBottom[ 0.5 0 ]
+    chiTop[ 0.5 0 ]
+  }
+  AmIteratorBasis{
+    epsilon 1.0e-11
+    maxItr 500
+    maxHist 25
+    isFlexible 1
+  }
+}
