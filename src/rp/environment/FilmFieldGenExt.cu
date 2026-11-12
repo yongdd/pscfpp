@@ -85,6 +85,20 @@ namespace Rp {
             d = (cudaReal)ix / (cudaReal)meshDims.x;
          }
 
+         // Determine if this grid point is in the "top" half. As in the
+         // CPU code, grid index >= N/2 (integer division) is the top half.
+         bool topHalf;
+         if (D == 3) {
+            if (normalVecId == 2) topHalf = (ix >= meshDims.x / 2);
+            if (normalVecId == 1) topHalf = (iy >= meshDims.y / 2);
+            if (normalVecId == 0) topHalf = (iz >= meshDims.z / 2);
+         } else if (D == 2) {
+            if (normalVecId == 1) topHalf = (ix >= meshDims.x / 2);
+            if (normalVecId == 0) topHalf = (iy >= meshDims.y / 2);
+         } else { // D == 1
+            topHalf = (ix >= meshDims.x / 2);
+         }
+
          if (ix < meshDims.x && iy < meshDims.y && iz < meshDims.z) {
             // Get mask value at this gridpoint from global memory
             cudaReal dPhidL = mask[id];
@@ -92,10 +106,10 @@ namespace Rp {
             // Calculate d\phi_m / dL at this gridpoint
             dPhidL = dPhidL * (dPhidL - 1) * 8.0 * ( std::abs(d - 0.5) - 0.5 )
                      / interfaceThickness;
-            
+
             // Calculate dh_i / dL at this gridpoint for each species i
             for (int in = 0; in < nMonomer; in++) {
-               if (d < 0.5) {
+               if (!topHalf) {
                   hDerivs[in][id] = -1.0 * dPhidL * chiBottom[in];
                } else {
                   hDerivs[in][id] = -1.0 * dPhidL * chiTop[in];
@@ -134,17 +148,18 @@ namespace Rp {
          if (D > 1) id += meshDims.x * iy;
          if (D > 2) id += meshDims.x * meshDims.y * iz;
 
-         // Determine if this grid point is in the "top" half
+         // Determine if this grid point is in the "top" half. As in the
+         // CPU code, grid index >= N/2 (integer division) is the top half.
          bool topHalf;
          if (D == 3) {
-            if (normalVecId == 2) topHalf = (ix > meshDims.x / 2);
-            if (normalVecId == 1) topHalf = (iy > meshDims.y / 2);
-            if (normalVecId == 0) topHalf = (iz > meshDims.z / 2);
+            if (normalVecId == 2) topHalf = (ix >= meshDims.x / 2);
+            if (normalVecId == 1) topHalf = (iy >= meshDims.y / 2);
+            if (normalVecId == 0) topHalf = (iz >= meshDims.z / 2);
          } else if (D == 2) {
-            if (normalVecId == 1) topHalf = (ix > meshDims.x / 2);
-            if (normalVecId == 0) topHalf = (iy > meshDims.y / 2);
+            if (normalVecId == 1) topHalf = (ix >= meshDims.x / 2);
+            if (normalVecId == 0) topHalf = (iy >= meshDims.y / 2);
          } else { // D == 1
-            topHalf = (ix > meshDims.x / 2);
+            topHalf = (ix >= meshDims.x / 2);
          }
 
          if (ix < meshDims.x && iy < meshDims.y && iz < meshDims.z) {
