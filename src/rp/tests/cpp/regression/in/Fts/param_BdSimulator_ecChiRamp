@@ -1,0 +1,23 @@
+BdSimulator{
+   seed            4321
+   LMBdStep{
+      mobility     1.0e-14
+   }
+   LrAmCompressor{
+      epsilon      1.0e-10
+      maxItr       300
+      maxHist      20
+      verbose      0
+      errorType    rms
+   }
+   EinsteinCrystalPerturbation{
+      lambda         0.0
+      fieldFileName  in/Fts/w_small_ref.rf
+   }
+   LinearRamp{
+      nParameter   1
+      parameters[
+         chi  0  1  2.0
+      ]
+   }
+}
