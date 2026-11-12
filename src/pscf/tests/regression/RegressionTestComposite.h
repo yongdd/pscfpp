@@ -24,12 +24,14 @@
 #include "CoreAmIteratorTest.h"
 #include "CoreFhMixtureUnderflowTest.h"
 #include "CoreLuSolverSingularTest.h"
+#include "CoreNyquistTest.h"
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
 #include "GpuVecRandomTest.h"
 #include "GpuFftTest.h"
 #include "GpuKSqOverflowTest.h"
+#include "GpuNyquistTest.h"
 #endif
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
@@ -49,11 +51,13 @@ TEST_COMPOSITE_ADD_UNIT(CoreSweepTmplTest);
 TEST_COMPOSITE_ADD_UNIT(CoreAmIteratorTest);
 TEST_COMPOSITE_ADD_UNIT(CoreFhMixtureUnderflowTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverSingularTest);
+TEST_COMPOSITE_ADD_UNIT(CoreNyquistTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
 TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);
 TEST_COMPOSITE_ADD_UNIT(GpuFftTest);
 TEST_COMPOSITE_ADD_UNIT(GpuKSqOverflowTest);
+TEST_COMPOSITE_ADD_UNIT(GpuNyquistTest);
 #endif
 TEST_COMPOSITE_END
 

@@ -1,0 +1,29 @@
+System{
+  polymerModel bead
+  Mixture{
+    nMonomer  2
+    monomers[
+              1.0
+              1.0
+    ]
+    nPolymer  1
+    Polymer{
+      type    linear
+      nBlock  2
+      blocks[
+              0  4
+              1  6
+      ]
+      phi     1.0
+    }
+  }
+  Interaction{
+    chi(
+         1   0   10.0
+    )
+  }
+  Domain{
+    mesh           8  6  10
+    lattice        triclinic
+  }
+}
