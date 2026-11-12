@@ -21,6 +21,11 @@
 
 #include <pscf/solvers/BlockTmpl.tpp>
 
+#include <util/misc/Log.h>
+
+#include <climits>
+#include <cmath>
+
 namespace Pscf {
 namespace Rp {
 
@@ -99,6 +104,46 @@ namespace Rp {
          int startID = blockIdx.x * blockDim.x + threadIdx.x;
          for (int i = startID; i < n; i += nThreads) {
             a[i] += b[i]*c[i]*d[i];
+         }
+      }
+
+      /*
+      * Number of contour points of a thread block.
+      *
+      * Returns the odd number ns >= 3 for which the step length/(ns-1)
+      * is closest to ds. The count is computed in double precision, and
+      * an Exception is thrown if it does not fit an int.
+      */
+      int threadNs(double length, double ds)
+      {
+         const double nPair = std::floor(length / (2.0*ds) + 0.5);
+         // The negated comparison also rejects inf and NaN
+         if (!(nPair < 0.5*double(INT_MAX) - 1.0)) {
+            Log::file() << "Block length = " << length
+                        << ", ds = " << ds << std::endl;
+            UTIL_THROW("Contour step ds too small for block length: "
+                       "too many contour steps");
+         }
+         int tempNs = (int) nPair;
+         if (tempNs == 0) {
+            tempNs = 1;          // ensure ns >= 3
+         }
+         return 2*tempNs + 1;
+      }
+
+      /*
+      * Check that a propagator of ns slices fits one GPU array.
+      *
+      * A propagator stores all ns slices of meshSize values in a single
+      * array, whose capacity is an int.
+      */
+      void checkPropagatorSize(int ns, int meshSize)
+      {
+         if (double(ns) * double(meshSize) > double(INT_MAX)) {
+            Log::file() << "Contour points ns = " << ns
+                        << ", mesh size = " << meshSize << std::endl;
+            UTIL_THROW("Propagator too large for a GPU array: "
+                       "ns x mesh size exceeds INT_MAX");
          }
       }
 
@@ -302,12 +347,7 @@ namespace Rp {
          // Set contour length discretization for this block
          const double length = Edge::length();
          UTIL_CHECK(length > 0.0);
-         int tempNs;
-         tempNs = floor(length / (2.0 * ds) + 0.5);
-         if (tempNs == 0) {
-            tempNs = 1;          // ensure ns_ >= 3
-         }
-         ns_ = 2*tempNs + 1;
+         ns_ = threadNs(length, ds);
          ds_ = length/double(ns_ - 1);
 
       } else
@@ -317,6 +357,7 @@ namespace Rp {
          ns_ = Edge::nBead() + 2;
 
       }
+      checkPropagatorSize(ns_, mesh().size());
 
       // Allocate memory for solutions of MDE (requires ns_)
       propagator(0).allocate(ns_, mesh());
@@ -354,12 +395,8 @@ namespace Rp {
          // Reset contour length discretization
          UTIL_CHECK(dsTarget_ > 0);
          int oldNs = ns_;
-         int tempNs;
-         tempNs = floor(length / (2.0 * dsTarget_) + 0.5);
-         if (tempNs == 0) {
-            tempNs = 1; // ensure at least 3 contour steps per chain
-         }
-         ns_ = 2*tempNs + 1;
+         ns_ = threadNs(length, dsTarget_);
+         checkPropagatorSize(ns_, mesh().size());
          ds_ = length/double(ns_-1);
 
          if (oldNs != ns_) {

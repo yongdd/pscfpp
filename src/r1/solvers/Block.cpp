@@ -10,6 +10,10 @@
 #include <r1/field/Domain.h>
 #include <r1/field/GeometryMode.h>
 #include <pscf/solvers/BlockTmpl.tpp>
+#include <util/misc/Log.h>
+
+#include <climits>
+#include <cmath>
 
 namespace Pscf {
    template class BlockTmpl< R1::Propagator, Util::DArray<double> >;
@@ -19,6 +23,37 @@ namespace Pscf {
 namespace R1 {
 
    using namespace Util;
+
+   namespace {
+
+      /*
+      * Number of contour points of a block.
+      *
+      * Returns the odd number ns >= 3 nearest above length/ds + 1. The
+      * count is computed in double precision, and an Exception is
+      * thrown if it does not fit an int.
+      */
+      int contourNs(double length, double ds)
+      {
+         const double nStep = std::floor(length/ds + 0.5);
+         // The negated comparison also rejects inf and NaN
+         if (!(nStep < double(INT_MAX) - 2.0)) {
+            Log::file() << "Block length = " << length
+                        << ", ds = " << ds << std::endl;
+            UTIL_THROW("Contour step ds too small for block length: "
+                       "too many contour steps");
+         }
+         int ns = (int) nStep + 1;
+         if (ns%2 == 0) {
+            ns += 1;
+         }
+         if (ns < 3) {
+            ns = 3;  // ns = 1 (block shorter than ds/2) gives ds = inf
+         }
+         return ns;
+      }
+
+   }
 
    /*
    * Constructor.
@@ -50,13 +85,7 @@ namespace R1 {
 
       // Set contour length discretization
       dsTarget_ = ds;
-      ns_ = floor(length()/dsTarget_ + 0.5) + 1;
-      if (ns_%2 == 0) {
-         ns_ += 1;
-      }
-      if (ns_ < 3) {
-         ns_ = 3;  // ns_ = 1 (block shorter than ds/2) gives ds_ = inf
-      }
+      ns_ = contourNs(length(), dsTarget_);
       ds_ = length()/double(ns_ - 1);
 
       // Allocate all required memory
@@ -81,13 +110,7 @@ namespace R1 {
          // Reset contour length discretization
          UTIL_CHECK(ns_ > 0);
          int oldNs = ns_;
-         ns_ = floor(length()/dsTarget_ + 0.5) + 1;
-         if (ns_%2 == 0) {
-            ns_ += 1;
-         }
-         if (ns_ < 3) {
-            ns_ = 3;  // ns_ = 1 (block shorter than ds/2) gives ds_ = inf
-         }
+         ns_ = contourNs(length(), dsTarget_);
          ds_ = length()/double(ns_ - 1);
 
          if (oldNs != ns_) {
