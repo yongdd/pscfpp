@@ -14,6 +14,7 @@
 #include <pscf/floryHuggins/FhMolecule.h>   // member 
 #include <util/containers/DArray.h>         // member 
 #include <util/containers/DMatrix.h>        // member 
+#include <vector>                           // member
 
 // Forward declarations
 namespace Pscf {
@@ -244,6 +245,9 @@ namespace Pscf {
       * Array of old molecular volume fractions, for use in computePhi.
       */
       DArray<double> phiOld_;
+
+      /// Species absent from computePhi (target mu = -infinity, phi = 0).
+      std::vector<bool> isAbsent_;
 
       /**
       * Free energy per monomer / kT.

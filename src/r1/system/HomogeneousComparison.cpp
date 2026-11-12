@@ -18,6 +18,7 @@
 
 #include <util/format/Str.h>
 #include <util/format/Int.h>
+#include <cmath>
 #include <util/format/Dbl.h>
 
 #include <string>
@@ -136,6 +137,24 @@ namespace R1
          }
          for (int i = 0; i < ns; ++i) {
             p_[i + np] = mixture().solvent(i).cField()[ix];
+         }
+
+         // A converged SCFT field need not give a valid composition at
+         // the boundary point exactly (a fraction can exceed 1 slightly):
+         // clip the guess to (0, 1] and normalize it to a sum of 1. A
+         // species with mu = -infinity (phi = 0) stays exactly at 0.
+         double sum = 0.0;
+         for (int i = 0; i < np + ns; ++i) {
+            if (std::isinf(m_[i]) && m_[i] < 0.0) {
+               p_[i] = 0.0;
+            } else {
+               if (!(p_[i] > 1.0E-12)) p_[i] = 1.0E-12;
+               if (p_[i] > 1.0) p_[i] = 1.0;
+            }
+            sum += p_[i];
+         }
+         for (int i = 0; i < np + ns; ++i) {
+            p_[i] /= sum;
          }
 
          double xi = 0.0;

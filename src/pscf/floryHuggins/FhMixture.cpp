@@ -199,8 +199,53 @@ namespace Pscf {
          solverPtr_->allocate(nMolecule_);
       }
 
+      // A species whose chemical potential is -infinity (a closed species
+      // with phi = 0 in the SCFT solution) is absent: its phi stays 0 and
+      // it is left out of the residual and of the Newton update.
+      isAbsent_.assign(nMolecule_, false);
+      for (int m = 0; m < nMolecule_; ++m) {
+         if (std::isinf(mu[m]) && mu[m] < 0.0) {
+            isAbsent_[m] = true;
+            UTIL_CHECK(phi[m] == 0.0);
+         }
+      }
+
+      // The present species with the largest starting fraction takes the
+      // incompressibility constraint: its phi is 1 minus the sum of the
+      // others, and its Newton variable is xi. Any other choice of this
+      // species loses its relative precision when its phi is tiny (e.g.
+      // 2e-9 at the edge of a strongly segregated interface), and then
+      // the residual cannot reach the tolerance; an absent species
+      // cannot take the role at all.
+      int mDep = -1;
+      for (int m = 0; m < nMolecule_; ++m) {
+         if (!isAbsent_[m] && (mDep < 0 || phi[m] > phi[mDep])) {
+            mDep = m;
+         }
+      }
+      if (mDep < 0) {
+         UTIL_THROW("Homogeneous mixture: no species is present");
+      }
+
+      // Initial composition: the given fractions, with mDep set so that
+      // they add up to 1. (setComposition() would make the last species
+      // the dependent one; if it is absent, rounding of the others can
+      // give it a small negative fraction or fail its check sum <= 1.)
+      validate();
+      double sum = 0.0;
+      for (int m = 0; m < nMolecule_; ++m) {
+         if (m == mDep) continue;
+         phi_[m] = isAbsent_[m] ? 0.0 : phi[m];
+         UTIL_CHECK(phi_[m] >= 0.0);
+         UTIL_CHECK(phi_[m] <= 1.0);
+         sum += phi_[m];
+      }
+      UTIL_CHECK(sum <= 1.0);
+      phi_[mDep] = 1.0 - sum;
+      computeC();
+      hasComposition_ = true;
+
       // Compute initial state
-      setComposition(phi);
       computeMu(interaction, xi);
       adjustXi(mu, xi);
 
@@ -270,13 +315,23 @@ namespace Pscf {
          }
 
          // Impose incompressibility
-         int mLast = nMolecule_ - 1;
          for (m1 = 0; m1 < nMolecule_; ++m1) {
-            for (m2 = 0; m2 < nMolecule_ - 1; ++m2) {
-               jacobian_(m1, m2) -= jacobian_(m1, mLast);
+            for (m2 = 0; m2 < nMolecule_; ++m2) {
+               if (m2 == mDep) continue;
+               jacobian_(m1, m2) -= jacobian_(m1, mDep);
             }
             // Derivative of mu_[m1] with respect to xi
-            jacobian_(m1, mLast) = molecule(m1).size();
+            jacobian_(m1, mDep) = molecule(m1).size();
+         }
+
+         // Absent species: unit row and zero residual, so dX = 0
+         for (m1 = 0; m1 < nMolecule_; ++m1) {
+            if (isAbsent_[m1]) {
+               for (m2 = 0; m2 < nMolecule_; ++m2) {
+                  jacobian_(m1, m2) = 0.0;
+               }
+               jacobian_(m1, m1) = 1.0;
+            }
          }
 
          // Newton Raphson update of phi and xi fields
@@ -294,11 +349,12 @@ namespace Pscf {
 
             // Update volume fractions
             double sum = 0.0;
-            for (m1 = 0; m1 < nMolecule_ - 1; ++m1) {
+            for (m1 = 0; m1 < nMolecule_; ++m1) {
+               if (m1 == mDep) continue;
                phi_[m1] = phiOld_[m1] - dX_[m1];
                sum += phi_[m1];
             }
-            phi_[mLast] = 1.0 - sum;
+            phi_[mDep] = 1.0 - sum;
 
             // Check if all volume fractions are in [0,1]
             inRange = true;
@@ -318,7 +374,7 @@ namespace Pscf {
 
          }
          if (inRange) {
-            xi = xi - dX_[mLast];
+            xi = xi - dX_[mDep];
          } else {
             UTIL_THROW("Volume fractions remain out of range");
          }
@@ -350,6 +406,7 @@ namespace Pscf {
       double dxi = 0.0;
       double sum = 0.0;
       for (int i=0; i < nMolecule_; ++i) {
+         if (isAbsent_.size() > 0 && isAbsent_[i]) continue;
          dxi += mu[i] - mu_[i];
          sum += molecules_[i].size();
       }
@@ -364,6 +421,10 @@ namespace Pscf {
    {
       error = 0.0;
       for (int i = 0; i < nMolecule_; ++i) {
+         if (isAbsent_.size() > 0 && isAbsent_[i]) {
+            residual_[i] = 0.0;
+            continue;
+         }
          residual_[i] = mu_[i] - mu[i];
          if (std::abs(residual_[i]) > error) {
             error = std::abs(residual_[i]);
@@ -382,7 +443,10 @@ namespace Pscf {
       double size;
       for (int i = 0; i < nMolecule_; ++i) {
          size = molecules_[i].size();
-         fHelmholtz_ += phi_[i]*( log(phi_[i]) - 1.0 )/size;
+         // phi*(log(phi) - 1) tends to 0 as phi tends to 0
+         if (phi_[i] > 0.0) {
+            fHelmholtz_ += phi_[i]*( log(phi_[i]) - 1.0 )/size;
+         }
       }
 
       // Add average interaction free energy density per monomer
@@ -392,7 +456,10 @@ namespace Pscf {
       pressure_ = -fHelmholtz_;
       for (int i = 0; i < nMolecule_; ++i) {
          size = molecules_[i].size();
-         pressure_ += phi_[i]*mu_[i]/size;
+         // phi*mu tends to 0 as phi tends to 0 (mu ~ log(phi))
+         if (phi_[i] > 0.0) {
+            pressure_ += phi_[i]*mu_[i]/size;
+         }
       }
 
    }
