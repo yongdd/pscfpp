@@ -29,7 +29,8 @@ namespace Pscf {
       dWdC_(),
       dWdPhi_(),
       jacobian_(),
-      phiOld_(),
+      lnPhi_(),
+      lnPhiOld_(),
       fHelmholtz_(0.0),
       pressure_(0.0),
       solverPtr_(0),
@@ -64,6 +65,7 @@ namespace Pscf {
       molecules_.allocate(nMolecule_);
       mu_.allocate(nMolecule_);
       phi_.allocate(nMolecule_);
+      lnPhi_.allocate(nMolecule_);
       for (int i = 0; i < nMolecule_; ++i) {
          readParamComposite(in, molecules_[i]);
       }
@@ -79,6 +81,7 @@ namespace Pscf {
       molecules_.allocate(nMolecule_);
       mu_.allocate(nMolecule_);
       phi_.allocate(nMolecule_);
+      lnPhi_.allocate(nMolecule_);
    }
 
    void FhMixture::setNMonomer(int nMonomer)
@@ -156,8 +159,20 @@ namespace Pscf {
    void FhMixture::computeMu(FhInteraction const & interaction, 
                              double xi)
    {
-      UTIL_CHECK(interaction.nMonomer() == nMonomer_);
       UTIL_CHECK(hasComposition_);
+      for (int m = 0; m < nMolecule_; ++m) {
+         lnPhi_[m] = log( phi_[m] );
+      }
+      computeMuFromLnPhi(interaction, xi);
+   }
+
+   /*
+   * Compute chemical potentials from lnPhi_ and the composition c_.
+   */
+   void FhMixture::computeMuFromLnPhi(FhInteraction const & interaction, 
+                                      double xi)
+   {
+      UTIL_CHECK(interaction.nMonomer() == nMonomer_);
 
       // Compute monomer excess chemical potentials
       interaction.computeW(c_, w_);
@@ -168,7 +183,7 @@ namespace Pscf {
       double mu, size;
       for (m = 0; m < nMolecule_; ++m) {
          FhMolecule& mol = molecules_[m];
-         mu = log( phi_[m] );
+         mu = lnPhi_[m];
          mu += xi*mol.size();
          for (c = 0; c < mol.nClump(); ++c) {
             t = mol.clump(c).monomerId();
@@ -196,7 +211,7 @@ namespace Pscf {
          dWdC_.allocate(nMonomer_, nMonomer_);
          dWdPhi_.allocate(nMonomer_, nMolecule_);
          jacobian_.allocate(nMolecule_, nMolecule_);
-         phiOld_.allocate(nMolecule_);
+         lnPhiOld_.allocate(nMolecule_);
          solverPtr_ = new LuSolver();
          solverPtr_->allocate(nMolecule_);
       }
@@ -233,6 +248,10 @@ namespace Pscf {
       // they add up to 1. (setComposition() would make the last species
       // the dependent one; if it is absent, rounding of the others can
       // give it a small negative fraction or fail its check sum <= 1.)
+      // The Newton variables are ln(phi), kept in lnPhi_: they are
+      // finite for every present species, while phi itself underflows
+      // to zero for ln(phi) below about -745 (an open species with a
+      // very negative mu), so phi must not enter as a divisor or a log.
       validate();
       double sum = 0.0;
       for (int m = 0; m < nMolecule_; ++m) {
@@ -240,15 +259,20 @@ namespace Pscf {
          phi_[m] = isAbsent_[m] ? 0.0 : phi[m];
          UTIL_CHECK(phi_[m] >= 0.0);
          UTIL_CHECK(phi_[m] <= 1.0);
+         if (!isAbsent_[m] && !(phi_[m] > 0.0)) {
+            UTIL_THROW("Guess of phi is zero for a species with finite mu");
+         }
+         lnPhi_[m] = log(phi_[m]);
          sum += phi_[m];
       }
       UTIL_CHECK(sum <= 1.0);
       phi_[mDep] = 1.0 - sum;
+      lnPhi_[mDep] = log(phi_[mDep]);
       computeC();
       hasComposition_ = true;
 
       // Compute initial state
-      computeMu(interaction, xi);
+      computeMuFromLnPhi(interaction, xi);
       adjustXi(mu, xi);
 
       // Compute initial residual
@@ -298,12 +322,12 @@ namespace Pscf {
             }
          }
 
-         // Compute matrix d(mu)/d(Phi), stored in jacobian_
+         // Compute the interaction part of matrix d(mu)/d(Phi), stored
+         // in jacobian_ (the ideal part, d(ln phi), is added below)
          for (m1 = 0; m1 < nMolecule_; ++m1) {
             for (m2 = 0; m2 < nMolecule_; ++m2) {
                jacobian_(m1, m2) = 0.0;
             }
-            jacobian_(m1, m1) = 1.0/phi_[m1];
          }
          for (m1 = 0; m1 < nMolecule_; ++m1) {
             v1 = molecule(m1).size();
@@ -330,12 +354,18 @@ namespace Pscf {
          // other than mDep: d(mu)/d(ln phi) = phi*d(mu)/d(phi). Newton
          // steps in ln(phi) keep every fraction positive and converge
          // in a few steps also for a very dilute species, whose mu
-         // depends on ln(phi).
+         // depends on ln(phi). The ideal part is added in this form:
+         // d(ln phi[m2])/d(ln phi[m2]) = 1, and phi[mDep] = 1 - sum of
+         // the others gives d(ln phi[mDep])/d(ln phi[m2]) =
+         // -phi[m2]/phi[mDep]. (The form 1/phi[m2] times phi[m2] gives
+         // inf or NaN when phi[m2] underflows.)
          for (m2 = 0; m2 < nMolecule_; ++m2) {
             if (m2 == mDep || isAbsent_[m2]) continue;
             for (m1 = 0; m1 < nMolecule_; ++m1) {
                jacobian_(m1, m2) *= phi_[m2];
             }
+            jacobian_(m2, m2) += 1.0;
+            jacobian_(mDep, m2) -= phi_[m2]/phi_[mDep];
          }
 
          // Absent species: unit row and zero residual, so dX = 0
@@ -352,37 +382,36 @@ namespace Pscf {
          solverPtr_->computeLU(jacobian_);
          solverPtr_->solve(residual_, dX_);
 
-         // Store old value of phi
+         // Store old values of ln(phi)
          for (m1 = 0; m1 < nMolecule_; ++m1) {
-            phiOld_[m1] = phi_[m1];
+            lnPhiOld_[m1] = lnPhi_[m1];
          }
 
          // Apply update: ln(phi) -= dX for the independent species. The
-         // step is halved while the dependent fraction is out of range.
+         // step is halved while a fraction is out of range.
          bool inRange = false;
          for (int j = 0; j < 30; ++j) {
 
-            // Update volume fractions
+            // Update volume fractions (those of absent species stay 0)
             double sum = 0.0;
             for (m1 = 0; m1 < nMolecule_; ++m1) {
-               if (m1 == mDep) continue;
-               if (isAbsent_[m1]) {
-                  phi_[m1] = 0.0;
-               } else {
-                  phi_[m1] = phiOld_[m1]*std::exp(-dX_[m1]);
-               }
+               if (m1 == mDep || isAbsent_[m1]) continue;
+               lnPhi_[m1] = lnPhiOld_[m1] - dX_[m1];
+               phi_[m1] = std::exp(lnPhi_[m1]);
                sum += phi_[m1];
             }
             phi_[mDep] = 1.0 - sum;
 
-            // Check if all volume fractions are in [0,1], and those of
-            // present species positive
+            // Check if all volume fractions are in [0,1]: ln(phi) <= 0
+            // for the independent species (phi may underflow to 0), and
+            // phi in (0,1] for the dependent one
             inRange = true;
             for (m1 = 0; m1 < nMolecule_; ++m1) {
-               if (!(phi_[m1] >= 0.0)) inRange = false;
-               if (phi_[m1] > 1.0) inRange = false;
-               if (!isAbsent_[m1] && !(phi_[m1] > 0.0)) inRange = false;
+               if (m1 == mDep || isAbsent_[m1]) continue;
+               if (!(lnPhi_[m1] <= 0.0)) inRange = false;
             }
+            if (!(phi_[mDep] > 0.0)) inRange = false;
+            if (phi_[mDep] > 1.0) inRange = false;
 
             // Exit loop or reduce increment
             if (inRange) {
@@ -395,6 +424,7 @@ namespace Pscf {
 
          }
          if (inRange) {
+            lnPhi_[mDep] = log(phi_[mDep]);
             xi = xi - dX_[mDep];
          } else {
             UTIL_THROW("Volume fractions remain out of range");
@@ -402,7 +432,7 @@ namespace Pscf {
 
          // Compute residual
          computeC();
-         computeMu(interaction, xi);
+         computeMuFromLnPhi(interaction, xi);
          adjustXi(mu, xi);
          computeResidual(mu, error);
 

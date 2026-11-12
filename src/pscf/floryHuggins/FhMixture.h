@@ -242,9 +242,18 @@ namespace Pscf {
       DMatrix<double> jacobian_;
 
       /**
-      * Array of old molecular volume fractions, for use in computePhi.
+      * Array of logarithms of the molecular volume fractions.
+      *
+      * These are the Newton variables of computePhi. The fraction of a
+      * species with finite mu can underflow to zero in phi_, but not
+      * here. Set from phi_ by computeMu.
       */
-      DArray<double> phiOld_;
+      DArray<double> lnPhi_;
+
+      /**
+      * Array of old values of lnPhi_, for use in computePhi.
+      */
+      DArray<double> lnPhiOld_;
 
       /// Species absent from computePhi (target mu = -infinity, phi = 0).
       std::vector<bool> isAbsent_;
@@ -283,6 +292,15 @@ namespace Pscf {
       * Compute monomer concentrations from phi_.
       */
       void computeC();
+
+      /**
+      * Compute chemical potentials mu_ from lnPhi_ and c_.
+      *
+      * \param interaction  excess free energy model (input)
+      * \param xi  Lagrange multiplier field (input)
+      */
+      void computeMuFromLnPhi(FhInteraction const & interaction, 
+                              double xi);
 
       /**
       * Adjust xi to minimize mean-squared residual.
