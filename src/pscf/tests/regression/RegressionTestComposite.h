@@ -16,11 +16,13 @@
 #include "CoreEdgeTest.h"
 #include "CoreFhMixtureTest.h"
 #include "CoreGroupInputTest.h"
+#include "CoreKSqOverflowTest.h"
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
 #include "GpuVecRandomTest.h"
 #include "GpuFftTest.h"
+#include "GpuKSqOverflowTest.h"
 #endif
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
@@ -32,10 +34,12 @@ TEST_COMPOSITE_ADD_UNIT(CorePolymerTopologyTest);
 TEST_COMPOSITE_ADD_UNIT(CoreEdgeTest);
 TEST_COMPOSITE_ADD_UNIT(CoreFhMixtureTest);
 TEST_COMPOSITE_ADD_UNIT(CoreGroupInputTest);
+TEST_COMPOSITE_ADD_UNIT(CoreKSqOverflowTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
 TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);
 TEST_COMPOSITE_ADD_UNIT(GpuFftTest);
+TEST_COMPOSITE_ADD_UNIT(GpuKSqOverflowTest);
 #endif
 TEST_COMPOSITE_END
 
