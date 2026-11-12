@@ -13,6 +13,7 @@
 #include <pscf/field/cuda/resources.h>
 #include <pscf/field/cuda/FFT.h>
 #include <pscf/crystal/UnitCell.h>
+#include <pscf/crystal/shiftToMinimum.h>
 #include <pscf/crystal/hasVariableAngle.h>
 #include <pscf/backend/cuda/HostRecvArray.h>
 #include <pscf/backend/cuda/HostSendArray.h>
@@ -28,6 +29,103 @@ namespace Pscf {
    namespace {
 
       /*
+      * Voronoi-relevant vectors of the lattice of image shifts (see
+      * imageShiftNeighbors in shiftToMinimum.h), passed to the kernels
+      * by value. Vector j has components v[D*j], ..., v[D*j+D-1].
+      */
+      struct ImageShifts
+      {
+         int n;
+         int v[14*3];
+      };
+
+      /*
+      * Square magnitude of the wavevector with integer coordinates img.
+      */
+      template <int D>
+      __device__ cudaReal _kSqImage(int const * img,
+                                    cudaReal const * kBasis)
+      {
+         cudaReal kSq = 0.0;
+         for (int c = 0; c < D; ++c) {
+            cudaReal kVec = 0.0;
+            for (int k = 0; k < D; ++k) {
+               kVec += kBasis[D*k + c] * img[k];
+            }
+            kSq += kVec*kVec;
+         }
+         return kSq;
+      }
+
+      /*
+      * Move image r to a minimum image, with the steps of the function
+      * descendToMinimum in shiftToMinimum.cpp: move by the image shift
+      * that lowers kSq most while one lowers it by more than epsilon,
+      * then move to the largest neighboring image of equal kSq,
+      * repeatedly. Returns true if r changed, and then sets kSq.
+      */
+      template <int D>
+      __device__ bool _descendToMinimum(int* r, cudaReal& kSq,
+                                        cudaReal const * kBasis,
+                                        ImageShifts const & shifts,
+                                        cudaReal const epsilon)
+      {
+         int u[D];
+         bool moved = false;
+         for (;;) {
+            int jBest = -1;
+            cudaReal kSqBest = kSq - epsilon;
+            for (int j = 0; j < shifts.n; ++j) {
+               for (int i = 0; i < D; ++i) {
+                  u[i] = r[i] + shifts.v[D*j + i];
+               }
+               cudaReal g = _kSqImage<D>(u, kBasis);
+               if (g < kSqBest) {
+                  jBest = j;
+                  kSqBest = g;
+               }
+            }
+            if (jBest < 0) break;
+            for (int i = 0; i < D; ++i) {
+               r[i] += shifts.v[D*jBest + i];
+            }
+            kSq = kSqBest;
+            moved = true;
+         }
+         bool changed = true;
+         while (changed) {
+            changed = false;
+            for (int j = 0; j < shifts.n; ++j) {
+               for (int i = 0; i < D; ++i) {
+                  u[i] = r[i] + shifts.v[D*j + i];
+               }
+               if (_kSqImage<D>(u, kBasis) < kSq + epsilon) {
+                  // Is r < u in the order of IntVec?
+                  bool less = false;
+                  for (int i = 0; i < D; ++i) {
+                     if (r[i] > u[i]) break;
+                     if (r[i] < u[i]) {
+                        less = true;
+                        break;
+                     }
+                  }
+                  if (less) {
+                     for (int i = 0; i < D; ++i) {
+                        r[i] = u[i];
+                     }
+                     changed = true;
+                     moved = true;
+                  }
+               }
+            }
+         }
+         if (moved) {
+            kSq = _kSqImage<D>(r, kBasis);
+         }
+         return moved;
+      }
+
+      /*
       * Compute minimum images of each wavevector, template declaration.
       */
       template <int D> __global__
@@ -35,13 +133,16 @@ namespace Pscf {
                                  cudaReal* kSq,
                                  cudaReal const * kBasis,
                                  int const * meshDims,
-                                 int const kSize);
+                                 int const kSize,
+                                 int const kBegin,
+                                 ImageShifts const shifts);
 
       /*
       * Compute minimum images of each wavevector, 1D specialization.
       *
       * Kernel must be launched with kSize threads. (One thread calculates
-      * one minimum image.)
+      * one minimum image.) Wavevectors with index below kBegin are not
+      * evaluated.
       *
       * When launched, this kernel requires no dynamic memory allocation.
       */
@@ -50,7 +151,9 @@ namespace Pscf {
                                     cudaReal* kSq,
                                     cudaReal const * kBasis,
                                     int const * meshDims,
-                                    int const kSize)
+                                    int const kSize,
+                                    int const kBegin,
+                                    ImageShifts const shifts)
       {
          unsigned int nThreads = blockDim.x * gridDim.x;
          unsigned int startID = blockIdx.x * blockDim.x + threadIdx.x;
@@ -59,7 +162,7 @@ namespace Pscf {
          cudaReal kBasis_ = kBasis[0];
          int meshDims_ = meshDims[0];
 
-         for (int i = startID; i < kSize; i += nThreads) {
+         for (int i = kBegin + startID; i < kSize; i += nThreads) {
             int img = minImages[i];
 
             while (img > (meshDims_>>1)) { // note: x>>1 is same as x/2
@@ -83,6 +186,10 @@ namespace Pscf {
       * we compare 25 different images of a wave to determine the minimum
       * image, and here we choose 32 instead because it is a power of 2,
       * allowing us to use a reduction algorithm to compare the images.
+      * The 7 spare threads evaluate the unshifted image again, so that
+      * the images compared are the same as in the CPU code. As in the
+      * CPU code, the image is then moved by the shifts in shifts while
+      * one lowers kSq (needed where the window misses the minimum).
       *
       * When launched, this kernel requires dynamic memory allocation of
       * (2*sizeof(int) + sizeof(cudaReal)) * nThreadsPerBlock.
@@ -92,21 +199,30 @@ namespace Pscf {
                                     cudaReal* kSq,
                                     cudaReal const * kBasis,
                                     int const * meshDims,
-                                    int const kSize)
+                                    int const kSize,
+                                    int const kBegin,
+                                    ImageShifts const shifts)
       {
          unsigned int startID = blockIdx.x * blockDim.x + threadIdx.x;
 
          // Determine which lattice parameter and which image to evaluate
-         unsigned int paramID = (startID >> 5); // equivalent to startID / 32
-         unsigned int imageID = startID - (paramID * 32); // value in [0, 31]
+         // (this launch treats wavevectors kBegin, kBegin+1, ...)
+         unsigned int localID = (startID >> 5); // equivalent to startID / 32
+         unsigned int paramID = kBegin + localID;
+         unsigned int imageID = startID - (localID * 32); // value in [0, 31]
 
          // Determine the image that will be evaluated by this thread
          // (uses integer division, not ideal for speed)
          int s0, s1;
-         s0 = imageID / 5;
-         s1 = imageID - (s0 * 5);
-         s0 -= 2; // shift values to go from -2 to 4, not 0 to 6
-         s1 -= 2; // shift values to go from -2 to 2, not 0 to 4
+         if (imageID < 25) {
+            s0 = imageID / 5;
+            s1 = imageID - (s0 * 5);
+            s0 -= 2; // shift values to go from -2 to 2, not 0 to 4
+            s1 -= 2;
+         } else {
+            s0 = 0;  // spare thread: unshifted image
+            s1 = 0;
+         }
 
          // Set epsilon
          #ifdef SINGLE_PRECISION
@@ -171,8 +287,11 @@ namespace Pscf {
                   }
                }
             }
-            // Note: no __syncthreads() needed here because this reduction
-            // occurswithin 1 warp, so all threads are already synced)
+            // The 32 threads of this reduction form one warp. Since Volta
+            // (independent thread scheduling), the warp must still be
+            // synchronized between steps, so that each step reads the
+            // values written in the previous one.
+            __syncwarp();
          }
 
          // At this point, for any thread with imageID == 0, the
@@ -180,9 +299,14 @@ namespace Pscf {
          // the kSq value and the minimum image, respectively. Store
          // values and exit
          if ((imageID == 0) && (paramID < kSize)) {
-            kSq[paramID] = kSqVals_[threadIdx.x];
-            minImages[paramID] = images_[2*threadIdx.x];
-            minImages[paramID + kSize] = images_[2*threadIdx.x+1];
+            int r[2];
+            r[0] = images_[2*threadIdx.x];
+            r[1] = images_[2*threadIdx.x+1];
+            cudaReal kSqMin = kSqVals_[threadIdx.x];
+            _descendToMinimum<2>(r, kSqMin, kBasis, shifts, epsilon);
+            kSq[paramID] = kSqMin;
+            minImages[paramID] = r[0];
+            minImages[paramID + kSize] = r[1];
          }
       }
 
@@ -195,7 +319,10 @@ namespace Pscf {
       * code, we compare 125 different images of a wave to determine the
       * minimum image, and here we choose 128 instead because it is a
       * power of 2, allowing us to use a reduction algorithm to compare
-      * the images.
+      * the images. The 3 spare threads evaluate the unshifted image
+      * again, so that the images compared are the same as in the CPU
+      * code. As in the CPU code, the image is then moved by the shifts
+      * in shifts while one lowers kSq.
       *
       * When launched, this kernel requires dynamic memory allocation of
       * (3*sizeof(int) + sizeof(cudaReal)) * nThreadsPerBlock.
@@ -205,23 +332,33 @@ namespace Pscf {
                                     cudaReal* kSq,
                                     cudaReal const * kBasis,
                                     int const * meshDims,
-                                    int const kSize)
+                                    int const kSize,
+                                    int const kBegin,
+                                    ImageShifts const shifts)
       {
          unsigned int startID = blockIdx.x * blockDim.x + threadIdx.x;
 
          // Determine which lattice parameter and which image to evaluate
-         unsigned int paramID = (startID >> 7); // equivalent to startID / 128
-         unsigned int imageID = startID - (paramID * 128);
+         // (this launch treats wavevectors kBegin, kBegin+1, ...)
+         unsigned int localID = (startID >> 7); // equivalent to startID / 128
+         unsigned int paramID = kBegin + localID;
+         unsigned int imageID = startID - (localID * 128);
 
          // Determine the image that will be evaluated by this thread
          // (uses integer division, not ideal for speed)
          int s0, s1, s2;
-         s0 = imageID / 25;
-         s1 = (imageID - (s0 * 25)) / 5;
-         s2 = imageID - (s0 * 25) - (s1 * 5);
-         s0 -= 2; // shift values to go from -2 to 2
-         s1 -= 2;
-         s2 -= 2;
+         if (imageID < 125) {
+            s0 = imageID / 25;
+            s1 = (imageID - (s0 * 25)) / 5;
+            s2 = imageID - (s0 * 25) - (s1 * 5);
+            s0 -= 2; // shift values to go from -2 to 2
+            s1 -= 2;
+            s2 -= 2;
+         } else {
+            s0 = 0;  // spare thread: unshifted image
+            s1 = 0;
+            s2 = 0;
+         }
 
          // Set epsilon
          #ifdef SINGLE_PRECISION
@@ -301,10 +438,16 @@ namespace Pscf {
          // contain the kSq value and the minimum image, respectively. 
          // Store values and exit
          if ((imageID == 0) && (paramID < kSize)) {
-            kSq[paramID] = kSqVals_[threadIdx.x];
-            minImages[paramID] = images_[3*threadIdx.x];
-            minImages[paramID + kSize] = images_[3*threadIdx.x+1];
-            minImages[paramID + kSize + kSize] = images_[3*threadIdx.x+2];
+            int r[3];
+            r[0] = images_[3*threadIdx.x];
+            r[1] = images_[3*threadIdx.x+1];
+            r[2] = images_[3*threadIdx.x+2];
+            cudaReal kSqMin = kSqVals_[threadIdx.x];
+            _descendToMinimum<3>(r, kSqMin, kBasis, shifts, epsilon);
+            kSq[paramID] = kSqMin;
+            minImages[paramID] = r[0];
+            minImages[paramID + kSize] = r[1];
+            minImages[paramID + kSize + kSize] = r[2];
          }
       }
 
@@ -612,14 +755,21 @@ namespace Pscf {
          threadsPerGP = 1;
       }
 
+      // The kernel uses threadsPerGP threads per wavevector. For a large
+      // mesh, kSize_*threadsPerGP exceeds the range of int (e.g., in 3D
+      // for kSize_ >= 2^24). The kernel is therefore launched for chunks
+      // of at most kChunk wavevectors, with at most 2^30 threads each.
+      const int kChunkMax = (1 << 30) / threadsPerGP;
+      const int kChunk = (kSize_ < kChunkMax) ? kSize_ : kChunkMax;
+
       // GPU resources
       int nBlocks, nThreads;
-      ThreadArray::setThreadsLogical(kSize_*threadsPerGP, nBlocks, nThreads);
+      ThreadArray::setThreadsLogical(kChunk*threadsPerGP, nBlocks, nThreads);
 
       if ((D == 3) && (nThreads < 128)) {
          // Thread blocks too small. Manually set nThreads to 128
          ThreadArray::setThreadsPerBlock(128);
-         ThreadArray::setThreadsLogical(kSize_*threadsPerGP, nBlocks, nThreads);
+         ThreadArray::setThreadsLogical(kChunk*threadsPerGP, nBlocks, nThreads);
 
          // If the above was successful, print warning
          Log::file() << "\nWarning: "
@@ -630,11 +780,25 @@ namespace Pscf {
       UTIL_CHECK(kSq_.isAllocated());
       UTIL_CHECK(minImages_.isAllocated());
 
-      // Launch kernel
+      // Voronoi-relevant vectors of the lattice of image shifts
+      FSArray<IntVec<D>, 14> neighbors;
+      imageShiftNeighbors<D>(mesh().dimensions(), unitCell(), neighbors);
+      ImageShifts shifts;
+      shifts.n = neighbors.size();
+      for (int j = 0; j < neighbors.size(); ++j) {
+         for (int i = 0; i < D; ++i) {
+            shifts.v[D*j + i] = neighbors[j][i];
+         }
+      }
+
+      // Launch kernel, once per chunk of wavevectors
       size_t sz = (D * sizeof(int) + sizeof(cudaReal)) * nThreads;
-      _computeMinimumImages<D><<<nBlocks, nThreads, sz>>>
-         (minImages_.cArray(), kSq_.cArray(), kBasis.cArray(),
-          meshDims.cArray(), kSize_);
+      for (int kBegin = 0; kBegin < kSize_; kBegin += kChunk) {
+         _computeMinimumImages<D><<<nBlocks, nThreads, sz>>>
+            (minImages_.cArray(), kSq_.cArray(), kBasis.cArray(),
+             meshDims.cArray(), kSize_, kBegin, shifts);
+         cudaErrorCheck( cudaGetLastError() );
+      }
 
       hasMinImages_ = true;
       hasKSq_ = true;
