@@ -204,7 +204,7 @@ namespace Rp {
       UTIL_CHECK(bunches.size() == nBunch_);
 
       // Set bunchWavenumbers_, waveBunchIds_, and waveWeights_
-      double wavenumberSq, newWavenumber, oldWavenumber;
+      double wavenumberSq, newWavenumber, oldWavenumberSq;
       double count, sum, tot;
       int begin, end, k, iw;
       int nw = 0;
@@ -218,10 +218,13 @@ namespace Rp {
          UTIL_CHECK(wavenumberSq >= 0.0);
          newWavenumber = std::sqrt(wavenumberSq);
          bunchWavenumbers_[ib] = newWavenumber;
+         // The wave list starts a new bunch where k^2 exceeds the first
+         // k^2 of the previous bunch by more than 1.0E-8; check the
+         // same criterion (a 1.0E-8 gap in |k| rejects valid cells)
          if (ib > 0) {
-            UTIL_CHECK(newWavenumber - oldWavenumber > 1.0E-8);
+            UTIL_CHECK(wavenumberSq - oldWavenumberSq > 1.0E-8);
          }
-         oldWavenumber = newWavenumber;
+         oldWavenumberSq = wavenumberSq;
 
          // Set bunchIds, unnormalized weights for all waves in this bunch
          sum = 0.0;
