@@ -168,11 +168,24 @@ class Field:
          line = openFile.readline()
          l = line.split()
       else:
+         # Each header line contains a label and a value. The number of
+         # header lines is not fixed: w and c field files have nx and
+         # nm, files written by WRITE_BLOCK_C have nx, n_block and
+         # n_solvent, and propagator slice files have only nx. The data
+         # section starts with the first line that begins with a number.
+         while True:
             line = openFile.readline()
             l = line.split()
+            if line == '':
+               break
+            if len(l) == 0:
+               continue
+            if not isinstance(getValue(l[0]), str):
+               break
+            if len(l) != 2:
+               raise Exception('Invalid header line in field file: '
+                               + line.strip())
             self.header[l[0]] = getValue(l[1])
-            line = openFile.readline()
-            l = line.split()
 
       while line != '':
          d = []
@@ -197,9 +210,14 @@ class Field:
    #
    def __str__(self):
       out = ''
+      if self.type == 'fd1d':
+         # Width of the label column: 7, or more for longer labels
+         width = 7
+         for x in self.header:
+            width = max(width, len(x) + 3)
       for x, y in self.header.items():
          if self.type == 'fd1d':
-            o = f'{x:<7}' + str(y) + '\n'
+            o = f'{x:<{width}}' + str(y) + '\n'
          else:
             if x == 'format':
                o = x + '   ' + str(y[0]) + '   ' + str(y[1]) + '\n'
@@ -230,9 +248,11 @@ class Field:
 
       for i in range(0, len(self.data)):
          row = ''
-         for j in range(0, len(self.data[0])):
+         for j in range(0, len(self.data[i])):
             if self.type == 'fd1d':
-               if j == 0:
+               # Rows start with a grid point index, except in files
+               # with a single field and no index column
+               if j == 0 and isinstance(self.data[i][j], int):
                   row += f'{self.data[i][j]:>6}'
                else:
                   val = f'{self.data[i][j]:.11e}'
