@@ -12,6 +12,7 @@
 
 #include <rp/system/System.h>
 #include <rp/fts/simulator/Simulator.h>
+#include <rp/fts/perturbation/Perturbation.h>
 #include <rp/solvers/Mixture.h>
 #include <rp/field/Domain.h>
 #include <rp/field/WFields.h>
@@ -46,6 +47,7 @@ namespace Rp {
       UTIL_CHECK(nMonomer == 2);
       // Only valid for nMonomer == 2
 
+
       const double vSystem = system().domain().unitCell().volume();
       const double vMonomer = system().mixture().vMonomer();
       const double nMonomerSystem = vSystem / vMonomer;
@@ -73,6 +75,12 @@ namespace Rp {
 
       // Convert to derivative of total free energy F
       dfdchi *= (double)nMonomerSystem;
+
+      // With a perturbation, the sampled Hamiltonian is H0 plus the
+      // perturbation term; add the derivative of that term
+      if (simulator().hasPerturbation()) {
+         dfdchi += simulator().perturbation().chiDerivative(dfdchi);
+      }
 
       // With N term
       dfdchi += double(meshSize)/(2.0 * chi);

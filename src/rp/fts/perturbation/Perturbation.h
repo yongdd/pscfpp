@@ -116,6 +116,23 @@ namespace Rp {
       virtual double df();
 
       /**
+      * Derivative of the perturbation term in H with respect to chi.
+      *
+      * For a binary system, return the derivative with respect to the
+      * Flory-Huggins chi, at fixed fields, of the term that this
+      * perturbation adds to the unperturbed Hamiltonian H0. Used by the
+      * BinaryChiDerivative analyzer, which computes dH0/dchi itself.
+      * Call after the Hamiltonian has been computed.
+      *
+      * The default implementation throws an Exception: a perturbation
+      * must define this function before it can be used with that
+      * analyzer.
+      *
+      * \param dH0dChi  derivative of H0 with respect to chi
+      */
+      virtual double chiDerivative(double dH0dChi) const;
+
+      /**
       * Get parent Simulator<D,T> by const reference.
       */
       Simulator<D,T> const & simulator() const;

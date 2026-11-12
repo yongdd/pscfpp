@@ -80,6 +80,17 @@ namespace Rp {
       virtual double df();
 
       /**
+      * Derivative of the perturbation term in H with respect to chi.
+      *
+      * The term is (1-lambda)*(H_EC - H0). H_EC depends on chi only
+      * through epsilon: not at all if epsilon was given, and as 1/chi
+      * if epsilon has its default value (chi, for a binary system).
+      *
+      * \param dH0dChi  derivative of H0 with respect to chi
+      */
+      virtual double chiDerivative(double dH0dChi) const;
+
+      /**
       * Save any required internal state variables.
       */
       virtual void saveState();
@@ -133,6 +144,10 @@ namespace Rp {
 
       // Compute eigenvector components of the reference field.
       void computeWcReference();
+
+      // Update the reference components and default epsilon values for
+      // the current chi (eigenvectors and eigenvalues).
+      void updateReference();
 
    };
 

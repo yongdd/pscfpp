@@ -38,8 +38,19 @@ and
   \frac{\partial \ln N}{\partial \chi}
   = \frac{G}{2\chi} \quad.
 \f]
-Here, \f$ v \f$ is the monomer reference volume and \f$ G \f$ 
+Here, \f$ v \f$ is the monomer reference volume and \f$ G \f$
 is the total number of nodes in the computational mesh.
+
+<em> Perturbations </em>: With a \ref psfts_perturb_page "perturbation",
+\f$ H \f$ is the perturbed Hamiltonian that is sampled, and its
+derivative includes that of the perturbation term. For an
+EinsteinCrystalPerturbation with parameter \f$ \lambda \f$,
+\f$ \partial H / \partial \chi
+= \lambda \, \partial H_{0} / \partial \chi
++ (1-\lambda) \, \partial H_{EC} / \partial \chi \f$, where
+\f$ H_{EC} \f$ depends on \f$ \chi \f$ only through the default
+values of its epsilon parameters (\f$ \epsilon = \chi \f$). Other
+perturbations stop with an error unless they define this derivative.
 
 \section rp_BinaryChiDerivative_parameter_sec Parameter file
 

@@ -114,7 +114,8 @@ public:
       TEST_ASSERT(checkAverage(filename, ref));
 
       filename = "out/chiDerivative.ave";
-      ref = 8.2574275e+02;
+      //ref = 8.2574275e+02;  // without the perturbation term (wrong)
+      ref = 1.5803108e+02;    // with the EinsteinCrystal term (lambda 0.25)
       TEST_ASSERT(checkAverage(filename, ref));
 
       filename = "out/cubicLengthDerivative.ave";

@@ -125,6 +125,9 @@ namespace Rp {
       // Set unperturbedHamiltonian_ member variable
       unperturbedHamiltonian_ = unperturbedHamiltonian;
 
+      // Reference components and default epsilon for the current chi
+      updateReference();
+
       // Constants
       const int nMonomer = system().mixture().nMonomer();
       const double vMonomer = system().mixture().vMonomer();
@@ -158,6 +161,9 @@ namespace Rp {
       const double vMonomer = system().mixture().vMonomer();
       double prefactor;
 
+      // Reference components and default epsilon for the current chi
+      updateReference();
+
       // Loop over composition eigenvectors (exclude the last)
       for (int i = 0; i < nMonomer - 1; ++i) {
          prefactor = double(nMonomer) / (epsilon_[i] * vMonomer);
@@ -180,6 +186,27 @@ namespace Rp {
    {  return unperturbedHamiltonian_ - ecHamiltonian_; }
 
    /*
+   * Derivative of the perturbation term with respect to chi.
+   */
+   template <int D, class T>
+   double
+   EinsteinCrystalPerturbation<D,T>::chiDerivative(double dH0dChi) const
+   {
+      UTIL_CHECK(system().mixture().nMonomer() == 2);
+
+      // dH_EC/dchi at fixed fields. H_EC is proportional to 1/epsilon.
+      // An epsilon given in the parameter file does not depend on chi;
+      // the default epsilon is -chiEval(0) = chi for the current chi
+      // (see updateReference), so that d(epsilon)/d(chi) = 1.
+      double dHecdChi = 0.0;
+      if (!hasEpsilon_) {
+         dHecdChi = -1.0 * ecHamiltonian_ / epsilon_[0];
+      }
+
+      return (1.0 - lambda_)*(dHecdChi - dH0dChi);
+   }
+
+   /*
    * Save any required internal state variables.
    */
    template <int D, class T>
@@ -197,6 +224,29 @@ namespace Rp {
    {
       ecHamiltonian_ = stateEcHamiltonian_;
       unperturbedHamiltonian_ = stateUnperturbedHamiltonian_;
+   }
+
+   /*
+   * Update the reference components and the default epsilon values.
+   */
+   template <int D, class T>
+   void EinsteinCrystalPerturbation<D,T>::updateReference()
+   {
+      // The chi eigenvectors and eigenvalues change when chi changes,
+      // e.g. under a LinearRamp. Keep the components of the reference
+      // field in the current eigenbasis (the simulator's wc are in that
+      // basis), and a default epsilon equal to the current -chiEval, so
+      // that the perturbation stays centred on the reference field and
+      // agrees with chiDerivative. Without a change of chi the values
+      // are the same as those set in setup().
+      const int nMonomer = system().mixture().nMonomer();
+      if (!hasEpsilon_) {
+         for (int i = 0; i < nMonomer - 1; ++i) {
+            epsilon_[i] = -1.0 * simulator().chiEval(i);
+            UTIL_CHECK(epsilon_[i] > 0.0);
+         }
+      }
+      computeWcReference();
    }
 
    /*
