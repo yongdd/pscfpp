@@ -10,7 +10,9 @@
 #include <rp/fts/montecarlo/McSimulator.h>
 #include <rp/fts/analyzer/AnalyzerManager.h>
 #include <rp/fts/trajectory/RGridTrajectoryReader.h>
+#include <rp/field/Domain.h>
 #include <rp/field/WFields.h>
+#include <pscf/crystal/UnitCell.h>
 #include <pscf/field/cpp/RField.h>
 #include <pscf/field/cpp/RFieldComparison.h>
 
@@ -338,6 +340,124 @@ public:
                               "in/Fts/param_McSimulator_analyze");
    }
 
+   /*
+   * Return the number of lines "cell_param x ..." (unit cell of a
+   * trajectory frame) in a file. The "cell_param" label of a field
+   * header has its values on the next line and is not counted.
+   */
+   int countFrameCells(std::string filename)
+   {
+      std::ifstream file;
+      openInputFile(filename, file);
+      std::string line;
+      int n = 0;
+      while (std::getline(file, line)) {
+         std::istringstream s(line);
+         std::string label;
+         double value;
+         s >> label;
+         if (label == "cell_param" && (s >> value)) {
+            ++n;
+         }
+      }
+      file.close();
+      return n;
+   }
+
+   /*
+   * Copy a trajectory file, replacing the mesh dimensions of each frame.
+   */
+   void writeTrajectoryMesh(std::string inFileName,
+                            std::string outFileName,
+                            std::string dimensions)
+   {
+      std::ifstream in;
+      openInputFile(inFileName, in);
+      std::ofstream out;
+      openOutputFile(outFileName, out);
+      std::string line;
+      bool isMeshLine = false;
+      while (std::getline(in, line)) {
+         if (isMeshLine) {
+            out << "   " << dimensions << "\n";
+            isMeshLine = false;
+         } else {
+            out << line << "\n";
+            std::istringstream s(line);
+            std::string label;
+            s >> label;
+            if (label == "mesh") isMeshLine = true;
+         }
+      }
+      in.close();
+      out.close();
+   }
+
+   /*
+   * Trajectory and concentration files written under a cell_param ramp
+   * (3.0 to 3.4 in 4 steps), and ANALYZE of that trajectory.
+   */
+   void testTrajectoryCellRamp()
+   {
+      printMethod(TEST_FUNC);
+      openLogFile("out/FtsTrajectoryCellRamp.log");
+
+      {
+         Rp::System<3,CPT> system;
+         initSystem(system, "in/Fts/param_system_small");
+         Rp::BdSimulator<3,CPT> simulator(system);
+         initSimulator(simulator, "in/Fts/param_BdSimulator_cellRamp");
+         system.w().readRGrid("in/Fts/w_small.rf");
+         simulator.simulate(4);
+         TEST_ASSERT(simulator.iStep() == 4);
+         double cell = system.domain().unitCell().parameter(0);
+         TEST_ASSERT(std::abs(cell - 3.4) < 1.0E-10);
+      }
+
+      // Frames 1 to 4 have a unit cell other than the header cell
+      TEST_ASSERT(countFrameCells("out/FtsCellRamp_trajectory") == 4);
+      TEST_ASSERT(countFrameCells("out/FtsCellRamp_concentration") == 4);
+
+      // ANALYZE sets the unit cell of each frame (3.2 at frame 2)
+      for (int max = 2; max <= 4; max += 2) {
+         Rp::System<3,CPT> system;
+         initSystem(system, "in/Fts/param_system_small");
+         Rp::BdSimulator<3,CPT> simulator(system);
+         initSimulator(simulator, "in/Fts/param_BdSimulator_analyze");
+         TEST_ASSERT(analyze(simulator, 0, max,
+                             "out/FtsCellRamp_trajectory"));
+         double cell = system.domain().unitCell().parameter(0);
+         TEST_ASSERT(std::abs(cell - (3.0 + 0.1*max)) < 1.0E-10);
+      }
+   }
+
+   /*
+   * ANALYZE of a trajectory whose frames have mesh dimensions (4 8 16)
+   * other than those of the system (8 8 8), with the same number of
+   * grid points, must fail.
+   */
+   void testTrajectoryMesh()
+   {
+      printMethod(TEST_FUNC);
+      openLogFile("out/FtsTrajectoryMesh.log");
+      writeTrajectoryMesh("in/Fts/traj_small.rf", "out/FtsTrajMesh.rf",
+                          "4  8  16");
+      {
+         Rp::System<3,CPT> system;
+         initSystem(system, "in/Fts/param_system_small");
+         Rp::BdSimulator<3,CPT> simulator(system);
+         initSimulator(simulator, "in/Fts/param_BdSimulator_analyze");
+         TEST_ASSERT(!analyze(simulator, 0, 3, "out/FtsTrajMesh.rf"));
+      }
+      {
+         Rp::System<3,CPT> system;
+         initSystem(system, "in/Fts/param_system_small");
+         Rp::McSimulator<3,CPT> simulator(system);
+         initSimulator(simulator, "in/Fts/param_McSimulator_analyze");
+         TEST_ASSERT(!analyze(simulator, 0, 3, "out/FtsTrajMesh.rf"));
+      }
+   }
+
 };
 
 TEST_BEGIN(FtsAnalyzerTest)
@@ -347,6 +467,8 @@ TEST_ADD(FtsAnalyzerTest, testAnalyzeLastFrame)
 TEST_ADD(FtsAnalyzerTest, testAnalyzeNoFrame)
 TEST_ADD(FtsAnalyzerTest, testAnalyzeNoSample)
 TEST_ADD(FtsAnalyzerTest, testTimersWithoutCompressor)
+TEST_ADD(FtsAnalyzerTest, testTrajectoryCellRamp)
+TEST_ADD(FtsAnalyzerTest, testTrajectoryMesh)
 TEST_END(FtsAnalyzerTest)
 
 #endif
