@@ -16,6 +16,7 @@
 #include <pscf/interaction/Interaction.h>
 
 #include <util/misc/Exception.h>
+#include <util/param/Label.h>
 #include <util/tests/LogFileUnitTest.h>
 
 #include <fstream>
@@ -101,10 +102,55 @@ public:
       TEST_ASSERT(!error);
    }
 
+   /*
+   * Read an iterator block that has isFlexible 0 followed by a
+   * flexibleParams array, as written by WRITE_PARAM after every
+   * flexible parameter was turned off.
+   */
+   void checkRigidFlexibleParams(std::string paramFile)
+   {
+      Rp::System<1,CPT> system;
+      bool thrown = false;
+      try {
+         setupSystem(system, paramFile);
+      } catch (Exception& e) {
+         thrown = true;
+         Label::clear(); // Discard the label left by the failed read
+      }
+      TEST_ASSERT(!thrown);
+      TEST_ASSERT(!system.iterator().isFlexible());
+      TEST_ASSERT(system.iterator().nFlexibleParams() == 0);
+      TEST_ASSERT(system.iterator().flexibleParams().size() == 1);
+      TEST_ASSERT(!system.iterator().flexibleParams()[0]);
+
+      // Iterate: the unit cell must not change
+      system.w().readBasis("in/Scft/lam_w.bf");
+      double a = system.domain().unitCell().parameter(0);
+      int error = system.iterate();
+      TEST_ASSERT(!error);
+      TEST_ASSERT(eq(system.domain().unitCell().parameter(0), a));
+   }
+
+   void testBasisRigidFlexibleParams()
+   {
+      printMethod(TEST_FUNC);
+      openLogFile("out/ScftAmIteratorBasisRigidFlexibleParams.log");
+      checkRigidFlexibleParams("in/Scft/lam_flexParams");
+   }
+
+   void testGridRigidFlexibleParams()
+   {
+      printMethod(TEST_FUNC);
+      openLogFile("out/ScftAmIteratorGridRigidFlexibleParams.log");
+      checkRigidFlexibleParams("in/Scft/lam_flexParams_grid");
+   }
+
 };
 
 TEST_BEGIN(ScftAmIteratorTest)
 TEST_ADD(ScftAmIteratorTest, testBasisNanRecovery)
+TEST_ADD(ScftAmIteratorTest, testBasisRigidFlexibleParams)
+TEST_ADD(ScftAmIteratorTest, testGridRigidFlexibleParams)
 TEST_END(ScftAmIteratorTest)
 
 #endif
