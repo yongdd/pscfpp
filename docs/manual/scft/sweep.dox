@@ -382,6 +382,9 @@ Parameters of type "cell_param" are only usable in simulations of
 periodic structure performed using pscf_rp, for simulations with a 
 rigid unit cell in which the parameters are not automatically optimized 
 so as to minimize the free energy density.
+A sweep of a lattice parameter that the iterator treats as flexible
+stops with an error message at its first step. Other lattice parameters
+of the same unit cell may remain flexible.
 In this case, a "unit_cell" parameter is one of the parameters that
 determine the the size and shape of the crystal unit for a system of
 specified latttice type. Examples include the length of each edge of
