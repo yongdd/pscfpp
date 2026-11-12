@@ -549,6 +549,7 @@ namespace Rp {
             std::string classname;
             readEcho(in, classname);
             readEcho(in, filename);
+            UTIL_CHECK(hasSimulator());
             simulator().analyze(min, max, classname, filename);
          } else
          if (command == "WRITE_PARAM") {
@@ -899,8 +900,18 @@ namespace Rp {
       // If necessary, compute and store Environment stress
       if (hasEnvironment()) {
          if (!environment().hasStress()) {
-            environment().computeStress(mixture_(),
-                                        iterator().flexibleParams());
+            if (hasIterator()) {
+               environment().computeStress(mixture_(),
+                                           iterator().flexibleParams());
+            } else {
+               // Without an iterator the unit cell is rigid
+               FSArray<bool,6> flexibleParams;
+               int nParameter = domain_().unitCell().nParameter();
+               for (int i = 0; i < nParameter; ++i) {
+                  flexibleParams.append(false);
+               }
+               environment().computeStress(mixture_(), flexibleParams);
+            }
          }
       }
    }
