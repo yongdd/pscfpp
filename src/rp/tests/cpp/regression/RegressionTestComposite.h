@@ -19,6 +19,7 @@
 #include "FtsPerturbationTest.h"
 #include "FtsStructureFactorTest.h"
 #include "FtsAnalyzePrefixTest.h"
+#include "ScftParamFileEndTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -37,6 +38,7 @@ TEST_COMPOSITE_ADD_UNIT(FtsMcSimulatorTest);
 TEST_COMPOSITE_ADD_UNIT(FtsPerturbationTest);
 TEST_COMPOSITE_ADD_UNIT(FtsStructureFactorTest);
 TEST_COMPOSITE_ADD_UNIT(FtsAnalyzePrefixTest);
+TEST_COMPOSITE_ADD_UNIT(ScftParamFileEndTest);
 TEST_COMPOSITE_END
 
 #endif
