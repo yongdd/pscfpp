@@ -35,7 +35,8 @@ namespace Rp {
    RGridTrajectoryReader<D,T>::RGridTrajectoryReader(
                                          System<D,T>& system)
     : TrajectoryReader<D,T>(system),
-      isAllocated_(false)
+      isAllocated_(false),
+      hasFrameCell_(false)
    {}
 
    /*
@@ -78,7 +79,16 @@ namespace Rp {
       bool hasSymmetry;
       fieldIo.readFieldHeader(inputfile_, nMonomer, tmpUnitCell,
                               hasSymmetry);
+      // readFieldHeader returns the N_monomer of the file
+      if (nMonomer != system().mixture().nMonomer()) {
+         Log::file() << "N_monomer in trajectory file = " << nMonomer
+                     << ", in the system = "
+                     << system().mixture().nMonomer() << "\n";
+         UTIL_THROW("Trajectory file has a different number of monomers");
+      }
       system().setUnitCell(tmpUnitCell);
+      headerParameters_ = tmpUnitCell.parameters();
+      hasFrameCell_ = false;
       Log::file() << "Read Header" << "\n";
    }
 
@@ -113,14 +123,52 @@ namespace Rp {
       Log::file() << "step " << step << "\n";
       #endif
 
-      // Read mesh dimensions
+      // Read an optional "cell_param" line (written by TrajectoryWriter
+      // when the unit cell of a frame differs from the header cell, e.g.,
+      // under a cell_param ramp), then the mesh dimensions line.
       notEnd = getNextLine(inputfile_, line);
       UTIL_CHECK(notEnd);
-      checkString(line, "mesh");
+      std::string label;
+      line >> label;
+      if (label == "cell_param") {
+         int nParameter = system().domain().unitCell().nParameter();
+         FSArray<double, 6> parameters;
+         double value;
+         for (int i = 0; i < nParameter; ++i) {
+            line >> value;
+            UTIL_CHECK(!line.fail());
+            parameters.append(value);
+         }
+         system().setUnitCell(parameters);
+         hasFrameCell_ = true;
+         notEnd = getNextLine(inputfile_, line);
+         UTIL_CHECK(notEnd);
+         line >> label;
+      } else if (hasFrameCell_) {
+         // A frame without the line uses the header cell
+         system().setUnitCell(headerParameters_);
+         hasFrameCell_ = false;
+      }
+      if (label != "mesh") {
+         Log::file() << "Expected \"mesh\", found \"" << label << "\"\n";
+         UTIL_THROW("Bad frame in r-grid trajectory file");
+      }
 
-      // Read empty line
+      // Read the mesh dimensions of the frame and compare them with the
+      // system mesh (a permuted mesh of the same size would otherwise
+      // be read point by point in the wrong order)
       notEnd = getNextLine(inputfile_, line);
       UTIL_CHECK(notEnd);
+      IntVec<D> frameDimensions;
+      for (int i = 0; i < D; ++i) {
+         line >> frameDimensions[i];
+      }
+      if (line.fail() || frameDimensions != meshDimensions_) {
+         Log::file() << "Mesh dimensions of frame: " << line.str()
+                     << "\nMesh dimensions of system: " << meshDimensions_
+                     << "\n";
+         UTIL_THROW("Trajectory frame has other mesh dimensions");
+      }
 
       // Read a w-field configuration in r-grid format
       int nMonomer = system().mixture().nMonomer();
