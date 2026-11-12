@@ -98,6 +98,14 @@ namespace Rp {
          for (int i = 0; i < np; i++) {
             flexibleParams_.append(false);
          }
+         // A file written by WRITE_PARAM after every flexible parameter
+         // was turned off has 'isFlexible 0' followed by this array:
+         // accept it. The values are ignored, since the cell is rigid.
+         ParamComposite::readOptionalFSArray(in, "flexibleParams",
+                                             flexibleParams_, np);
+         for (int i = 0; i < np; i++) {
+            flexibleParams_[i] = false;
+         }
       }
 
       // Optionally read scaleStress value
