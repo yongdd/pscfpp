@@ -169,7 +169,83 @@ public:
       TEST_ASSERT(eq(blend3.pressure(), pressure));
    }
 
+   /*
+   * Absent species last, with guesses of the present species that add
+   * up to 1 + 1 ulp or 1 - 1 ulp, as after a normalization of a guess
+   * in floating point (r1 COMPARE_HOMOGENEOUS). When computePhi set
+   * the initial composition, the last species took 1 minus the sum of
+   * the others: the check of that sum aborted for 1 + 1 ulp, and the
+   * absent species kept a fraction of 1 ulp for 1 - 1 ulp. The results
+   * must be those of the A/B blend without the diblock.
+   */
+   void testComputePhiAbsentLastAbove()
+   {
+      printMethod(TEST_FUNC);
+      checkAbsentLast(std::nextafter(1.0, 2.0));
+   }
+
+   void testComputePhiAbsentLastBelow()
+   {
+      printMethod(TEST_FUNC);
+      checkAbsentLast(std::nextafter(1.0, 0.0));
+   }
+
 private:
+
+   /*
+   * Solve the A/B blend with an absent AB diblock (last species) from a
+   * guess (0.6, b, 0) with 0.6 + b == sum, and compare with the A/B
+   * blend solved from (0.5, 0.5), at chi N = 1.5 and target mu of the
+   * composition (0.75, 0.25).
+   */
+   void checkAbsentLast(double sum)
+   {
+      FhInteraction interaction;
+      interaction.setNMonomer(2);
+      interaction.setChi(0, 1, 1.5);
+
+      FhMixture blend2;
+      FhMixture blend3;
+      readBlends(blend2, blend3);
+
+      DArray<double> phi2;
+      phi2.allocate(2);
+      phi2[0] = 0.75;
+      phi2[1] = 0.25;
+      blend2.setComposition(phi2);
+      blend2.computeMu(interaction, 0.0);
+      DArray<double> mu2;
+      mu2.allocate(2);
+      mu2[0] = blend2.mu(0);
+      mu2[1] = blend2.mu(1);
+      phi2[0] = 0.5;
+      phi2[1] = 0.5;
+      double xi = 0.0;
+      blend2.computePhi(interaction, mu2, phi2, xi);
+      blend2.computeFreeEnergy(interaction);
+
+      // Guess of the present species, adding up to sum exactly
+      double a = 0.6;
+      double b = 0.4;
+      while (a + b < sum) b = std::nextafter(b, 1.0);
+      while (a + b > sum) b = std::nextafter(b, 0.0);
+      TEST_ASSERT(a + b == sum);
+
+      DArray<double> mu3;
+      DArray<double> phi3;
+      mu3.allocate(3);
+      phi3.allocate(3);
+      mu3[0] = mu2[0];
+      mu3[1] = mu2[1];
+      mu3[2] = -std::numeric_limits<double>::infinity();
+      phi3[0] = a;
+      phi3[1] = b;
+      phi3[2] = 0.0;
+      xi = 0.0;
+      blend3.computePhi(interaction, mu3, phi3, xi);
+      blend3.computeFreeEnergy(interaction);
+      checkSameState(blend3, blend2);
+   }
 
    // Read the A/B blend and the A/B blend with an AB diblock
    void readBlends(FhMixture& blend2, FhMixture& blend3)
@@ -205,6 +281,8 @@ private:
 TEST_BEGIN(CoreFhMixtureTest)
 TEST_ADD(CoreFhMixtureTest, testComputePhiDiluteLast)
 TEST_ADD(CoreFhMixtureTest, testComputePhiAbsentSpecies)
+TEST_ADD(CoreFhMixtureTest, testComputePhiAbsentLastAbove)
+TEST_ADD(CoreFhMixtureTest, testComputePhiAbsentLastBelow)
 TEST_END(CoreFhMixtureTest)
 
 #endif
