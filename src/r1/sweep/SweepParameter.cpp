@@ -88,8 +88,11 @@ namespace R1 {
          type_ = Solvent;
          nId_ = 1; //species identifier.
       } else if (buffer == "cell_param") {
-         type_ = Cell_Param;
-         nId_ = 1; //lattice parameter identifier.
+         // Unit cell parameters exist only for periodic structures
+         // (pscf_rpc and pscf_rpg). The type, get_ and set_ functions
+         // of this class do not accept this type.
+         UTIL_THROW("Sweep parameter type cell_param is not available "
+                    "in pscf_1d (only for periodic unit cells)");
       } else {
          // Search in parameterTypes array for this sweep parameter
          bool found = false;
