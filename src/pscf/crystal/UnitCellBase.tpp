@@ -87,7 +87,9 @@ namespace Pscf {
       for (int p = 0; p < D; ++p){
          for (int q = 0; q < D; ++q){
             element = dkkBasis(n, p, q);
-            value += vec[p]*vec[q]*element;
+            // Convert to double before the product, which can overflow
+            // int for wave indices above 46340
+            value += double(vec[p])*double(vec[q])*element;
          }
       }
 

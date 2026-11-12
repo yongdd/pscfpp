@@ -173,7 +173,11 @@ namespace Pscf {
             }
 
             minImages[i] = img;
-            kSq[i] = img * img * kBasis_ * kBasis_;
+
+            // Compute kSq in floating point (img*img overflows int
+            // for |img| > 46340, i.e. for meshes of 92682 or more points)
+            cudaReal kVec = kBasis_ * img;
+            kSq[i] = kVec * kVec;
          }
       }
 
@@ -551,10 +555,11 @@ namespace Pscf {
                   waveBz_[j] = waveBz[i + (j * kSize)];
                }
 
-               // Compute dKSq
+               // Compute dKSq (in floating point, because the product
+               // of two wave indices can overflow int)
                for (j = 0; j < D; ++j) {
                   for (k = 0; k < D; ++k) {
-                     dKSqVal += waveBz_[j] * waveBz_[k]
+                     dKSqVal += cudaReal(waveBz_[j]) * cudaReal(waveBz_[k])
                                 * dkkBasis_[k + (j * D) + (param * D * D)];
                   } // D
                } // D
