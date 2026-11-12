@@ -42,6 +42,7 @@
 #include "FtsBdMoveNStepTest.h"
 #include "FtsAmCompressorLogTest.h"
 #include "CommandReplicateTest.h"
+#include "ScftBeadDsTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -83,6 +84,7 @@ TEST_COMPOSITE_ADD_UNIT(CommandStatusTest);
 TEST_COMPOSITE_ADD_UNIT(FtsBdMoveNStepTest);
 TEST_COMPOSITE_ADD_UNIT(FtsAmCompressorLogTest);
 TEST_COMPOSITE_ADD_UNIT(CommandReplicateTest);
+TEST_COMPOSITE_ADD_UNIT(ScftBeadDsTest);
 TEST_COMPOSITE_END
 
 #endif
