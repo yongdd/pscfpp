@@ -31,6 +31,7 @@
 #include "CoreSingularCellTest.h"
 #include "CoreBasisDataTest.h"
 #include "CoreNyquistGroupTest.h"
+#include "CoreNyquistPlaneCacheTest.h"
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
@@ -65,6 +66,7 @@ TEST_COMPOSITE_ADD_UNIT(CoreMixAndMatchEnvTest);
 TEST_COMPOSITE_ADD_UNIT(CoreSingularCellTest);
 TEST_COMPOSITE_ADD_UNIT(CoreBasisDataTest);
 TEST_COMPOSITE_ADD_UNIT(CoreNyquistGroupTest);
+TEST_COMPOSITE_ADD_UNIT(CoreNyquistPlaneCacheTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
 TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);
