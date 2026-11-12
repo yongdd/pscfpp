@@ -14,6 +14,7 @@
 #include "crystal/CrystalTestComposite.h"
 #include "backend/cpp/BackendCppTestComposite.h"
 #include "field/cpp/FieldCppTestComposite.h"
+#include "regression/RegressionTestComposite.h"
 
 #include <util/param/BracketPolicy.h>
 #include <util/global.h>
@@ -29,6 +30,7 @@ addChild(new MeshTestComposite, "mesh/");
 addChild(new CrystalTestComposite, "crystal/");
 addChild(new BackendCppTestComposite, "backend/cpp/");
 addChild(new FieldCppTestComposite, "field/cpp/");
+addChild(new RegressionTestComposite, "regression/");
 TEST_COMPOSITE_END
 
 using namespace Pscf;

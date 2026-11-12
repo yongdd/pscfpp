@@ -16,6 +16,7 @@
 #include "backend/cuda/BackendCudaTestComposite.h"
 #include "field/cpp/FieldCppTestComposite.h"
 #include "field/cuda/FieldCudaTestComposite.h"
+#include "regression/RegressionTestComposite.h"
 
 #include <util/param/BracketPolicy.h>
 #include <util/global.h>
@@ -33,6 +34,7 @@ addChild(new BackendCppTestComposite, "backend/cpp/");
 addChild(new BackendCudaTestComposite, "backend/cuda/");
 addChild(new FieldCppTestComposite, "field/cpp/");
 addChild(new FieldCudaTestComposite, "field/cuda/");
+addChild(new RegressionTestComposite, "regression/");
 TEST_COMPOSITE_END
 
 using namespace Pscf;

@@ -6,11 +6,17 @@
 #include <util/param/BracketPolicy.h>
 
 #include "R1dTestComposite.h"
+#include "regression/RegressionTestComposite.h"
 
 #include <test/CompositeTestRunner.h>
 
 using namespace R1;
 using namespace Util;
+
+TEST_COMPOSITE_BEGIN(R1NsTestComposite)
+addChild(new R1dTestComposite, "");
+addChild(new RegressionTestComposite, "regression/");
+TEST_COMPOSITE_END
 
 int main(int argc, char* argv[])
 {
@@ -19,7 +25,7 @@ int main(int argc, char* argv[])
 
    try {
 
-      R1dTestComposite runner;
+      R1NsTestComposite runner;
   
       // Optionally add file prefix given as command line argument 
       if (argc > 2) {

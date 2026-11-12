@@ -1,0 +1,44 @@
+/*
+* This program runs the regression tests in the r1/tests/regression
+* directory.
+*/ 
+
+#include <util/global.h>
+#include <util/param/BracketPolicy.h>
+
+#include "RegressionTestComposite.h"
+
+#include <test/CompositeTestRunner.h>
+
+using namespace Util;
+
+int main(int argc, char* argv[])
+{
+
+   BracketPolicy::set(BracketPolicy::Optional);
+
+   try {
+
+      RegressionTestComposite runner;
+
+      // Optionally add file prefix given as command line argument 
+      if (argc > 2) {
+         UTIL_THROW("Too many arguments");
+      }
+      if (argc == 2) {
+         runner.addFilePrefix(argv[1]);
+      }
+
+      // Run all unit test functions
+      int failures = runner.run();
+
+      return (failures != 0);
+
+   } catch (...) {
+
+      std::cerr << "Uncaught exception in r1/tests/regression/Test.cpp" 
+                << std::endl;
+      return 1;
+
+   }
+}
