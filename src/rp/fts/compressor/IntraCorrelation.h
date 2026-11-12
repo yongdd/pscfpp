@@ -110,7 +110,12 @@ namespace Rp {
       /**
       * Compute array of squared wavevectors.
       *
-      * Results are stored in a private member variable.
+      * The values are those of the kSq array of the WaveList, which 
+      * the MDE solver uses: |k|^2 of the minimum image, or, for a 
+      * wavevector with a Nyquist index, its average over the signs of 
+      * the Nyquist indices if the WaveList uses this average (see 
+      * WaveList::hasNyquistAverage). Results are stored in a private 
+      * member variable.
       */
       void computeGsq();
 

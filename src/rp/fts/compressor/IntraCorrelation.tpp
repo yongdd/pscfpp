@@ -19,6 +19,7 @@
 
 #include <pscf/field/FFT.h>
 #include <pscf/field/RField.h>
+#include <pscf/field/WaveList.h>
 #include <pscf/crystal/shiftToMinimum.h>
 #include <pscf/crystal/UnitCell.h>
 
@@ -159,15 +160,26 @@ namespace Rp {
       }
       UTIL_CHECK(Gsq_.capacity() == kSize_);
 
-      // Compute Gsq_
+      // Compute Gsq_, equal to kSq of the WaveList used by the MDE 
+      // solver: for a wavevector with a Nyquist index, averaged over 
+      // the signs of the Nyquist indices if the WaveList does so (see
+      // WaveList::allowNyquistAverage), otherwise |k|^2 of the minimum
+      // image. 
       UnitCell<D> const & unitCell = system().domain().unitCell();
+      bool const averageNyquist 
+                       = system().domain().waveList().hasNyquistAverage();
       IntVec<D> G, Gmin;
       MeshIterator<D> iter;
       iter.setDimensions(kMeshDimensions_);
       for (iter.begin(); !iter.atEnd(); ++iter) {
          G = iter.position();
-         Gmin = shiftToMinimum(G, meshDimensions_, unitCell);
-         Gsq_[iter.rank()] = unitCell.ksq(Gmin);
+         if (averageNyquist && hasNyquistIndex(G, meshDimensions_)) {
+            Gmin = shiftToMinimumNyquist(G, meshDimensions_, unitCell);
+            Gsq_[iter.rank()] = ksqNyquist(Gmin, meshDimensions_, unitCell);
+         } else {
+            Gmin = shiftToMinimum(G, meshDimensions_, unitCell);
+            Gsq_[iter.rank()] = unitCell.ksq(Gmin);
+         }
       }
    }
 
