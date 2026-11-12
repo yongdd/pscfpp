@@ -68,16 +68,16 @@ class Script:
    #
    def read(self, filename):
 
-      # Determine type of parameter in
+      # Determine type of parameter in, and split the file into a
+      # list of line strings
       if isinstance(filename, str):
-         file = open(filename, 'r')
-      elif isinstance(filename, file):
-         file = filename
+         with open(filename, 'r') as f:
+            lines = f.readlines()
+      elif hasattr(filename, 'readlines'):
+         # An open file object
+         lines = filename.readlines()
       else:
          raise Exception("Invalid parameter in")
-
-      # Split file into list of line strings
-      lines = file.readlines();
 
       # Process lines
       i = 0
@@ -86,26 +86,30 @@ class Script:
          line = lines[i]
          if not isinstance(line, str):
             raise Exception('Command line object is not a string')
+         i += 1
          command = Command(line)
+         if command.size == 0:
+            # Skip a blank line
+            continue
 
          # Add command to list self._commands
+         n = len(self._commands)
          self._commands.append(command)
 
-         # Add index i to dictionary self._indices
+         # Add its index n in self._commands to dictionary self._indices
          label = command.label
          if label in self._indices:
             index = self._indices[label]
             if isinstance(index, int):
                self._indices[label] = [index]
-            elif not instance(index, list):
+            elif not isinstance(index, list):
                raise Exception('Values of _indices must be int or list')
-            self._indices[label].append(i)
+            self._indices[label].append(n)
          else:
-            self._indices[label] = i
+            self._indices[label] = n
 
          if (command.label == 'FINISH'):
             finish = True
-         i += 1
 
    ## 
    # Return a string containing the command script. 
@@ -159,7 +163,7 @@ class Command(Record):
    # 
    def __init__(self, line):
       Record.__init__(self, line)
-      self.label = self.fields[0]
+      self.label = self.fields[0] if self.size > 0 else ''
 
    ## 
    # Number of parameter / arguments of the command. 

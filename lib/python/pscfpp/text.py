@@ -95,39 +95,19 @@ class Record:
    # \param line string containing fields separated by white space
    #  
    def __init__(self, line):
-      if line[-1] == '\n':
+      if line.endswith('\n'):
          line = line[:-1]
       self.line   = line
       self.spaces  = []
       self.fields  = []
-      n = 0
-      blank  = True
-      gap = ''
-      for i in range(len(line)):
-         if blank:
-            if line[i] != ' ':
-               begin = i
-               blank = False
-            else:
-               gap = gap + ' '
-         else:
-            if line[i] == ' ':
-               end = i
-               blank = True
-               self.fields.append(line[begin:end])
-               self.spaces.append(gap)
-               gap = ' '
-               n += 1
-      if not blank:
-         end = len(line)
-         self.fields.append(line[begin:])
-         self.spaces.append(gap)
-         n +=1
-      self.size = n
+      # Fields are separated by any whitespace (spaces or tabs); the
+      # whitespace before each field is kept so that str() reproduces
+      # the line
+      for match in re.finditer(r'(\s*)(\S+)', line):
+         self.spaces.append(match.group(1))
+         self.fields.append(match.group(2))
+      self.size = len(self.fields)
 
-   ##
-   # String representation - line from which Record was constructed.
-   #
    def __str__(self):
       line = ''
       for i in range(self.size):

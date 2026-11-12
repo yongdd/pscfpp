@@ -246,7 +246,21 @@ class Composite:
    def read(self, file):
       line = file.readline()
       l = line.split()
+      last = None    # last child read, for continuation lines
       while line != '':
+         if len(l) == 0:
+            # Skip a blank line
+            line = file.readline()
+            l = line.split()
+            continue
+         if last is not None and _isNumber(l[0]):
+            # A line that starts with a number continues the previous
+            # item: a bracketless array or matrix (BracketPolicy
+            # Optional in PSCF)
+            last = self._continue(last, l)
+            line = file.readline()
+            l = line.split()
+            continue
          if l[0][-1] == '{':
             # Composite (nested)
             if len(l) == 1:
@@ -302,9 +316,57 @@ class Composite:
                p = Parameter(label, val)
                #p = Parameter(l[0], val)
          self.addChild(p)
+         if isinstance(p, Parameter):
+            last = p
+         else:
+            last = None
          line = file.readline()
          l = line.split()
       # end while loop
+
+   ##
+   # Add a continuation line to the last item (bracketless format).
+   #
+   # A Parameter followed by continuation lines becomes an Array (or a
+   # Matrix for a label in _MATRIX_LABELS), which replaces it as a
+   # child. Returns the item that holds the line.
+   #
+   def _continue(self, last, l):
+      row = [getValue(x) for x in l]
+      if isinstance(last, Parameter):
+         first = last.val
+         if last.label in _MATRIX_LABELS:
+            if not isinstance(first, list):
+               first = [first]
+            item = Matrix(last.label, None, [first, row])
+         else:
+            if len(row) == 1:
+               rows = [first, row[0]]
+            else:
+               rows = [first, row]
+            item = Array(last.label, None, rows)
+         self._replaceChild(last, item)
+         return item
+      elif isinstance(last, Array):
+         last.val.append(row[0] if len(row) == 1 else row)
+         return last
+      elif isinstance(last, Matrix):
+         last.addEntry(row)
+         return last
+      else:
+         raise Exception('Invalid parameter file line')
+
+   ##
+   # Replace child object old by new (same label).
+   #
+   def _replaceChild(self, old, new):
+      current = self._children[old.label]
+      if isinstance(current, list):
+         for i in range(len(current)):
+            if current[i] is old:
+               current[i] = new
+      else:
+         self._children[old.label] = new
 
    ##
    # Add a single child to this Composite.
@@ -575,7 +637,14 @@ class Array:
    def read(self, file):
       line = file.readline()
       l = line.split()
-      while l[0] != ']':
+      while len(l) == 0 or l[0] != ']':
+         if len(l) == 0:
+            # Skip a blank line
+            if line == '':
+               raise Exception('End of file inside an Array')
+            line = file.readline()
+            l = line.split()
+            continue
          # Process a line
          if len(l) == 1:
             # Single value
@@ -696,10 +765,15 @@ class Matrix:
    # \param label  label string for the Matrix.
    # \param file  python file object, open for reading
    #
-   def __init__(self, label, file):
+   def __init__(self, label, file, rows=None):
       self.label = label
       self.val = []
-      self.read(file)
+      if file is not None:
+         self.read(file)
+      else:
+         # Rows 'i j value' of a bracketless matrix
+         for row in rows:
+            self.addEntry(row)
 
    ##
    # Read the a parameter block from a file.
@@ -714,28 +788,47 @@ class Matrix:
    # \param file  a file object, open for reading
    #
    def read(self, file):
-      att = []
       line = file.readline()
       l = line.split()
-      while l[0] != ')':
-         att.append(l)
+      while len(l) == 0 or l[0] != ')':
+         if len(l) == 0:
+            # Skip a blank line
+            if line == '':
+               raise Exception('End of file inside a Matrix')
+         else:
+            self.addEntry(l)
          line = file.readline()
          l = line.split()
-      rowMax = att[0][0]
-      colMax = att[0][1]
-      for i in range(1, len(att)):
-         if att[i][0] > rowMax:
-            rowMax = att[i][0]
-         if att[i][1] > colMax:
-            colMax = att[i][1]
-      size = int(max(rowMax, colMax))+1
-      for i in range(0, size):
-         self.val.append([])
-         for j in range(0, size):
-            self.val[i].append(getValue('0'))
-      for i in range(0, len(att)):
-         self.val[int(att[i][0])][int(att[i][1])] = getValue(att[i][2])
-         self.val[int(att[i][1])][int(att[i][0])] = getValue(att[i][2])
+
+   ##
+   # Set a symmetric pair of elements from a line 'i j value'.
+   #
+   # The matrix grows as needed. Indices are compared as integers.
+   #
+   def addEntry(self, l):
+      i = int(l[0])
+      j = int(l[1])
+      value = getValue(str(l[2]))
+      size = max(i, j) + 1
+      if size > len(self.val):
+         self.resize(size)
+      self.val[i][j] = value
+      self.val[j][i] = value
+
+   ##
+   # Enlarge this Matrix to size x size, filling new elements with 0.
+   #
+   def resize(self, size):
+      old = self.val
+      self.val = []
+      for i in range(size):
+         values = []
+         for j in range(size):
+            if i < len(old) and j < len(old):
+               values.append(old[i][j])
+            else:
+               values.append(getValue('0'))
+         self.val.append(_SymmetricRow(self.val, i, values))
 
    ##
    # String representation of this Matrix object.
@@ -796,9 +889,10 @@ class Matrix:
                   raise Exception('The diagonal of the Matrix should all be zero.')
             self.val = []
             for i in range(len(val)):
-               self.val.append([])
+               values = []
                for j in range(len(val[0])):
-                  self.val[i].append(getValue(str(val[i][j])))
+                  values.append(getValue(str(val[i][j])))
+               self.val.append(_SymmetricRow(self.val, i, values))
          else: 
             # Input value is a list in format: [x-index, y-index, value]
             if len(val) != 3:
@@ -822,6 +916,36 @@ class Matrix:
 #
 # \param v  a string representation of a parameter value
 #
+##
+# Labels of matrix parameters, for bracketless matrices.
+#
+_MATRIX_LABELS = ('chi',)
+
+##
+# Is this token a number (int or float)?
+#
+def _isNumber(token):
+   return isinstance(getValue(token), (int, float))
+
+##
+# One row of a symmetric Matrix.
+#
+# Setting element j of row i also sets element i of row j, so that an
+# element changed through the list returned by Matrix.returnData()
+# keeps the matrix symmetric (only the lower triangle is written).
+#
+class _SymmetricRow(list):
+
+   def __init__(self, rows, i, values):
+      list.__init__(self, values)
+      self._rows = rows
+      self._i = i
+
+   def __setitem__(self, j, value):
+      list.__setitem__(self, j, value)
+      if isinstance(j, int) and j != self._i and j < len(self._rows):
+         list.__setitem__(self._rows[j], self._i, value)
+
 def getValue(v):
 
    if (v.isdigit() == True) or (v[0] == '-' and v[1:].isdigit() == True):

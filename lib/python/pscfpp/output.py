@@ -200,6 +200,7 @@ class Thermo:
       self.tableLabel = None
       self.homogeneous = None
       self.homogeneousSpecies = None
+      self.homogeneousSpeciesHeader = None
       self.stress = None
       self.environmentStress = None
 
@@ -285,46 +286,46 @@ class Thermo:
             self.homogeneous = {}
             self.homogeneousSpecies = []
 
+            # Lines 'label = value [unit]' (the label width differs
+            # between comparison modes, so split at '=')
             while line.strip() != '':
-               self.homogeneous[line[:11].strip()] = float(line[12:31])
+               key, rest = line.split('=', 1)
+               self.homogeneous[key.strip()] = float(rest.split()[0])
                line = file.readline()
             
             line = self.skipEmptyLine(file)
             if line.lower().startswith('species:'):
                line = file.readline()
+               # Column labels (mode 0 has 3 columns, modes 1 and 2 have 4)
+               self.homogeneousSpeciesHeader = line
                speciesParams = line.split()
                line = file.readline()
                while line.strip() != '':
                   l = line.split()
                   self.homogeneousSpecies.append({})
-                  for i in range(4):
+                  for i in range(min(len(speciesParams), len(l))):
                      prm = speciesParams[i]
                      if i == 0:
                         self.homogeneousSpecies[-1][prm] = int(l[i])
                      else:
                         self.homogeneousSpecies[-1][prm] = float(l[i])
                   line = file.readline()
-            line = self.skipEmptyLine(file)
+               line = self.skipEmptyLine(file)
       
          # Read stress block (optional)
          elif line.lower().startswith('stress:'):
-            self.stress = []
-            line = file.readline()
-            while line.strip() != '':
-               l = line.split()
-               self.stress.append(float(l[1]))
-               line = file.readline()
+            self.stress = self.readIndexedValues(file)
             line = self.skipEmptyLine(file)
          
          # Read environment stress block (optional)
          elif line.lower().startswith('environment-modified stress:'):
-            self.environmentStress = []
-            line = file.readline()
-            while line.strip() != '':
-               l = line.split()
-               self.environmentStress.append(float(l[1]))
-               line = file.readline()
+            self.environmentStress = self.readIndexedValues(file)
             line = self.skipEmptyLine(file)
+
+         # Any other line ends this thermo block (for example, the start
+         # of another block appended to the same file)
+         else:
+            break
 
       if not hasPolymersBlock:
          raise Exception('Not valid Thermo file. No polymers block found.')
@@ -339,9 +340,30 @@ class Thermo:
    #
    def skipEmptyLine(self, file):
       line = file.readline()
-      while line == '\n':
+      while line != '' and line.strip() == '':
          line = file.readline()
       return line
+
+   ##
+   # Read lines 'id  value' up to an empty line.
+   #
+   # Returns a list in which element id holds the value for lattice
+   # parameter id, and None for an id that does not appear (for
+   # example, a rigid parameter in an environment-modified stress).
+   #
+   # \param file  a file object, open for reading
+   #
+   def readIndexedValues(self, file):
+      values = []
+      line = file.readline()
+      while line.strip() != '':
+         l = line.split()
+         i = int(l[0])
+         while len(values) <= i:
+            values.append(None)
+         values[i] = float(l[1])
+         line = file.readline()
+      return values
 
    ##
    # Write the contents of this object in thermo file format to a file.
@@ -423,17 +445,24 @@ class Thermo:
 
       if self.homogeneousSpecies:
          s += 'Species:\n'
-         s += '    i      mu                  phi(homo)           deltaV\n'
+         header = getattr(self, 'homogeneousSpeciesHeader', None)
+         if header is None:
+            header = '    i      mu                  phi(homo)           deltaV\n'
+         s += header
          for sp in self.homogeneousSpecies:
-            s += f'{sp["i"]:>5}'
-            s += f'{sp["mu"]:>20.11e}'
-            s += f'{sp["phi(homo)"]:>20.11e}'
-            s += f'{sp["deltaV"]:>20.11e}\n'
+            for key, val in sp.items():
+               if key == 'i':
+                  s += f'{val:>5}'
+               else:
+                  s += f'{val:>20.11e}'
+            s += '\n'
          s += '\n'
       
       if self.stress != None:
          s += 'stress:\n'
          for i in range(len(self.stress)):
+            if self.stress[i] is None:
+               continue
             v = f'{self.stress[i]:.11e}'
             s += f'{i:>5}{v:>20}\n'
          s += '\n'
@@ -441,6 +470,8 @@ class Thermo:
       if self.environmentStress != None:
          s += 'environment-modified stress:\n'
          for i in range(len(self.environmentStress)):
+            if self.environmentStress[i] is None:
+               continue
             v = f'{self.environmentStress[i]:.11e}'
             s += f'{i:>5}{v:>20}\n'
          s += '\n'
