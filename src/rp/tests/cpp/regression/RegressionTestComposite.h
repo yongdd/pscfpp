@@ -32,6 +32,7 @@
 #include "FilmParamStreamTest.h"
 #include "ScftLinearSweepTest.h"
 #include "FtsLinearRampTest.h"
+#include "FtsBdMoveFailTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -63,6 +64,7 @@ TEST_COMPOSITE_ADD_UNIT(FilmWriteFieldsTest);
 TEST_COMPOSITE_ADD_UNIT(FilmParamStreamTest);
 TEST_COMPOSITE_ADD_UNIT(ScftLinearSweepTest);
 TEST_COMPOSITE_ADD_UNIT(FtsLinearRampTest);
+TEST_COMPOSITE_ADD_UNIT(FtsBdMoveFailTest);
 TEST_COMPOSITE_END
 
 #endif

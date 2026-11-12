@@ -1,0 +1,16 @@
+McSimulator{
+   seed              1784106389
+   McMoveManager{
+      BdMove{
+         probability   1.0
+         mobility      1.0e-4
+         nStep         2
+      }
+   }
+   FtsScheduledCompressor{
+      epsilon      1.0e-6
+      maxItr       100
+      verbose      0
+      errorType    rms
+   }
+}
