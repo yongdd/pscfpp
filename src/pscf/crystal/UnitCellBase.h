@@ -196,7 +196,8 @@ namespace Pscf {
       *
       * Calls initializeToZero, setBasis, & computeDerivatives functions
       * internally. Also sets isInitialized flag true and notifies any 
-      * observers.
+      * observers. Throws an Exception if the parameters give a singular
+      * or nearly singular basis (see checkBasis).
       */
       void setLattice();
 
@@ -289,6 +290,15 @@ namespace Pscf {
       * Compute values of dkBasis_, drrBasis_, and dkkBasis_.
       */
       void computeDerivatives();
+
+      /**
+      * Check that the Bravais basis vectors span a cell of finite volume.
+      *
+      * Throws an Exception if the basis vectors are linearly dependent
+      * or nearly so (the volume of the cell is at most 1.0E-6 times the
+      * product of their lengths), or if an element is not finite.
+      */
+      void checkBasis() const;
 
       /**
       * Copy constructor - private and unimplemented to prohibit.
