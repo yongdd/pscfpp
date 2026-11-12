@@ -30,6 +30,8 @@
 #include <util/containers/FSArray.h>
 #include <util/global.h>
 
+#include <cmath>
+
 #include <pscf/iterator/AmIteratorTmpl.tpp> // base template impl.
 
 namespace Pscf {
@@ -114,6 +116,15 @@ namespace Rp {
       // Optionally read scaleStress value
       scaleStress_ = 10.0;  // default
       ParamComposite::readOptional(in, "scaleStress", scaleStress_);
+
+      // The stress residuals are scaled by scaleStress, and the cell
+      // parameters are recovered by dividing by it
+      if (Iterator<D,T>::isFlexible_) {
+         if (!(scaleStress_ > 0.0) || !std::isfinite(scaleStress_)) {
+            UTIL_THROW("scaleStress must be positive and finite "
+                       "when the unit cell is flexible");
+         }
+      }
 
       // Read optional mixing parameters (lambda, useLambdaRamp, r)
       AmIterTmplT::readMixingParameters(in);
