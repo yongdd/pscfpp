@@ -39,6 +39,7 @@
 #include "ScftLongChainTest.h"
 #include "ScftContourStepTest.h"
 #include "ScftNyquistStressTest.h"
+#include "CommandStatusTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -77,6 +78,7 @@ TEST_COMPOSITE_ADD_UNIT(FtsRelNormTest);
 TEST_COMPOSITE_ADD_UNIT(ScftLongChainTest);
 TEST_COMPOSITE_ADD_UNIT(ScftContourStepTest);
 TEST_COMPOSITE_ADD_UNIT(ScftNyquistStressTest);
+TEST_COMPOSITE_ADD_UNIT(CommandStatusTest);
 TEST_COMPOSITE_END
 
 #endif
