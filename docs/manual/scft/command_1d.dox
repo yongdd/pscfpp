@@ -390,6 +390,20 @@ accessible slice may be identified by a integer contour step index
 originates, and increases with increasing distance \f$ s \f$ from that
 vertex.
 
+The MDE for each block is solved in the field of its monomer type minus
+the spatial average \f$ \bar{w}_{i} \f$ of that field. This constant
+shift multiplies each propagator by a known factor, which is removed
+analytically from the logarithm of the molecular partition function,
+so that concentrations, free energies and chemical potentials are
+those of the unshifted fields, while the propagators of long chains
+remain within the range of floating point numbers. The propagators
+written by the commands described below are those of the shifted
+fields. Within a block of monomer type \f$ i \f$, the propagator of
+the unshifted field is the written one multiplied by
+\f$ \exp(-s \bar{w}_{i}) \f$, where \f$ s \f$ is the contour distance
+from the start of the block, and by the corresponding factors of all
+blocks that precede it along the propagation direction.
+
 The pscf_1d programs accept several commands that output propagators
 and propagator slices to one or more files. The names for these commands
 start with a string "WRITE_Q", followed by a suffix that describes what

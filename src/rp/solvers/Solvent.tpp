@@ -14,6 +14,8 @@
 #include <pscf/backend/VecOp.h>
 #include <pscf/mesh/Mesh.h>
 
+#include <cmath>
+
 namespace Pscf {
 namespace Rp {
 
@@ -64,8 +66,13 @@ namespace Rp {
       const int nx = meshPtr_->size();
       const double size = SolventSpeciesT::size();
 
-      // Evaluate unnormalized integral and Q
-      VecOp::expVc(cField_, wField, -1.0*size);
+      // Evaluate the Boltzmann weight exp(-size*(w - wShift)) of the
+      // field shifted by its spatial average wShift, which keeps the
+      // weight representable for large solvent molecules, and its
+      // spatial average Q
+      const double wShift = Reduce::sum(wField) / double(nx);
+      VecOp::subVS(cField_, wField, wShift);
+      VecOp::expVc(cField_, cField_, -1.0*size);
       double Q = Reduce::sum(cField_);
       Q = Q / double(nx);     // spatial average
       Q /= phiTot;            // correct for partial occupation
@@ -73,10 +80,10 @@ namespace Rp {
       // Note: phiTot = 1.0 except in the case of a mask that confines
       // material to a fraction of the unit cell.
 
-      // Set q and compute mu or phi
-      SpeciesT::setQ(Q);
+      // Set ln q = ln Q - size*wShift and compute mu or phi
+      SpeciesT::setLnQ(std::log(Q) - size*wShift);
 
-      // Normalize concentration
+      // Normalize concentration (the shift cancels in phi/Q)
       double prefactor = SpeciesT::phi()/Q;
       VecOp::mulEqS(cField_, prefactor);
 

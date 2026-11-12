@@ -8,6 +8,7 @@
 #include "Polymer.h"
 #include "Block.h"
 #include "Propagator.h"
+#include <r1/field/Domain.h>
 #include <pscf/solvers/PolymerTmpl.tpp>
 
 // Explicit instantiation of base class
@@ -36,19 +37,29 @@ namespace R1 {
    void Polymer::compute(DArray< DArray<double> > const & wFields)
    {
 
-      // Setup solvers for all blocks
+      // Setup solvers for all blocks. Each block solves the MDE in the
+      // field of its monomer type minus the spatial average of that
+      // field, which is removed from ln q analytically by
+      // PolymerTmpl::solve. This keeps the propagators representable
+      // for long chains and makes the results independent of the
+      // constant of w.
       int monomerId;
+      double wShift;
       for (int j = 0; j < nBlock(); ++j) {
          monomerId = block(j).monomerId();
-         block(j).setupSolver(wFields[monomerId]);
+         DArray<double> const & w = wFields[monomerId];
+         wShift = block(j).domain().spatialAverage(w);
+         block(j).setupSolver(w, wShift);
       }
 
       // Solve MDE for all propagators
       solve();
 
-      // Compute block concentration fields (thread model)
+      // Compute block concentration fields (thread model), normalizing
+      // products of the shifted propagators by their own partition
+      // function
       double prefactor;
-      prefactor = phi() / ( q() * length() );
+      prefactor = phi() / ( qShifted() * length() );
       for (int i = 0; i < nBlock(); ++i) {
          block(i).computeConcentration(prefactor);
       }

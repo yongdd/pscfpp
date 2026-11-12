@@ -9,6 +9,7 @@
 */
 
 #include "PolymerTmpl.h"                   
+#include <pscf/chem/PolymerModel.h>
 #include <pscf/math/arithmetic.h>
 #include <util/containers/Pair.h>
 
@@ -24,7 +25,10 @@ namespace Pscf {
    PolymerTmpl<BT,PT,WT>::PolymerTmpl()
     : PolymerSpeciesT(),
       blocks_()
-   {  ParamComposite::setClassName("PolymerTmpl"); }
+   {
+      assign(qShifted_, 0.0);
+      ParamComposite::setClassName("PolymerTmpl");
+   }
 
    /*
    * Allocate blocks array.
@@ -170,16 +174,34 @@ namespace Pscf {
          propagator(j).solve();
       }
 
-      // Compute molecular partition function Q
+      // Compute partition function Q of the propagators, which are
+      // solutions in the shifted fields w - wShift of all blocks
       WT Q;
       block(0).propagator(0).computeQ(Q);
 
       // The PT::computeQ function returns an overall spatial average.
       // Correct for possible partial occupation of the unit cell.
       divEq(Q, phiTot);
+      assign(qShifted_, Q);
 
-      // Set q and compute phi or mu, depending on the ensemble
-      SpeciesT::setQ(Q);
+      // Remove the field shifts: the shift of a block multiplies Q by
+      // exp(wShift*length) (thread) or exp(wShift*nBead) (bead), so
+      // ln q = ln Q - sum over blocks of these exponents
+      double lnShift = 0.0;
+      const int nBlock = PolymerSpeciesT::nBlock();
+      for (int j = 0; j < nBlock; ++j) {
+         if (PolymerModel::isThread()) {
+            lnShift += block(j).wShift() * block(j).length();
+         } else {
+            lnShift += block(j).wShift() * (double) block(j).nBead();
+         }
+      }
+      WT lnQ;
+      assignLog(lnQ, Q);
+      subEq(lnQ, lnShift);
+
+      // Set ln q and compute phi or mu, depending on the ensemble
+      SpeciesT::setLnQ(lnQ);
 
    }
 

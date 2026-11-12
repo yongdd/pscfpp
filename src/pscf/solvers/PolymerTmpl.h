@@ -106,9 +106,30 @@ namespace Pscf {
       * not use such a mask, the default parameter value of phiTot = 1.0 
       * should be used.
       *
+      * Each block may solve the MDE in the field w - wShift of its
+      * monomer type, where wShift = BT::wShift() is a constant chosen
+      * when the solver is set up. The partition function of the
+      * propagators so obtained, which is returned by qShifted(), then
+      * exceeds q by a factor exp(S), where S is the sum over blocks of
+      * wShift times the block length (thread model) or the number of
+      * beads in the block (bead model). This function stores ln q =
+      * ln qShifted() - S, from which mu or phi is computed, and never
+      * forms q itself.
+      *
       * \param phiTot  fraction of unit cell volume occupied by material
       */
       virtual void solve(double phiTot = 1.0);
+
+      /**
+      * Get the partition function of the propagators as solved.
+      *
+      * This is the spatial average of the product of the propagators
+      * at any point of the chain, computed with the shifted fields of
+      * all blocks (see solve()). Products of propagators of this
+      * polymer, e.g. in block concentrations and stresses, must be
+      * normalized by this value rather than by q().
+      */
+      WT qShifted() const;
 
       /// \name Accessors (objects, by reference)
       ///@{
@@ -232,6 +253,9 @@ namespace Pscf {
       /// Array of Block objects in this polymer.
       DArray<BT> blocks_;
 
+      /// Partition function of the propagators of the shifted fields.
+      WT qShifted_;
+
       /**
       * Check validity of internal data structures set by readParameters.
       *
@@ -256,6 +280,13 @@ namespace Pscf {
    template <class BT, class PT, typename WT> inline
    Edge const & PolymerTmpl<BT,PT,WT>::edge(int id) const
    {  return blocks_[id]; }
+
+   /*
+   * Get the partition function of the propagators as solved.
+   */
+   template <class BT, class PT, typename WT> inline
+   WT PolymerTmpl<BT,PT,WT>::qShifted() const
+   {  return qShifted_; }
 
    /*
    * Get a specified Block solver by non-const reference.

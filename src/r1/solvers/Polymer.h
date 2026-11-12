@@ -60,6 +60,12 @@ namespace R1 {
       * have been computed for all propagators and blocks, along with the
       * molecular partition function q and phi or mu.
       *
+      * Each block solves the MDE in the field of its monomer type minus
+      * the spatial average of that field (see Block::setupSolver), so
+      * the stored propagators are those of the shifted fields. Their
+      * partition function is qShifted(); ln q, mu, phi and the block
+      * concentrations do not depend on the shifts.
+      *
       * \param wFields  array of chemica potential fields.
       */
       void compute(DArray< DArray<double> > const & wFields);

@@ -91,6 +91,12 @@ namespace Rp {
       * propagator solutions and block volume fraction fields, while q and
       * phi or mu are set to new values.
       *
+      * Each block solves the MDE in the field of its monomer type minus
+      * the spatial average of that field (see Block::wShift()), so the
+      * stored propagators are those of the shifted fields. Their
+      * partition function is qShifted(); ln q, mu, phi and the block
+      * concentrations do not depend on the shifts.
+      *
       * The parameter phiTot is only relevant to problems such as thin
       * films in which the material is excluded from part of the unit
       * cell by imposing an inhogeneous constraint on the sum of the
@@ -143,12 +149,14 @@ namespace Rp {
 
       // Inherited non-dependent public member functions (for convenience)
       using PolymerTmplT::block;
+      using PolymerTmplT::qShifted;
       using PolymerSpeciesT::nBlock;
       using PolymerSpeciesT::length;
       using PolymerSpeciesT::nBead;
       using SpeciesT::phi;
       using SpeciesT::mu;
       using SpeciesT::q;
+      using SpeciesT::lnQ;
       using SpeciesT::ensemble;
 
    private:
@@ -161,7 +169,7 @@ namespace Rp {
 
       // Restrict access to inherited functions
       using PolymerTmplT::solve;
-      using SpeciesT::setQ;
+      using SpeciesT::setLnQ;
 
    };
 

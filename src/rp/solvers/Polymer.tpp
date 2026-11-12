@@ -12,6 +12,7 @@
 #include <rp/solvers/Block.h>
 #include <rp/solvers/Propagator.h>
 #include <pscf/field/RField.h>
+#include <pscf/backend/Reduce.h>
 #include <pscf/solvers/PolymerTmpl.tpp>
 #include <pscf/chem/PolymerModel.h>
 
@@ -60,26 +61,33 @@ namespace Rp {
    void Polymer<D,T>::compute(DArray< RField<D,T> > const & wFields,
                               double phiTot)
    {
-      // Setup solvers for all blocks
+      // Setup solvers for all blocks. Each block solves the MDE in the
+      // field of its monomer type minus the spatial average of that
+      // field, which keeps q representable for long chains, and which
+      // is removed from ln q analytically by PolymerTmpl::solve
       int monomerId;
+      double wShift;
       for (int j = 0; j < nBlock(); ++j) {
          monomerId = block(j).monomerId();
-         block(j).setupSolver(wFields[monomerId]);
+         RField<D,T> const & w = wFields[monomerId];
+         wShift = Reduce::sum(w) / double(w.capacity());
+         block(j).setupSolver(w, wShift);
       }
 
       // Call base class PolymerTmpl solve() function
       // This solves the MDE for all propagators in a precalculated order
       PolymerTmplT::solve(phiTot);
 
-      // Compute block concentration fields
+      // Compute block concentration fields, normalizing products of
+      // the shifted propagators by their own partition function
       double prefactor;
       if (PolymerModel::isThread()) {
-         prefactor = phi() / ( q() * length() );
+         prefactor = phi() / ( qShifted() * length() );
          for (int i = 0; i < nBlock(); ++i) {
             block(i).computeConcentrationThread(prefactor);
          }
       } else {
-         prefactor = phi() / ( q() * (double)nBead() );
+         prefactor = phi() / ( qShifted() * (double)nBead() );
          for (int i = 0; i < nBlock(); ++i) {
             block(i).computeConcentrationBead(prefactor);
          }
@@ -98,12 +106,12 @@ namespace Rp {
       // Compute stress contributions for all blocks
       double prefactor;
       if (PolymerModel::isThread()) {
-         prefactor = phi() / ( q() * length() );
+         prefactor = phi() / ( qShifted() * length() );
          for (int i = 0; i < nBlock(); ++i) {
             block(i).computeStressThread(prefactor);
          }
       } else {
-         prefactor = phi() / ( q() * (double)nBead() );
+         prefactor = phi() / ( qShifted() * (double)nBead() );
          for (int i = 0; i < nBlock(); ++i) {
             block(i).computeStressBead(prefactor);
          }

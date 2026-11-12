@@ -103,7 +103,9 @@ public:
    * Check that the partition function Q of each polymer is the same
    * from every propagator (product of its head and the tail of its
    * partner), from every vertex (product of the incoming tails), and
-   * as stored by the polymer, which normalizes the concentrations.
+   * as stored by the polymer (qShifted(), the value for the shifted
+   * fields w - wShift of the blocks, which normalizes the concentrations),
+   * and that lnQ() is ln qShifted() minus the field shifts.
    */
    void checkQ(System& sys)
    {
@@ -141,7 +143,15 @@ public:
             q = domain.spatialAverage(product);
             TEST_ASSERT(std::abs(q/q0 - 1.0) < 1.0E-6);
          }
-         TEST_ASSERT(std::abs(polymer.q()/q0 - 1.0) < 1.0E-6);
+         TEST_ASSERT(std::abs(polymer.qShifted()/q0 - 1.0) < 1.0E-6);
+
+         // ln Q removes the field shift of every block from qShifted()
+         double lnShift = 0.0;
+         for (int ib = 0; ib < polymer.nBlock(); ++ib) {
+            lnShift += polymer.block(ib).wShift()*polymer.block(ib).length();
+         }
+         TEST_ASSERT(std::abs(polymer.lnQ() - (std::log(q0) - lnShift))
+                     < 1.0E-6);
       }
    }
 
