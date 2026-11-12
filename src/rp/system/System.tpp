@@ -59,6 +59,42 @@ namespace Rp {
 
    using namespace Util;
 
+   namespace {
+
+      /*
+      * Stop if the arguments of a command could not be read (used in
+      * readCommands). Without this, the stream stays in a failed state
+      * and the loop repeats the command with the old argument values.
+      */
+      inline
+      void checkCommandInput(std::istream& in, std::string const & command)
+      {
+         if (in.fail()) {
+            Log::file() << "\nError reading the arguments of command "
+                        << command << std::endl;
+            UTIL_THROW("Error reading command arguments");
+         }
+      }
+
+      /*
+      * Stop if the solver output (block concentrations, propagators,
+      * stress) would not belong to the current w fields and unit cell.
+      * SET_UNIT_CELL and READ_W_* clear the c fields, but not the
+      * propagators and block concentrations of the previous solution.
+      */
+      inline
+      void checkHasSolution(bool hasData, std::string const & command)
+      {
+         if (!hasData) {
+            Log::file() << "\n" << command << " needs a solution for the "
+                        << "current w fields and unit cell (COMPUTE or "
+                        << "ITERATE first)" << std::endl;
+            UTIL_THROW("No solution for the current w fields and unit cell");
+         }
+      }
+
+   }
+
    /*
    * Constructor.
    */
@@ -470,13 +506,14 @@ namespace Rp {
       bool readNext = true;
       while (readNext) {
 
+         // Stop when no further command can be read. (A test of eof()
+         // here would skip a last command that is not followed by a
+         // newline.)
          in >> command;
-
-         if (in.eof()) {
+         if (in.fail()) {
             break;
-         } else {
-            Log::file() << command << std::endl;
          }
+         Log::file() << command << std::endl;
 
          if (command == "FINISH") {
             Log::file() << std::endl;
@@ -503,6 +540,7 @@ namespace Rp {
          if (command == "SET_UNIT_CELL") {
             UnitCell<D> unitCell;
             in >> unitCell;
+            checkCommandInput(in, command);
             Log::file() << "   " << unitCell << std::endl;
             setUnitCell(unitCell);
             UTIL_CHECK(domain_().unitCell().isInitialized());
@@ -530,12 +568,23 @@ namespace Rp {
          if (command == "COMPRESS") {
             // Impose incompressibility
             UTIL_CHECK(hasSimulator());
-            simulator().compressor().compress();
+            // The unit cell or parameters may have changed since the
+            // compressor last ran (SET_UNIT_CELL, READ_W_*, ANALYZE)
+            simulator().compressor().clearCache();
+            int fail = simulator().compressor().compress();
+            // As for ITERATE, stop on failure: later commands would act
+            // on an uncompressed or diverged state
+            if (fail) {
+               Log::file() << "COMPRESS failed; no further commands "
+                           << "are executed" << std::endl;
+               readNext = false;
+            }
          } else
          if (command == "SIMULATE") {
             // Perform a field theoretic simulation
             int nStep;
             in >> nStep;
+            checkCommandInput(in, command);
             Log::file() << "   "  << nStep << "\n";
             simulate(nStep);
          } else
@@ -544,6 +593,7 @@ namespace Rp {
             int min, max;
             in >> min;
             in >> max;
+            checkCommandInput(in, command);
             Log::file() << "   "  << min ;
             Log::file() << "   "  << max << "\n";
             std::string classname;
@@ -570,6 +620,11 @@ namespace Rp {
          if (command == "WRITE_STRESS") {
             readEcho(in, filename);
             std::ofstream file;
+            // The stress needs propagators for the current w fields and
+            // unit cell, as WRITE_THERMO does. SET_UNIT_CELL and READ_W_*
+            // invalidate the c fields; the stored stress or propagators
+            // would then belong to the previous state.
+            checkHasSolution(c().hasData(), command);
             if (!mixture_().hasStress()) {
                computeStress();
             }
@@ -599,6 +654,7 @@ namespace Rp {
          } else
          if (command == "WRITE_BLOCK_C_RGRID") {
             readEcho(in, filename);
+            checkHasSolution(c().hasData(), command);
             mixture_().writeBlockCRGrid(filename);
          } else
          if (command == "WRITE_Q_SLICE") {
@@ -608,12 +664,14 @@ namespace Rp {
             in >> blockId;
             in >> directionId;
             in >> segmentId;
+            checkCommandInput(in, command);
             Log::file() << Str("polymer ID  ", 21) << polymerId << "\n"
                         << Str("block ID  ", 21) << blockId << "\n"
                         << Str("direction ID  ", 21) << directionId
                         << "\n"
                         << Str("segment ID  ", 21) << segmentId
                         << std::endl;
+            checkHasSolution(c().hasData(), command);
             mixture_().writeQSlice(filename, polymerId, blockId,
                                  directionId, segmentId);
          } else
@@ -623,10 +681,12 @@ namespace Rp {
             in >> polymerId;
             in >> blockId;
             in >> directionId;
+            checkCommandInput(in, command);
             Log::file() << Str("polymer ID  ", 21) << polymerId << "\n"
                         << Str("block ID  ", 21) << blockId << "\n"
                         << Str("direction ID  ", 21) << directionId
                         << "\n";
+            checkHasSolution(c().hasData(), command);
             mixture_().writeQTail(filename, polymerId, blockId, directionId);
          } else
          if (command == "WRITE_Q") {
@@ -635,14 +695,17 @@ namespace Rp {
             in >> polymerId;
             in >> blockId;
             in >> directionId;
+            checkCommandInput(in, command);
             Log::file() << Str("polymer ID  ", 21) << polymerId << "\n"
                         << Str("block ID  ", 21) << blockId << "\n"
                         << Str("direction ID  ", 21) << directionId
                         << "\n";
+            checkHasSolution(c().hasData(), command);
             mixture_().writeQ(filename, polymerId, blockId, directionId);
          } else
          if (command == "WRITE_Q_ALL") {
             readEcho(in, filename);
+            checkHasSolution(c().hasData(), command);
             mixture_().writeQAll(filename);
          } else
          if (command == "WRITE_STARS") {
@@ -737,6 +800,7 @@ namespace Rp {
             // Read expanded spatial dimension d
             int d;
             in >> d;
+            checkCommandInput(in, command);
             UTIL_CHECK(d > D);
             Log::file() << Str("Expand dimension to: ") << d << "\n";
 
@@ -746,6 +810,7 @@ namespace Rp {
             for (int i = 0; i < d-D; i++) {
                in >> newGridDimensions[i];
             }
+            checkCommandInput(in, command);
             Log::file()
                << Str("Numbers of grid points in added dimensions :  ");
             for (int i = 0; i < d-D; i++) {
@@ -766,6 +831,7 @@ namespace Rp {
             for (int i = 0; i < D; i++){
                in >> replicas[i];
             }
+            checkCommandInput(in, command);
             for (int i = 0; i < D; i++){
                Log::file() << "Replicate unit cell in direction "
                            << i << " : ";
@@ -1092,6 +1158,11 @@ namespace Rp {
    void System<D,T>::writeParamNoSweep(std::ostream& out) const
    {
       out << "System{" << std::endl;
+      // polymerModel is optional (default thread). A bead-model file
+      // must name it, or it is read back as the thread model.
+      if (PolymerModel::isBead()) {
+         out << "  polymerModel  " << polymerModel_ << std::endl;
+      }
       mixture().writeParam(out);
       interaction().writeParam(out);
       domain().writeParam(out);
