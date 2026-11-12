@@ -264,7 +264,12 @@ namespace Rp {
       if (!sysPtr_->scft().hasData()) {
          sysPtr_->scft().compute();
       }
-      double fSys = sysPtr_->scft().fHelmholtz();
+      // With open species the stress is the derivative of the
+      // semi-grand potential g at fixed mu, not of fHelmholtz: use g,
+      // and fBulk is the bulk value of g (fHelmholtz for a closed
+      // mixture, -pressure for a fully open one)
+      double fSys = FilmFieldGenMaskBase<D>::semiGrandPotential(system().mixture(),
+                                       sysPtr_->scft().fHelmholtz());
 
       // Get the length L of the basis vector normal to the walls
       double L = system().domain().unitCell().parameter(paramId);

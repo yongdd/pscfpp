@@ -11,6 +11,10 @@
 #include <rp/environment/FieldGenerator.h>  // Base class
 #include <pscf/crystal/UnitCell.h>            // Function parameter
 #include <pscf/math/RealVec.h>                // container
+#include <pscf/chem/Ensemble.h>               // semiGrandPotential
+#include <pscf/chem/PolymerModel.h>           // semiGrandPotential
+#include <pscf/chem/PolymerSpecies.h>         // semiGrandPotential
+#include <pscf/chem/SolventSpecies.h>         // semiGrandPotential
 #include <iostream>
 #include <string>
 
@@ -134,6 +138,54 @@ namespace Rp {
       virtual double modifyStress(int paramId, double stress) const = 0;
 
    protected:
+
+      /**
+      * Semi-grand potential per monomer reference volume.
+      *
+      * Returns fHelmholtz minus phi*mu/N of each open species (N is the
+      * polymer length or number of beads, or the solvent size; species
+      * with phi <= 1e-8 are skipped, as in ScftThermo). The SCFT stress
+      * at fixed mu of the open species and fixed phi of the closed ones
+      * is the derivative of this potential. It equals fHelmholtz for a
+      * closed mixture and -pressure for a fully open one.
+      *
+      * \param mixture  the mixture (gives phi, mu and sizes)
+      * \param fHelmholtz  Helmholtz free energy per monomer
+      */
+      template <class MixtureT>
+      static double semiGrandPotential(MixtureT const & mixture,
+                                       double fHelmholtz)
+      {
+         double g = fHelmholtz;
+         for (int i = 0; i < mixture.nPolymer(); ++i) {
+            if (mixture.polymerSpecies(i).ensemble() != Ensemble::Open) {
+               continue;
+            }
+            double phi = mixture.polymerSpecies(i).phi();
+            double mu = mixture.polymerSpecies(i).mu();
+            double length;
+            if (PolymerModel::isThread()) {
+               length = mixture.polymerSpecies(i).length();
+            } else {
+               length = (double) mixture.polymerSpecies(i).nBead();
+            }
+            if (phi > 1.0E-08) {
+               g -= mu * phi / length;
+            }
+         }
+         for (int i = 0; i < mixture.nSolvent(); ++i) {
+            if (mixture.solventSpecies(i).ensemble() != Ensemble::Open) {
+               continue;
+            }
+            double phi = mixture.solventSpecies(i).phi();
+            double mu = mixture.solventSpecies(i).mu();
+            double size = mixture.solventSpecies(i).size();
+            if (phi > 1.0E-08) {
+               g -= mu * phi / size;
+            }
+         }
+         return g;
+      }
 
       /**
       * Compute the field and store where the System can access
