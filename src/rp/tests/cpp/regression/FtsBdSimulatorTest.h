@@ -84,10 +84,34 @@ public:
       TEST_ASSERT(std::abs(phi - 0.7) < 1.0E-10);
    }
 
+   /*
+   * A LinearRamp of vMonomer (0.01 to 0.002) with an LrCompressor. The
+   * intramolecular correlation must follow the parameters, or the
+   * compressor fails once vMonomer has changed enough.
+   */
+   void testVMonomerRampLrCompressor()
+   {
+      printMethod(TEST_FUNC);
+      openLogFile("out/FtsVMonomerRampLrCompressor.log");
+
+      Rp::System<3,CPT> system;
+      initSystem(system, "in/Fts/param_system_small");
+      Rp::BdSimulator<3,CPT> simulator(system);
+      initSimulator(simulator, "in/Fts/param_BdSimulator_vMonomerRamp");
+      system.w().readRGrid("in/Fts/w_small.rf");
+      simulator.simulate(60);
+
+      // Every step converged, so the ramp reached its end
+      TEST_ASSERT(simulator.iStep() == 60);
+      double vMonomer = system.mixture().vMonomer();
+      TEST_ASSERT(std::abs(vMonomer - 0.002) < 1.0E-10);
+   }
+
 };
 
 TEST_BEGIN(FtsBdSimulatorTest)
 TEST_ADD(FtsBdSimulatorTest, testPhiRampMixedEnsemble)
+TEST_ADD(FtsBdSimulatorTest, testVMonomerRampLrCompressor)
 TEST_END(FtsBdSimulatorTest)
 
 #endif

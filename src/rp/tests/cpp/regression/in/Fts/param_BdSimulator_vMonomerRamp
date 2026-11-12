@@ -1,0 +1,18 @@
+BdSimulator{
+   seed            977
+   LMBdStep{
+      mobility     0.02
+   }
+   LrCompressor{
+      epsilon      1.0e-6
+      maxItr       200
+      verbose      0
+      errorType    rms
+   }
+   LinearRamp{
+      nParameter   1
+      parameters[
+         v_monomer  -0.008
+      ]
+   }
+}
