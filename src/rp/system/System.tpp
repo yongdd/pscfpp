@@ -500,11 +500,14 @@ namespace Rp {
    * Read and execute commands from a specified command file.
    */
    template <int D, class T>
-   void System<D,T>::readCommands(std::istream &in)
+   int System<D,T>::readCommands(std::istream &in)
    {
       UTIL_CHECK(isAllocatedGrid_);
       std::string command, filename, inFileName, outFileName;
       FieldIo<D,T> const & fieldIo = domain_().fieldIo();
+
+      // Set to 1 if a command fails, which also stops execution
+      int status = 0;
 
       bool readNext = true;
       while (readNext) {
@@ -560,6 +563,7 @@ namespace Rp {
             bool isContinuation = false;
             int fail = iterate(isContinuation);
             if (fail) {
+               status = 1;
                readNext = false;
             }
          } else
@@ -580,6 +584,7 @@ namespace Rp {
             if (fail) {
                Log::file() << "COMPRESS failed; no further commands "
                            << "are executed" << std::endl;
+               status = 1;
                readNext = false;
             }
          } else
@@ -913,21 +918,23 @@ namespace Rp {
          } else {
             Log::file() << "Error: Unknown command  "
                         << command << std::endl;
+            status = 1;
             readNext = false;
          }
       }
+      return status;
    }
 
    /*
    * Read and execute commands from the default command file.
    */
    template <int D, class T>
-   void System<D,T>::readCommands()
+   int System<D,T>::readCommands()
    {
       if (fileMaster().commandFileName().empty()) {
          UTIL_THROW("Empty command file name");
       }
-      readCommands(fileMaster().commandFile());
+      return readCommands(fileMaster().commandFile());
    }
 
    // Primary Field Theory Computations
