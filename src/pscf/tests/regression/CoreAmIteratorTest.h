@@ -186,6 +186,58 @@ public:
       TEST_ASSERT(coreAmGslErrors == 0);
    }
 
+   /*
+   * Exactly singular U matrix with two basis vectors. The residuals of
+   * the first three evaluations are a, b, a, so that the two residual
+   * basis vectors a - b and b - a cancel exactly, as after an update
+   * that increases the residual by many orders of magnitude. The LU
+   * solution of U c = v would call the GSL error handler (which aborts
+   * by default). The iteration must continue instead, and converge.
+   */
+   void testSingularBasis()
+   {
+      printMethod(TEST_FUNC);
+
+      double a[4] = {1.0, 2.0, 3.0, 4.0};
+      double b[4] = {2.0, 0.0, 1.0, 5.0};
+      CoreAmToy toy(4, "rms");
+      toy.prescribed_.resize(3);
+      for (int i = 0; i < 4; ++i) {
+         toy.prescribed_[0].push_back(a[i]);
+         toy.prescribed_[1].push_back(b[i]);
+         toy.prescribed_[2].push_back(a[i]);
+         toy.target_[i] = double(i + 1);
+      }
+      int error = toy.solve();
+      TEST_ASSERT(coreAmGslErrors == 0);
+      TEST_ASSERT(error == 0);
+      TEST_ASSERT(toy.maxError() < 1.0E-8);
+   }
+
+   /*
+   * U(0,0) = 0 with one basis vector: the residual of the second
+   * evaluation equals the first one. The coefficient v/U(0,0) is not
+   * defined (it gave NaN fields). The iteration must continue instead,
+   * and converge.
+   */
+   void testZeroBasis()
+   {
+      printMethod(TEST_FUNC);
+
+      double a[4] = {1.0, 2.0, 3.0, 4.0};
+      CoreAmToy toy(4, "rms");
+      toy.prescribed_.resize(2);
+      for (int i = 0; i < 4; ++i) {
+         toy.prescribed_[0].push_back(a[i]);
+         toy.prescribed_[1].push_back(a[i]);
+         toy.target_[i] = double(i + 1);
+      }
+      int error = toy.solve();
+      TEST_ASSERT(coreAmGslErrors == 0);
+      TEST_ASSERT(error == 0);
+      TEST_ASSERT(toy.maxError() < 1.0E-8);
+   }
+
 private:
 
    gsl_error_handler_t* oldHandler_;
@@ -194,6 +246,8 @@ private:
 
 TEST_BEGIN(CoreAmIteratorTest)
 TEST_ADD(CoreAmIteratorTest, testRelNormZeroState)
+TEST_ADD(CoreAmIteratorTest, testSingularBasis)
+TEST_ADD(CoreAmIteratorTest, testZeroBasis)
 TEST_END(CoreAmIteratorTest)
 
 #endif
