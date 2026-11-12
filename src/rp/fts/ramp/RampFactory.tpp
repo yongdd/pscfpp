@@ -35,8 +35,10 @@ namespace Rp {
       ptr = trySubfactories(className);
       if (ptr) return ptr;
        
-      // Try to match classname
-      if (className == "LinearRamp") {
+      // Try to match classname. The generic label "Ramp" selects the
+      // default LinearRamp, as documented in the manual (and as the
+      // Compressor and BdStep factories do for their generic labels).
+      if (className == "LinearRamp" || className == "Ramp") {
          ptr = new LinearRamp<D,T>(*simulatorPtr_);
       }
 

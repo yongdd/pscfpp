@@ -711,7 +711,8 @@ namespace Rp {
    template <int D, class T>
    void Simulator<D,T>::outputTimers(std::ostream& out) const
    {
-      UTIL_CHECK(compressorPtr_);
+      // An analysis-only simulator (ANALYZE) may have no compressor
+      if (!compressorPtr_) return;
       outputMdeCounter(out);
       compressorPtr_->outputTimers(out);
    }
@@ -734,8 +735,10 @@ namespace Rp {
    template <int D, class T>
    void Simulator<D,T>::clearTimers()
    {
-      UTIL_CHECK(hasCompressor());
-      compressor().clearTimers();
+      // An analysis-only simulator (ANALYZE) may have no compressor
+      if (hasCompressor()) {
+         compressor().clearTimers();
+      }
    }
 
    // Protected Functions

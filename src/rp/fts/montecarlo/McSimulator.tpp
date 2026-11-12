@@ -35,6 +35,7 @@
 #include <util/param/ParamComposite.h>
 #include <util/random/Random.h>
 #include <util/misc/Timer.h>
+#include <vector>
 
 #include <gsl/gsl_eigen.h>
 
@@ -177,6 +178,34 @@ namespace Rp {
    }
 
    /*
+   * Recompute the state after the ramp has changed parameters.
+   */
+   template <int D, class T>
+   void McSimulator<D,T>::updateState()
+   {
+      // The stored c fields, field components and Hamiltonian refer to
+      // the old parameter values. Recompute them as setup() does.
+      Simulator<D,T>::system().compute();
+      Simulator<D,T>::compressor().clearCache();
+      int compress = Simulator<D,T>::compressor().compress();
+      if (compress != 0) {
+         Log::file() << "Warning: compressor failed after a ramp step\n";
+      }
+      if (!Simulator<D,T>::system().c().hasData()) {
+         Simulator<D,T>::system().compute();
+      }
+      Simulator<D,T>::clearData();
+      Simulator<D,T>::computeWc();
+      if (state().needsCc || state().needsDc) {
+         Simulator<D,T>::computeCc();
+      }
+      if (state().needsDc) {
+         Simulator<D,T>::computeDc();
+      }
+      Simulator<D,T>::computeHamiltonian();
+   }
+
+   /*
    * Perform a field theoretic MC simulation of nStep steps.
    */
    template <int D, class T>
@@ -220,6 +249,7 @@ namespace Rp {
 
             if (Simulator<D,T>::hasRamp()) {
                Simulator<D,T>::ramp().setParameters(iStep_);
+               updateState();
             }
 
             // Analysis (if any)
@@ -238,6 +268,14 @@ namespace Rp {
                         << " failed to converge" << "\n";
          }
       }
+
+      // A rejected move or a failed step restores w, but not the c
+      // fields, propagators and block concentrations, which still hold
+      // the rejected trial solution. Recompute them for the final w.
+      if (!Simulator<D,T>::system().c().hasData()) {
+         Simulator<D,T>::system().compute();
+      }
+
       timer.stop();
       double time = timer.time();
       double analyzerTime = analyzerTimer.time();
@@ -332,33 +370,70 @@ namespace Rp {
       trajectoryReaderPtr->open(filename);
       trajectoryReaderPtr->readHeader();
 
-      // Main loop over trajectory frames
+      // Main loop over trajectory frames. A frame is read only while its
+      // index is at most max, so frames after max are never read (a
+      // damaged frame after max does not matter, and the system is left
+      // with frame max).
       Timer timer;
       timer.start();
-      bool hasFrame = trajectoryReaderPtr->readFrame();
+      int nFrames = 0;  // number of frames with index in [min, max]
+      std::vector<long> sampledSteps;  // frames passed to the analyzers
+      iStep_ = 0;
+      while (iStep_ <= max && trajectoryReaderPtr->readFrame()) {
+         Simulator<D,T>::clearData();
 
-      for (iStep_ = 0; iStep_ <= max && hasFrame; ++iStep_) {
-         if (hasFrame) {
-            Simulator<D,T>::clearData();
+         // Initialize analyzers
+         if (iStep_ == min) {
+            setup(iStep_);
+         }
 
-            // Initialize analyzers
-            if (iStep_ == min) {
-               setup(iStep_);
-            }
-
-            // Sample property values only for iStep >= min
-            if (iStep_ >= min) {
+         // Sample property values only for iStep >= min, at multiples
+         // of the analyzer base interval (as in simulate())
+         if (iStep_ >= min) {
+            ++nFrames;
+            int baseInterval = Analyzer<D,T>::baseInterval;
+            if (baseInterval > 0 && iStep_ % baseInterval == 0) {
                analyzerManager().sample(iStep_);
+               sampledSteps.push_back(iStep_);
             }
          }
 
-         hasFrame = trajectoryReaderPtr->readFrame();
+         ++iStep_;
       }
       timer.stop();
       Log::file() << "end main loop" << std::endl;
-      int nFrames = iStep_ - min;
       trajectoryReaderPtr->close();
       delete trajectoryReaderPtr;
+
+      // Without any frame in [min, max] the analyzers were never set up
+      // and have nothing to output
+      if (nFrames == 0) {
+         Log::file() << "No frame with index in [" << min << ", " << max
+                     << "] in trajectory file " << filename << "\n";
+         UTIL_THROW("ANALYZE: no frame in the requested range");
+      }
+
+      // An analyzer whose interval matched none of the sampled frames
+      // has no data, and would write NaN averages
+      int nUnsampled = 0;
+      for (int k = 0; k < analyzerManager().size(); ++k) {
+         bool isSampled = false;
+         for (size_t m = 0; m < sampledSteps.size() && !isSampled; ++m) {
+            if (analyzerManager()[k].isAtInterval(sampledSteps[m])) {
+               isSampled = true;
+            }
+         }
+         if (!isSampled) {
+            ++nUnsampled;
+            Log::file() << "Warning: analyzer "
+                        << analyzerManager()[k].className()
+                        << " sampled no frame in [" << min << ", " << max
+                        << "]\n";
+         }
+      }
+      if (nUnsampled == analyzerManager().size()) {
+         UTIL_THROW("ANALYZE: no analyzer sampled any frame");
+      }
 
       // Output results of all analyzers to output files
       analyzerManager().output();
@@ -380,7 +455,10 @@ namespace Rp {
    template <int D, class T>
    void McSimulator<D,T>::outputTimers(std::ostream& out) const
    {
-      Simulator<D,T>::compressor().outputTimers(out);
+      // An analysis-only simulator (ANALYZE) may have no compressor
+      if (Simulator<D,T>::hasCompressor()) {
+         Simulator<D,T>::compressor().outputTimers(out);
+      }
       out << "\n";
       out << "MC move time contributions:\n";
       mcMoveManager().outputTimers(out);

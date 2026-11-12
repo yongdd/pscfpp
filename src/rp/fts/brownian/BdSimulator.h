@@ -190,6 +190,15 @@ namespace Rp {
       */
       void setup(int nStep);
 
+      /**
+      * Recompute the state after the ramp has changed parameters.
+      *
+      * Solves the MDE, compresses, and recomputes the field components,
+      * the derivatives used by the next step, and the Hamiltonian for
+      * the new parameter values, as setup() does for the initial state.
+      */
+      void updateState();
+
    };
 
    // Inline member functions
