@@ -378,8 +378,17 @@ namespace Pscf {
             }
          }
 
-         // Newton Raphson update of phi and xi fields
+         // Newton Raphson update of phi and xi fields. The Jacobian is
+         // singular (a zero pivot), e.g., if the composition is at a
+         // spinodal of the homogeneous mixture, where some change of
+         // composition changes all chemical potentials by the same
+         // amount per monomer. The Newton step is then undefined (and
+         // the GSL solver would abort).
          solverPtr_->computeLU(jacobian_);
+         if (solverPtr_->isSingular(0.0)) {
+            UTIL_THROW("Singular Jacobian in FhMixture::computePhi "
+                       "(composition at a spinodal of the mixture?)");
+         }
          solverPtr_->solve(residual_, dX_);
 
          // Store old values of ln(phi)
