@@ -90,8 +90,13 @@ namespace Rp {
       }
       McMoveT::attemptMoveTimer_.stop();
 
-      // Compute required properties in final state
+      // Compute required properties in final state. If the compressor
+      // failed in the last BD step, restoreState() restored only what
+      // the stored state holds, and the c fields are not valid.
       simulator().computeWc();
+      if (!system().c().hasData()) {
+         system().compute();
+      }
       if (simulator().needsCc() || simulator().needsDc()) {
          if (!simulator().hasCc()) {
             simulator().computeCc();
@@ -150,7 +155,18 @@ namespace Rp {
       etaOldPtr_ = &etaA_;
       etaNewPtr_ = &etaB_;
 
+      // Draw the "old" noise of the first LM step of this move. An LM
+      // step adds etaOld + etaNew; in a continuing LM chain the old noise
+      // is shared with the previous step, but here the move starts from
+      // a state that did not use it. With the usual variance the first
+      // step would carry half the noise of a full step (for nStep = 1
+      // every step would, so the move would sample at about half the
+      // temperature). A variance 3 times larger gives the first step the
+      // full Euler-Maruyama variance; later steps continue the LM chain.
       generateEtaNew();
+      for (int j = 0; j < nMonomer - 1; ++j) {
+         VecOp::mulEqS(etaNew(j), std::sqrt(3.0));
+      }
       exchangeOldNew();
    }
 
