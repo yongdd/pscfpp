@@ -23,6 +23,7 @@
 #include "ScftThermoRefTest.h"
 #include "CommandReadHTest.h"
 #include "ScftScaleStressTest.h"
+#include "FieldIoStarsHeaderTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -45,6 +46,7 @@ TEST_COMPOSITE_ADD_UNIT(ScftParamFileEndTest);
 TEST_COMPOSITE_ADD_UNIT(ScftThermoRefTest);
 TEST_COMPOSITE_ADD_UNIT(CommandReadHTest);
 TEST_COMPOSITE_ADD_UNIT(ScftScaleStressTest);
+TEST_COMPOSITE_ADD_UNIT(FieldIoStarsHeaderTest);
 TEST_COMPOSITE_END
 
 #endif
