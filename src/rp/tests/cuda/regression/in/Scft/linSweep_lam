@@ -1,0 +1,44 @@
+System{
+  Mixture{
+     nMonomer  2
+     monomers[
+               1.0
+               1.0
+     ]
+     nPolymer  1
+     Polymer{
+        type    linear
+        nBlock  2
+        blocks[
+                0  0.56
+                1  0.44
+        ]
+        phi     1.0
+     }
+     ds   0.01
+  }
+  Interaction{
+    chi(
+          1   0     12.0
+    )
+  }
+  Domain{
+    mesh        40
+    lattice     lamellar
+    groupName   P_-1
+  }
+  AmIteratorBasis{
+    epsilon      1.0e-10
+    maxItr       150
+    maxHist      10
+    isFlexible   @FLEXIBLE@
+  }
+  LinearSweep{
+    ns            2
+    baseFileName  out/ScftLinearSweepLam_
+    nParameter    1
+    parameters[
+           @PARAMETER@
+    ]
+  }
+}

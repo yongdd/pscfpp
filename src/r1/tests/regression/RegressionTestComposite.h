@@ -14,6 +14,7 @@
 #include "R1SweepTest.h"
 #include "R1HomogeneousTest.h"
 #include "R1HomogeneousLimitTest.h"
+#include "R1LinearSweepTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreMixtureTest);
@@ -23,6 +24,7 @@ TEST_COMPOSITE_ADD_UNIT(R1CommandTest);
 TEST_COMPOSITE_ADD_UNIT(R1SweepTest);
 TEST_COMPOSITE_ADD_UNIT(R1HomogeneousTest);
 TEST_COMPOSITE_ADD_UNIT(R1HomogeneousLimitTest);
+TEST_COMPOSITE_ADD_UNIT(R1LinearSweepTest);
 TEST_COMPOSITE_END
 
 #endif
