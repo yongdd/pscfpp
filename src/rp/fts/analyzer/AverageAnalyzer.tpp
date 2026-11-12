@@ -60,7 +60,17 @@ namespace Rp {
    */
    template <int D, class T>
    void AverageAnalyzer<D,T>::setup()
-   {  accumulator_.clear(); }
+   {
+      accumulator_.clear();
+
+      // output() closes the data file at the end of each run. Reopen it
+      // for a later run (e.g., a second SIMULATE), appending new data.
+      if (nSamplePerOutput_ > 0 && !outputFile_.is_open()) {
+         std::string fileName = Analyzer<D,T>::outputFileName(".dat");
+         Analyzer<D,T>::system().fileMaster().openOutputFile(fileName,
+                        outputFile_, std::ios_base::out | std::ios_base::app);
+      }
+   }
 
    /*
    * Compute and sample current values.
