@@ -520,7 +520,11 @@ namespace Rp {
    {
       std::ofstream file;
       fileMaster().openOutputFile(filename, file);
-      writeFieldRGrid(file, field, unitCell, isSymmetric);
+      // Name every argument: the stream overload takes writeHeader
+      // before isSymmetric, so passing isSymmetric alone would select
+      // the header (no header at all for a non-symmetric field)
+      bool writeHeader = true;
+      writeFieldRGrid(file, field, unitCell, writeHeader, isSymmetric);
       file.close();
    }
 
