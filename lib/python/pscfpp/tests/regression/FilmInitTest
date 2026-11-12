@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+
+# The initial-guess scripts of the thin-film examples (run by the
+# generate_guess script of each example) read the film parameters from
+# the parameter file of the example. Run each script on a copy of its
+# example and compare the c.rf file that it writes with the in/c.rf
+# file of the example.
+#
+# Scripts that import numpy are skipped if numpy is not available.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import filecmp
+import importlib.util
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+import pscfpp
+
+failures = []
+
+def run(name, test):
+   try:
+      result = test()
+      print(name + ': ' + result)
+   except Exception as e:
+      failures.append(name)
+      print(name + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Root directory of the package source tree
+testDir = os.path.dirname(os.path.abspath(__file__))
+root = os.path.abspath(os.path.join(testDir, '..', '..', '..', '..', '..'))
+
+# Directory that contains the pscfpp package
+packageDir = os.path.dirname(os.path.dirname(os.path.abspath(pscfpp.__file__)))
+
+hasNumpy = importlib.util.find_spec('numpy') is not None
+
+# Example directories and their initial-guess scripts
+examples = [['rpc/scf/films/1D', 'make_rgrid.py'],
+            ['rpc/scf/films/2D', 'make_rgrid.py'],
+            ['rpc/scf/films/3D', 'edit_rgrid.py'],
+            ['rpc/scf/films/chi_bottom_sweep', 'make_rgrid.py'],
+            ['rpc/scf/films/thickness_sweep', 'make_rgrid.py'],
+            ['rpg/scf/films/1D', 'make_rgrid.py'],
+            ['rpg/scf/films/2D', 'make_rgrid.py'],
+            ['rpg/scf/films/3D', 'edit_rgrid.py']]
+
+def makeTest(example, script):
+
+   def test():
+      source = os.path.join(root, 'examples', example)
+      scriptFile = os.path.join(source, 'init', script)
+      with open(scriptFile) as f:
+         if 'numpy' in f.read() and not hasNumpy:
+            return 'skipped (no numpy)'
+
+      with tempfile.TemporaryDirectory() as dir:
+
+         # Copy the parameter file and the init directory
+         shutil.copy(os.path.join(source, 'param'), dir)
+         shutil.copytree(os.path.join(source, 'init'),
+                         os.path.join(dir, 'init'))
+
+         # Run the script in the init directory
+         env = dict(os.environ)
+         path = env.get('PYTHONPATH', '')
+         env['PYTHONPATH'] = packageDir + (os.pathsep + path if path else '')
+         result = subprocess.run([sys.executable, script],
+                                 cwd=os.path.join(dir, 'init'), env=env,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True, timeout=120)
+         if result.returncode != 0:
+            # Last line of the script in the traceback, and the error
+            lines = result.stderr.strip().split('\n')
+            message = lines[-1].strip()
+            for i in range(len(lines) - 1):
+               if script in lines[i]:
+                  message = lines[i+1].strip() + ' -> ' + lines[-1].strip()
+            raise RuntimeError(script + ' exited with status '
+                               + str(result.returncode) + ': ' + message)
+
+         # Compare the output with the c.rf file of the example
+         output = os.path.join(dir, 'init', 'c.rf')
+         if not os.path.isfile(output):
+            raise RuntimeError('no c.rf written')
+         if not filecmp.cmp(output, os.path.join(source, 'in', 'c.rf'),
+                            shallow=False):
+            raise RuntimeError('c.rf differs from in/c.rf')
+      return 'passed'
+
+   return test
+
+for example, script in examples:
+   run(example, makeTest(example, script))
+
+if failures:
+   sys.exit(1)
