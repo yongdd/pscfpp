@@ -19,6 +19,7 @@
 #include "R1NrShellTest.h"
 #include "R1GaugeTest.h"
 #include "R1ContourStepTest.h"
+#include "R1AmRelNormTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreMixtureTest);
@@ -33,6 +34,7 @@ TEST_COMPOSITE_ADD_UNIT(R1HomogeneousUnderflowTest);
 TEST_COMPOSITE_ADD_UNIT(R1NrShellTest);
 TEST_COMPOSITE_ADD_UNIT(R1GaugeTest);
 TEST_COMPOSITE_ADD_UNIT(R1ContourStepTest);
+TEST_COMPOSITE_ADD_UNIT(R1AmRelNormTest);
 TEST_COMPOSITE_END
 
 #endif
