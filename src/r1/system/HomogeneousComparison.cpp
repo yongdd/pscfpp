@@ -140,15 +140,18 @@ namespace R1
          }
 
          // A converged SCFT field need not give a valid composition at
-         // the boundary point exactly (a fraction can exceed 1 slightly):
-         // clip the guess to (0, 1] and normalize it to a sum of 1. A
+         // the boundary point exactly (a fraction can exceed 1 slightly,
+         // or be zero or slightly negative): replace values that are not
+         // positive by a tiny positive one, clip values above 1, and
+         // normalize the guess to a sum of 1. Positive values are kept,
+         // however small: computePhi takes Newton steps in ln(phi). A
          // species with mu = -infinity (phi = 0) stays exactly at 0.
          double sum = 0.0;
          for (int i = 0; i < np + ns; ++i) {
             if (std::isinf(m_[i]) && m_[i] < 0.0) {
                p_[i] = 0.0;
             } else {
-               if (!(p_[i] > 1.0E-12)) p_[i] = 1.0E-12;
+               if (!(p_[i] > 0.0)) p_[i] = 1.0E-300;
                if (p_[i] > 1.0) p_[i] = 1.0;
             }
             sum += p_[i];

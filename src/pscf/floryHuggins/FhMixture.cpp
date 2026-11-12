@@ -106,8 +106,10 @@ namespace Pscf {
          phi_[i] = phi[i];
          sum += phi[i];
       }
-      UTIL_CHECK(sum <= 1.0);
-      phi_[nMolecule_ -1] = 1.0 - sum;
+      // A sum that exceeds 1 by rounding only (e.g. 0.56 + 0.33 + 0.11)
+      // leaves the last species at 0, not at a tiny negative fraction
+      UTIL_CHECK(sum <= 1.0 + 1.0E-12);
+      phi_[nMolecule_ -1] = (sum < 1.0) ? 1.0 - sum : 0.0;
 
       computeC();
       hasComposition_ = true;
@@ -324,6 +326,18 @@ namespace Pscf {
             jacobian_(m1, mDep) = molecule(m1).size();
          }
 
+         // The independent variables are ln(phi) of the present species
+         // other than mDep: d(mu)/d(ln phi) = phi*d(mu)/d(phi). Newton
+         // steps in ln(phi) keep every fraction positive and converge
+         // in a few steps also for a very dilute species, whose mu
+         // depends on ln(phi).
+         for (m2 = 0; m2 < nMolecule_; ++m2) {
+            if (m2 == mDep || isAbsent_[m2]) continue;
+            for (m1 = 0; m1 < nMolecule_; ++m1) {
+               jacobian_(m1, m2) *= phi_[m2];
+            }
+         }
+
          // Absent species: unit row and zero residual, so dX = 0
          for (m1 = 0; m1 < nMolecule_; ++m1) {
             if (isAbsent_[m1]) {
@@ -343,24 +357,31 @@ namespace Pscf {
             phiOld_[m1] = phi_[m1];
          }
 
-         // Apply update
+         // Apply update: ln(phi) -= dX for the independent species. The
+         // step is halved while the dependent fraction is out of range.
          bool inRange = false;
-         for (int j = 0; j < 5; ++j) {
+         for (int j = 0; j < 30; ++j) {
 
             // Update volume fractions
             double sum = 0.0;
             for (m1 = 0; m1 < nMolecule_; ++m1) {
                if (m1 == mDep) continue;
-               phi_[m1] = phiOld_[m1] - dX_[m1];
+               if (isAbsent_[m1]) {
+                  phi_[m1] = 0.0;
+               } else {
+                  phi_[m1] = phiOld_[m1]*std::exp(-dX_[m1]);
+               }
                sum += phi_[m1];
             }
             phi_[mDep] = 1.0 - sum;
 
-            // Check if all volume fractions are in [0,1]
+            // Check if all volume fractions are in [0,1], and those of
+            // present species positive
             inRange = true;
             for (m1 = 0; m1 < nMolecule_; ++m1) {
-               if (phi_[m1] < 0.0) inRange = false;
+               if (!(phi_[m1] >= 0.0)) inRange = false;
                if (phi_[m1] > 1.0) inRange = false;
+               if (!isAbsent_[m1] && !(phi_[m1] > 0.0)) inRange = false;
             }
 
             // Exit loop or reduce increment
