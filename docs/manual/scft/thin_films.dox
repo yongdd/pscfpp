@@ -89,11 +89,13 @@ parallel to the **a** and **b** lattice vectors, because this is the only
 orientation of the walls for which the third lattice vector is normal to
 the walls.
 
-The space group used to describe the system must accurately describe the
-symmetry of the mask and the external fields within a unit cell that
-satisfies the constraints described here. Determining the proper space
-group can be difficult in some cases, so an entire section is dedicated
-to this topic \ref scft_films_space_groups_sec "below."
+If a space group is used to describe the system, it must accurately
+describe the symmetry of the mask and the external fields within a unit
+cell that satisfies the constraints described here. Determining the
+proper space group can be difficult in some cases, so an entire section
+is dedicated to this topic \ref scft_films_space_groups_sec "below."
+A space group is optional: thin-film calculations can also be performed
+without one, as described \ref scft_films_no_group_sec "below."
 
 By default, the length of the lattice vector that is normal to the walls is
 not allowed to vary, so the film thickness will be held constant throughout
@@ -371,6 +373,29 @@ symmetry operations are those that describe every relevant field in the
 system: the mask, the external fields, and the polymer morphology. Thus, the
 selection of the appropriate space group for a thin film requires more
 substantial thought than is the case for bulk systems.
+
+\subsection scft_films_no_group_sec Thin films without a space group
+
+The groupName parameter of the Domain block is optional for thin-film
+calculations, as it is for bulk calculations (see the description of
+the \ref user_param_domain_pc_page "Domain block"). If the parameter file
+does not contain a groupName, no symmetry is imposed on the fields, the
+symmetry checks of the mask and external fields described in this section
+are skipped, and the walls may be chemically identical or not. The
+constraint on the orientation of the unit cell described
+\ref scft_films_unitcell_sec "above" still applies. As for any calculation
+without a space group, fields must then be read and written in the
+real-space grid (or k-grid) file format rather than in the
+symmetry-adapted basis format, and the Iterator block must select an
+algorithm that does not impose any symmetry, such as
+\ref rp_AmIteratorGrid_page "AmIteratorGrid". For example, the parameter
+file given above could be used without a space group by removing the
+groupName line from the Domain block and replacing the label of the
+Iterator block by AmIteratorGrid. The initial guess must then be a set
+of w fields in r-grid format, read with the READ_W_RGRID command: the
+ESTIMATE_W_BASIS command used in the procedure described
+\ref scft_films_initial_guess_sec "below" to obtain w fields from
+concentration fields requires a space group.
 
 \subsection scft_films_correct_sg_sec Identifying the correct space group
 
