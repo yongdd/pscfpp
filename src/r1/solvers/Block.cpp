@@ -54,6 +54,9 @@ namespace R1 {
       if (ns_%2 == 0) {
          ns_ += 1;
       }
+      if (ns_ < 3) {
+         ns_ = 3;  // ns_ = 1 (block shorter than ds/2) gives ds_ = inf
+      }
       ds_ = length()/double(ns_ - 1);
 
       // Allocate all required memory
@@ -81,6 +84,9 @@ namespace R1 {
          ns_ = floor(length()/dsTarget_ + 0.5) + 1;
          if (ns_%2 == 0) {
             ns_ += 1;
+         }
+         if (ns_ < 3) {
+            ns_ = 3;  // ns_ = 1 (block shorter than ds/2) gives ds_ = inf
          }
          ds_ = length()/double(ns_ - 1);
 

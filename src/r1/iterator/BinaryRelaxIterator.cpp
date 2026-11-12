@@ -27,6 +27,8 @@ namespace R1
       epsilon_(0.0),
       lambdaPlus_(0.0),
       lambdaMinus_(0.0),
+      lambdaPlusWork_(0.0),
+      lambdaMinusWork_(0.0),
       maxItr_(200),
       isAllocated_(false),
       isCanonical_(true)
@@ -80,7 +82,20 @@ namespace R1
       double dWm, dWp, c0, c1, w0, w1, wm;
       double dWmNorm = 0.0;
       double dWpNorm = 0.0;
-      double chi = system().interaction().chi(0,1);
+
+      // The SCF equations require w1 - w0 = (chi01 - chi00)*c0
+      // + (chi11 - chi01)*c1. The exchange residual is scaled by the
+      // effective chi = chi01 - (chi00 + chi11)/2. With zero diagonal
+      // elements, r0 = r1 = 1 and chiEff = chi01.
+      Interaction const & interaction = system().interaction();
+      const double chi01 = interaction.chi(0,1);
+      const double chiEff = chi01
+                  - 0.5*(interaction.chi(0,0) + interaction.chi(1,1));
+      if (chiEff == 0.0) {
+         UTIL_THROW("BinaryRelaxIterator requires a nonzero effective chi");
+      }
+      const double r0 = (chi01 - interaction.chi(0,0))/chiEff;
+      const double r1 = (chi01 - interaction.chi(1,1))/chiEff;
       int nx = domain().nx();        // number of grid points
       //For AB diblok
       for (int i = 0; i < nx; ++i) {
@@ -90,11 +105,11 @@ namespace R1
          w1 = wOld[1][i];
          wm = w1 - w0;
          dWp = c1 + c0 - 1.0;
-         dWm = 0.5*( c0 - c1 - wm/chi);
+         dWm = 0.5*( r0*c0 - r1*c1 - wm/chiEff);
          dWpNorm += dWp*dWp;
          dWmNorm += dWm*dWm;
-         dWp *= lambdaPlus_;
-         dWm *= lambdaMinus_;
+         dWp *= lambdaPlusWork_;
+         dWm *= lambdaMinusWork_;
          dW[0][i] = dWp -  dWm;
          dW[1][i] = dWp + dWm;
       }
@@ -141,6 +156,12 @@ namespace R1
 
       int nm = mixture().nMonomer();  // number of monomer types
       UTIL_CHECK(nm == 2);
+
+      // Start each solve with the mixing parameters from the parameter
+      // file; only the working copies are reduced below, so a reduction
+      // does not carry over to later solves (or into WRITE_PARAM)
+      lambdaPlusWork_ = lambdaPlus_;
+      lambdaMinusWork_ = lambdaMinus_;
       int np = mixture().nPolymer();  // number of polymer species
       int ns = mixture().nSolvent();  // number of solvent species
       int nx = domain().nx();         // number of grid points
@@ -222,13 +243,13 @@ namespace R1
          while (dWNormNew_ > dWNorm_ && j < 3) {
             Log::file() << "      error = "
                         << dWNormNew_ << ", decreasing increment" << std::endl;
-            lambdaPlus_ *= 0.5;
-            lambdaMinus_ *= 0.5;
-            //Print lambdaPlus_ and lambdaMinus_
+            lambdaPlusWork_ *= 0.5;
+            lambdaMinusWork_ *= 0.5;
+            //Print the reduced mixing parameters
             Log::file() << "      lambdaPlus = "
-                        << lambdaPlus_ << std::endl;
+                        << lambdaPlusWork_ << std::endl;
             Log::file() << "      lambdaMinus = "
-                        << lambdaMinus_<< std::endl;
+                        << lambdaMinusWork_<< std::endl;
             computeDW(system().wFields(), system().cFields(),
                       dWNew_, dWNormNew_);
             updateWFields(system().wFields(), dWNew_, wFieldsNew_);
