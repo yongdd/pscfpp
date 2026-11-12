@@ -73,6 +73,15 @@ namespace Rp {
       virtual void clearTimers() = 0;
 
       /**
+      * Discard data that depend on model parameters.
+      *
+      * Called when parameters such as vMonomer, kuhn lengths, block
+      * lengths, composition or the unit cell may have changed (start
+      * of a simulation, after each ramp step). The default does nothing.
+      */
+      virtual void clearCache() {}
+
+      /**
       * Get the number of times the MDE has been solved.
       */
       int mdeCounter() const;

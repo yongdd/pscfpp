@@ -11,6 +11,11 @@
 #include "LrCompressor.h"
 
 #include <rp/system/System.h>
+#include <rp/solvers/Polymer.h>
+#include <rp/solvers/Solvent.h>
+#include <pscf/chem/Ensemble.h>
+#include <vector>
+#include <cmath>
 #include <rp/solvers/Mixture.h>
 #include <rp/field/Domain.h>
 #include <rp/field/WFields.h>
@@ -90,9 +95,64 @@ namespace Rp {
          isAllocated_ = true;
       }
 
-      // Compute intraCorrelation
-      if (!isIntraCalculated_){
+      // The intramolecular correlation is computed in compress(), after
+      // the first MDE solution (see updateIntraCorrelation)
+   }
+
+   /*
+   * Compute the intramolecular correlation if needed.
+   */
+   template <int D, class T>
+   void LrCompressor<D,T>::updateIntraCorrelation()
+   {
+      FSArray<double, 6> parameters
+                           = system().domain().unitCell().parameters();
+      bool isCurrent = isIntraCalculated_
+                       && (parameters.size() == intraCellParameters_.size());
+      for (int i = 0; isCurrent && i < parameters.size(); ++i) {
+         if (parameters[i] != intraCellParameters_[i]) isCurrent = false;
+      }
+
+      // The volume fractions of open species follow the fields, and the
+      // correlation (in particular its k = 0 value in a mixed ensemble)
+      // depends on them: recompute it when one has changed by more than
+      // a small relative amount. (Closed species have fixed phi.)
+      std::vector<double> openPhi;
+      Mixture<D,T> const & mixture = system().mixture();
+      for (int i = 0; i < mixture.nPolymer(); ++i) {
+         if (mixture.polymer(i).ensemble() == Ensemble::Open) {
+            openPhi.push_back(mixture.polymer(i).phi());
+         }
+      }
+      for (int i = 0; i < mixture.nSolvent(); ++i) {
+         if (mixture.solvent(i).ensemble() == Ensemble::Open) {
+            openPhi.push_back(mixture.solvent(i).phi());
+         }
+      }
+      // A non-finite phi (the MDE solution overflowed in a diverging
+      // iteration) gives no usable correlation: keep the current one.
+      // Stored, it would also never be replaced, since a comparison
+      // with inf or NaN is false.
+      if (isIntraCalculated_) {
+         for (size_t i = 0; i < openPhi.size(); ++i) {
+            if (!std::isfinite(openPhi[i])) return;
+         }
+      }
+      if (isCurrent && openPhi.size() != intraOpenPhi_.size()) {
+         isCurrent = false;
+      }
+      for (size_t i = 0; isCurrent && i < openPhi.size(); ++i) {
+         double change = std::abs(openPhi[i] - intraOpenPhi_[i]);
+         if (!std::isfinite(intraOpenPhi_[i]) ||
+             change > 1.0E-3*std::abs(intraOpenPhi_[i])) {
+            isCurrent = false;
+         }
+      }
+
+      if (!isCurrent) {
          intra_.computeOmegaTotal(intraCorrelationK_);
+         intraCellParameters_ = parameters;
+         intraOpenPhi_ = openPhi;
          isIntraCalculated_ = true;
       }
    }
@@ -115,6 +175,9 @@ namespace Rp {
       system().compute();
       ++Compressor<D,T>::mdeCounter_;
       timerMDE_.stop();
+
+      // Intramolecular correlation for the current parameters and cell
+      updateIntraCorrelation();
 
       // Iterative loop
       for (itr_ = 0; itr_ < maxItr_; ++itr_) {
@@ -169,6 +232,9 @@ namespace Rp {
             system().compute();
             ++Compressor<D,T>::mdeCounter_;
             timerMDE_.stop();
+
+            // Refresh the correlation if open-species phi changed
+            updateIntraCorrelation();
 
          }
 

@@ -14,6 +14,8 @@
 #include <pscf/field/RFieldDft.h>                // member
 #include <pscf/math/IntVec.h>                    // member
 #include <util/containers/DArray.h>              // member
+#include <util/containers/FSArray.h>
+#include <vector>             // member
 #include <util/misc/Timer.h>                     // member
 
 #include <pscf/backend/TmplDeclare.h>
@@ -101,6 +103,12 @@ namespace Rp {
       */
       void clearTimers();
 
+      /**
+      * Mark the intramolecular correlation for recomputation.
+      */
+      void clearCache() override
+      {  isIntraCalculated_ = false; }
+
    protected:
 
       // Inherited protected member (for convenience)
@@ -155,6 +163,20 @@ namespace Rp {
 
       // Has the IntraCorrelation been calculated?
       bool isIntraCalculated_;
+
+      /// Unit cell parameters for which intraCorrelationK_ was computed.
+      FSArray<double, 6> intraCellParameters_;
+
+      /// Volume fractions of open species when it was computed.
+      std::vector<double> intraOpenPhi_;
+
+      /**
+      * Compute intraCorrelationK_ if needed: if it was never computed,
+      * if clearCache() was called, or if the unit cell has changed.
+      * Called after an MDE solution, so that open (grand-canonical)
+      * species have their volume fractions.
+      */
+      void updateIntraCorrelation();
 
       // Private member functions
 

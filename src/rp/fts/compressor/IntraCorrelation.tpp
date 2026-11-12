@@ -12,7 +12,10 @@
 
 #include <rp/system/System.h>
 #include <rp/solvers/Mixture.h>
+#include <rp/solvers/Polymer.h>
+#include <rp/solvers/Solvent.h>
 #include <rp/field/Domain.h>
+#include <pscf/chem/Ensemble.h>
 
 #include <pscf/field/FFT.h>
 #include <pscf/field/RField.h>
@@ -66,6 +69,9 @@ namespace Rp {
       correlations_h_.associate(correlations);
       computeOmegaTotalArray(correlations_h_);
       correlations = correlations_h_;
+      // Release the association, so that the correlations can be
+      // computed again (e.g., after a ramp step changes parameters)
+      correlations_h_.dissociate();
    }
 
    /*
@@ -83,6 +89,45 @@ namespace Rp {
       }
       correlationMixturePtr_->setup();
       correlationMixturePtr_->computeOmegaTotal(Gsq_, correlations);
+
+      // The LR compressors use these values as the response of the
+      // total concentration to a change of the pressure-like field. In a
+      // mixed ensemble (some species open, some closed) the amount of
+      // each closed species is fixed, so at k = 0 only the open species
+      // respond: use the sum of their k = 0 terms, phi*N/v each. (In a
+      // canonical system the k = 0 residual vanishes, and in a
+      // grand-canonical one every species counts, so the value is kept.)
+      Mixture<D,T> const & mixture = system().mixture();
+      const double vMonomer = mixture.vMonomer();
+      bool hasOpen = false;
+      bool hasClosed = false;
+      double omegaOpen = 0.0;
+      for (int i = 0; i < mixture.nPolymer(); ++i) {
+         if (mixture.polymer(i).ensemble() == Ensemble::Open) {
+            Correlation::Polymer<RealT> const & polymer
+                                     = correlationMixturePtr_->polymer(i);
+            omegaOpen += polymer.phi()*polymer.totalLength()/vMonomer;
+            hasOpen = true;
+         } else {
+            hasClosed = true;
+         }
+      }
+      for (int i = 0; i < mixture.nSolvent(); ++i) {
+         if (mixture.solvent(i).ensemble() == Ensemble::Open) {
+            omegaOpen += mixture.solvent(i).phi()*mixture.solvent(i).size()
+                         / vMonomer;
+            hasOpen = true;
+         } else {
+            hasClosed = true;
+         }
+      }
+      if (hasOpen && hasClosed) {
+         for (int j = 0; j < kSize_; ++j) {
+            if (Gsq_[j] == 0.0) {
+               correlations[j] = omegaOpen;
+            }
+         }
+      }
    }
 
    /*

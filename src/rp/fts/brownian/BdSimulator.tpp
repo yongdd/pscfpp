@@ -168,8 +168,11 @@ namespace Rp {
       // Solve MDE and compute c-fields for the intial state
       Simulator<D,T>::system().compute();
 
-      // Compress the initial state (adjust pressure-like field)
+      // Compress the initial state (adjust pressure-like field). Model
+      // parameters may have changed since the last run: discard data
+      // that the compressor derived from them.
       if (Simulator<D,T>::hasCompressor()) {
+         Simulator<D,T>::compressor().clearCache();
          Simulator<D,T>::compressor().compress();
          Simulator<D,T>::compressor().clearTimers();
       }
