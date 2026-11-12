@@ -190,6 +190,111 @@ public:
       checkAbsentLast(std::nextafter(1.0, 0.0));
    }
 
+   /*
+   * A/B blend at chi N = 46 with equal target mu: the A-rich solution
+   * has phi_B = 1.05e-20, as in the bulk phase of a strongly segregated
+   * interface. computePhi must reach it from guesses far above the
+   * root (1e-12, the former floor of COMPARE_HOMOGENEOUS, and 1e-4) and
+   * far below it (1e-30), with the dilute species last or first. Newton
+   * steps in phi could not reach it from above ('Volume fractions
+   * remain out of range'). The reference solves
+   * phi_B = (1 - phi_B) exp(-chi (1 - 2 phi_B)) by fixed-point iteration.
+   */
+   void testComputePhiVeryDilute()
+   {
+      printMethod(TEST_FUNC);
+
+      const double chi = 46.0;
+      double phiRef = std::exp(-chi);
+      for (int k = 0; k < 10; ++k) {
+         phiRef = (1.0 - phiRef)*std::exp(-chi*(1.0 - 2.0*phiRef));
+      }
+      TEST_ASSERT(phiRef > 1.0E-20);
+      TEST_ASSERT(phiRef < 1.1E-20);
+
+      FhInteraction interaction;
+      interaction.setNMonomer(2);
+      interaction.setChi(0, 1, chi);
+
+      DArray<double> mu;
+      DArray<double> phi;
+      mu.allocate(2);
+      phi.allocate(2);
+      mu[0] = -chi;
+      mu[1] = -chi;
+
+      double guesses[3] = {1.0E-12, 1.0E-4, 1.0E-30};
+      for (int ig = 0; ig < 3; ++ig) {
+         for (int dilute = 0; dilute < 2; ++dilute) {
+            FhMixture mixture;
+            std::ifstream in;
+            openInputFile("in/Core/FhMixtureBlend", in);
+            mixture.readParam(in);
+            in.close();
+
+            phi[dilute] = guesses[ig];
+            phi[1 - dilute] = 1.0 - guesses[ig];
+            double xi = 0.0;
+            mixture.computePhi(interaction, mu, phi, xi);
+            TEST_ASSERT(eq(mixture.mu(0), mu[0]));
+            TEST_ASSERT(eq(mixture.mu(1), mu[1]));
+            TEST_ASSERT(std::abs(mixture.phi(dilute)/phiRef - 1.0) < 1.0E-9);
+            TEST_ASSERT(std::abs(mixture.phi(1 - dilute) - 1.0) < 1.0E-15);
+         }
+      }
+   }
+
+   /*
+   * setComposition (COMPARE_HOMOGENEOUS 0) with an absent last species,
+   * when the fractions of the others add up to 1 + 1 ulp: the last
+   * fraction must be 0, not abort the check sum <= 1, and the free
+   * energy must be that of the A/B blend.
+   */
+   void testSetCompositionAbsentLast()
+   {
+      printMethod(TEST_FUNC);
+
+      FhInteraction interaction;
+      interaction.setNMonomer(2);
+      interaction.setChi(0, 1, 1.5);
+
+      FhMixture blend2;
+      FhMixture blend3;
+      readBlends(blend2, blend3);
+
+      // Fractions a + b == 1 + 1 ulp
+      const double sum = std::nextafter(1.0, 2.0);
+      double a = 0.6;
+      double b = 0.4;
+      while (a + b < sum) b = std::nextafter(b, 1.0);
+      TEST_ASSERT(a + b == sum);
+
+      DArray<double> phi3;
+      phi3.allocate(3);
+      phi3[0] = a;
+      phi3[1] = b;
+      phi3[2] = 0.0;
+      blend3.setComposition(phi3);
+      TEST_ASSERT(blend3.phi(2) == 0.0);
+      blend3.computeMu(interaction, 0.0);
+      blend3.computeFreeEnergy(interaction);
+
+      DArray<double> phi2;
+      phi2.allocate(2);
+      phi2[0] = a;
+      phi2[1] = 1.0 - a;
+      blend2.setComposition(phi2);
+      blend2.computeMu(interaction, 0.0);
+      blend2.computeFreeEnergy(interaction);
+
+      TEST_ASSERT(eq(blend3.phi(0), blend2.phi(0)));
+      TEST_ASSERT(eq(blend3.phi(1), blend2.phi(1)));
+      TEST_ASSERT(eq(blend3.mu(0), blend2.mu(0)));
+      TEST_ASSERT(eq(blend3.mu(1), blend2.mu(1)));
+      TEST_ASSERT(eq(blend3.fHelmholtz(), blend2.fHelmholtz()));
+      TEST_ASSERT(eq(blend3.pressure(), blend2.pressure()));
+   }
+
 private:
 
    /*
@@ -283,6 +388,8 @@ TEST_ADD(CoreFhMixtureTest, testComputePhiDiluteLast)
 TEST_ADD(CoreFhMixtureTest, testComputePhiAbsentSpecies)
 TEST_ADD(CoreFhMixtureTest, testComputePhiAbsentLastAbove)
 TEST_ADD(CoreFhMixtureTest, testComputePhiAbsentLastBelow)
+TEST_ADD(CoreFhMixtureTest, testComputePhiVeryDilute)
+TEST_ADD(CoreFhMixtureTest, testSetCompositionAbsentLast)
 TEST_END(CoreFhMixtureTest)
 
 #endif
