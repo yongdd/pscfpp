@@ -108,9 +108,12 @@ namespace Pscf
 
       // Write length or nBead
       if (PolymerModel::isThread()) {
+         // 17 significant digits, so that a length read back is the
+         // same double (a length one ulp below a rounding tie of the
+         // contour step rule would otherwise get another step count)
          out.setf(std::ios::scientific);
-         out.width(20);
-         out.precision(12);
+         out.width(24);
+         out.precision(16);
          out << block.length_;
       } else
       if (PolymerModel::isBead()) {
