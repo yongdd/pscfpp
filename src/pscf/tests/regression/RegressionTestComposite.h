@@ -12,6 +12,7 @@
 #include "CoreFhInteractionTest.h"
 #include "CoreAmbdInteractionTest.h"
 #include "CorePolymerTopologyTest.h"
+#include "CoreEdgeTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
@@ -19,6 +20,7 @@ TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
 TEST_COMPOSITE_ADD_UNIT(CoreFhInteractionTest);
 TEST_COMPOSITE_ADD_UNIT(CoreAmbdInteractionTest);
 TEST_COMPOSITE_ADD_UNIT(CorePolymerTopologyTest);
+TEST_COMPOSITE_ADD_UNIT(CoreEdgeTest);
 TEST_COMPOSITE_END
 
 #endif
