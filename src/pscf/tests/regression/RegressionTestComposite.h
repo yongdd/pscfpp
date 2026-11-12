@@ -30,6 +30,7 @@
 #include "CoreMixAndMatchEnvTest.h"
 #include "CoreSingularCellTest.h"
 #include "CoreBasisDataTest.h"
+#include "CoreNyquistGroupTest.h"
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
@@ -37,6 +38,7 @@
 #include "GpuFftTest.h"
 #include "GpuKSqOverflowTest.h"
 #include "GpuNyquistTest.h"
+#include "GpuNyquistGroupTest.h"
 #endif
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
@@ -62,12 +64,14 @@ TEST_COMPOSITE_ADD_UNIT(CoreSweepTmplParamTest);
 TEST_COMPOSITE_ADD_UNIT(CoreMixAndMatchEnvTest);
 TEST_COMPOSITE_ADD_UNIT(CoreSingularCellTest);
 TEST_COMPOSITE_ADD_UNIT(CoreBasisDataTest);
+TEST_COMPOSITE_ADD_UNIT(CoreNyquistGroupTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
 TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);
 TEST_COMPOSITE_ADD_UNIT(GpuFftTest);
 TEST_COMPOSITE_ADD_UNIT(GpuKSqOverflowTest);
 TEST_COMPOSITE_ADD_UNIT(GpuNyquistTest);
+TEST_COMPOSITE_ADD_UNIT(GpuNyquistGroupTest);
 #endif
 TEST_COMPOSITE_END
 
