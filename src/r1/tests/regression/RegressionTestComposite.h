@@ -21,6 +21,7 @@
 #include "R1ContourStepTest.h"
 #include "R1AmRelNormTest.h"
 #include "R1CommandStatusTest.h"
+#include "R1SweepCellParamTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreMixtureTest);
@@ -37,6 +38,7 @@ TEST_COMPOSITE_ADD_UNIT(R1GaugeTest);
 TEST_COMPOSITE_ADD_UNIT(R1ContourStepTest);
 TEST_COMPOSITE_ADD_UNIT(R1AmRelNormTest);
 TEST_COMPOSITE_ADD_UNIT(R1CommandStatusTest);
+TEST_COMPOSITE_ADD_UNIT(R1SweepCellParamTest);
 TEST_COMPOSITE_END
 
 #endif
