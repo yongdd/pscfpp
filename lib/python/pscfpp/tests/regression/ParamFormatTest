@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+
+# Parameter files in the formats that PSCF accepts: arrays and matrices
+# without brackets (in/param_bracketless is the parameter file of
+# examples/rpg/scf/diblock/a15 on a smaller mesh, in/param_sweep that of
+# examples/rpc/scf/sweep/block), blank lines inside blocks, and a chi
+# matrix with more than 10 monomer types. Also, editing an element of
+# the upper triangle of a matrix must change the matrix that is written.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import os
+import sys
+import tempfile
+from pscfpp.param import Composite
+
+failures = []
+
+def check(condition, message):
+   if not condition:
+      raise AssertionError(message)
+
+def run(test):
+   try:
+      test()
+      print(test.__name__ + ': passed')
+   except Exception as e:
+      failures.append(test.__name__)
+      print(test.__name__ + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Write a parameter file and read it again
+def rewrite(p):
+   with tempfile.TemporaryDirectory() as dir:
+      name = os.path.join(dir, 'param')
+      p.write(name)
+      return Composite(name)
+
+def checkBracketless(p):
+   check(p.Mixture.nMonomer == 2, 'nMonomer')
+   check(p.Mixture.monomers == [2.0, 1.0],
+         'monomers ' + str(p.Mixture.monomers))
+   labels = list(p.Mixture.Polymer.getChildren().keys())
+   check(labels == ['type', 'nBlock', 'blocks', 'phi'],
+         'Polymer labels ' + str(labels))
+   check(p.Mixture.Polymer.blocks == [[0, 0.25], [1, 0.75]],
+         'blocks ' + str(p.Mixture.Polymer.blocks))
+   check(p.Mixture.ds == 0.01, 'ds')
+   labels = list(p.Interaction.getChildren().keys())
+   check(labels == ['chi'], 'Interaction labels ' + str(labels))
+   check(p.Interaction.chi == [[0.0, 25.0], [25.0, 0.0]],
+         'chi ' + str(p.Interaction.chi))
+   check(p.Domain.mesh == [32, 32, 32], 'mesh ' + str(p.Domain.mesh))
+   check(p.AmIteratorGrid.maxItr == 500, 'maxItr')
+   check(p.AmIteratorGrid.isFlexible == 1, 'isFlexible')
+
+# Bracketless arrays and matrix
+def testBracketless():
+   p = Composite('in/param_bracketless')
+   checkBracketless(p)
+   checkBracketless(rewrite(p))
+
+# Bracketless array of blocks, in a file that also has brackets
+def testBracketlessBlocks():
+   p = Composite('in/param_sweep')
+   for q in [p, rewrite(p)]:
+      labels = list(q.Mixture.Polymer.getChildren().keys())
+      check(labels == ['type', 'nBlock', 'blocks', 'phi'],
+            'Polymer labels ' + str(labels))
+      check(q.Mixture.Polymer.blocks == [[0, 0.56], [1, 0.44]],
+            'blocks ' + str(q.Mixture.Polymer.blocks))
+      check(q.Mixture.monomers == [1.0, 1.0], 'monomers')
+      check(q.Interaction.chi == [[0, 12.0], [12.0, 0]],
+            'chi ' + str(q.Interaction.chi))
+      check(q.LinearSweep.ns == 4, 'ns')
+
+# Blank lines inside blocks: ../in/param with a blank line after each
+# line that opens a block
+def testBlankLines():
+   with open('../in/param') as f:
+      lines = f.readlines()
+   with tempfile.TemporaryDirectory() as dir:
+      name = os.path.join(dir, 'param')
+      with open(name, 'w') as f:
+         for line in lines:
+            f.write(line)
+            if line.rstrip().endswith('{') or line.rstrip().endswith('['):
+               f.write('\n')
+      p = Composite(name)
+   q = Composite('../in/param')
+   check(str(p) == str(q), 'with blank lines:\n' + str(p))
+
+# A chi matrix with 11 monomer types (indices up to 10)
+def testLargeMatrix():
+   p = Composite('in/param_chi11')
+   chi = p.Interaction.chi
+   check(len(chi) == 11, 'size ' + str(len(chi)))
+   for i in range(11):
+      check(len(chi[i]) == 11, 'row ' + str(i))
+      check(chi[i][i] == 0, 'diagonal ' + str(i))
+      for j in range(i):
+         value = 10.0*i + j
+         check(chi[i][j] == value and chi[j][i] == value,
+               'chi[' + str(i) + '][' + str(j) + ']')
+   q = rewrite(p)
+   check(q.Interaction.chi == chi, 'chi after write')
+
+# Edit of an upper-triangle element (as in ParamCompositeTest)
+def testMatrixEdit():
+   p = Composite('../in/param')
+   check(p.Interaction.chi[1][0] == 15.0, 'chi[1][0]')
+   p.Interaction.chi[0][1] = 17.0
+   check(p.Interaction.chi[0][1] == 17.0, 'chi[0][1]')
+   check(p.Interaction.chi[1][0] == 17.0,
+         'chi[1][0] = ' + str(p.Interaction.chi[1][0]))
+   q = rewrite(p)
+   check(q.Interaction.chi[0][1] == 17.0 and q.Interaction.chi[1][0] == 17.0,
+         'chi after write ' + str(q.Interaction.chi))
+
+run(testBracketless)
+run(testBracketlessBlocks)
+run(testBlankLines)
+run(testLargeMatrix)
+run(testMatrixEdit)
+
+if failures:
+   sys.exit(1)

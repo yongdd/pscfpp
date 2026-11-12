@@ -1,0 +1,62 @@
+System{
+  Mixture{
+    nMonomer                               2
+    monomers[           
+                         1.00000000e+00
+                         1.00000000e+00
+    ]
+    nPolymer                               1
+    Polymer{
+      type                              linear
+      nBlock                                 2
+      blocks[             
+                                              0    5.0000000000000000e-01
+                                              1    5.0000000000000000e-01
+      ]
+      phi                   1.000000000000e+00
+    }
+    ds                    1.000000000000e-02
+  }
+  Interaction{
+    chi(                
+                           0    0   0.000000000000e+00
+                           1    0   2.000000000000e+01
+                           1    1   0.000000000000e+00
+    )
+  }
+  Domain{
+    mode                              planar
+    xMin                  0.000000000000e+00
+    xMax                  1.700000000000e+00
+    nx                                   101
+  }
+  AmIterator{
+    epsilon               1.000000000000e-08
+    maxItr                               200
+    maxHist                               50
+  }
+}
+
+fHelmholtz     2.94260807740e+00
+pressure      -1.80861971935e+01
+
+fIdeal         1.09613349573e+00
+fInter         1.84647458167e+00
+
+polymers:
+             phi                 mu          
+    0   1.00000000000e+00  -1.51435891161e+01
+
+
+f (homo)   =  4.00000000000e+00   [per monomer volume]
+p (homo)   = -1.91435891161e+01   [per monomer volume]
+delta f    = -1.05739192260e+00   [per monomer volume]
+delta p    =  1.05739192260e+00   [per monomer volume]
+Phi (ex)   = -1.79756626842e+00   [total]
+F (ex)     = -1.79756626842e+00   [total]
+V(tot)/v   =  1.70000000000e+00
+
+Species:
+    i      mu                  phi(homo)           deltaV        
+    0  -1.51435891161e+01   1.00000000000e+00   0.00000000000e+00
+

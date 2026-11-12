@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+
+# Command files in the formats that PSCF accepts: fields separated by
+# tabs, blank lines and lines of spaces, and commands used more than
+# twice (in/command_format has all of these). A Script can also be read
+# from an open file.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import sys
+from pscfpp.command import Script
+
+failures = []
+
+def check(condition, message):
+   if not condition:
+      raise AssertionError(message)
+
+def run(test):
+   try:
+      test()
+      print(test.__name__ + ': passed')
+   except Exception as e:
+      failures.append(test.__name__)
+      print(test.__name__ + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Labels of the commands in in/command_format
+labels = ['READ_W_BASIS', 'ITERATE', 'WRITE_THERMO',
+          'SET_UNIT_CELL', 'ITERATE', 'WRITE_THERMO',
+          'SET_UNIT_CELL', 'ITERATE', 'WRITE_THERMO',
+          'WRITE_TIMERS', 'FINISH']
+
+def checkScript(s):
+   check(len(s) == len(labels), 'number of commands ' + str(len(s)))
+   check([s[i].label for i in range(len(s))] == labels, 'labels')
+
+# Tabs separate fields (in/command_tabs is examples/rpc/fts/bd/command)
+def testTabs():
+   s = Script('in/command_tabs')
+   c = s['WRITE_TIMERS']
+   check(c.nParam() == 1 and c.param() == 'out/timers',
+         'WRITE_TIMERS ' + str(c.fields))
+   c.setParam('out/timers2')
+   check(str(c).split() == ['WRITE_TIMERS', 'out/timers2'],
+         'edited command ' + repr(str(c)))
+   s = Script('in/command_format')
+   c = s['READ_W_BASIS']
+   check(c.nParam() == 1 and c.param() == 'in/w.bf',
+         'READ_W_BASIS ' + str(c.fields))
+
+# Blank lines and lines of spaces are skipped
+def testBlankLines():
+   s = Script('in/command_blank')
+   l = ['READ_W_BASIS', 'ITERATE', 'WRITE_THERMO', 'WRITE_PARAM', 'FINISH']
+   check([s[i].label for i in range(len(s))] == l,
+         'labels ' + str([s[i].label for i in range(len(s))]))
+   checkScript(Script('in/command_format'))
+
+# Commands used three times
+def testRepeated():
+   s = Script('in/command_format')
+   iterate = s['ITERATE']
+   check(isinstance(iterate, list) and len(iterate) == 3, 'ITERATE')
+   check(iterate[0] is s[1] and iterate[1] is s[4] and iterate[2] is s[7],
+         'ITERATE commands')
+   cells = s['SET_UNIT_CELL']
+   check([c.param(1) for c in cells] == ['1.31', '1.32'], 'SET_UNIT_CELL')
+   check(len(s['WRITE_THERMO']) == 3, 'WRITE_THERMO')
+
+# An open file
+def testFileObject():
+   with open('in/command_format') as f:
+      s = Script(f)
+   checkScript(s)
+   check(str(s) == str(Script('in/command_format')), 'string')
+
+run(testTabs)
+run(testBlankLines)
+run(testRepeated)
+run(testFileObject)
+
+if failures:
+   sys.exit(1)

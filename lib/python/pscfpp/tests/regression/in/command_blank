@@ -1,0 +1,8 @@
+READ_W_BASIS     in/w.bf
+ITERATE
+
+WRITE_THERMO     out/thermo
+   
+WRITE_PARAM      out/param
+
+FINISH

@@ -1,0 +1,75 @@
+System{
+  Mixture{
+    nMonomer                               2
+    monomers[           
+                         1.00000000e+00
+                         1.00000000e+00
+    ]
+    nPolymer                               2
+    Polymer{
+      type                              linear
+      nBlock                                 1
+      blocks[             
+                                              0    1.0000000000000000e+00
+      ]
+      phi                   5.000000000000e-01
+    }
+    Polymer{
+      type                              linear
+      nBlock                                 1
+      blocks[             
+                                              1    1.0000000000000000e+00
+      ]
+      phi                   5.000000000000e-01
+    }
+    vMonomer              1.000000000000e+00
+    ds                    1.000000000000e-02
+  }
+  Interaction{
+    chi(                
+                           0    0   0.000000000000e+00
+                           1    0   6.000000000000e+00
+                           1    1   0.000000000000e+00
+    )
+  }
+  Domain{
+    mode                              planar
+    xMin                  0.000000000000e+00
+    xMax                  8.000000000000e+00
+    nx                                   401
+  }
+  AmIterator{
+    epsilon               1.000000000000e-08
+  }
+  Sweep{
+    ns                                     2
+    baseFileName                      sweep/
+    homogeneousMode                        0
+    nParameter                             1
+    parameters[         
+                                         chi  0 1 5.000000000000e-01
+    ]
+  }
+}
+
+
+fHelmholtz    -8.56781556234e-01
+pressure      -5.11695376406e+00
+
+fIdeal        -1.04585178570e+00
+fInter         1.89070229465e-01
+
+polymers:
+             phi                 mu          
+    0   5.00000000000e-01  -5.97373532030e+00
+    1   5.00000000000e-01  -5.97373532030e+00
+
+
+f (homo)    = -1.93147180560e-01   [per monomer volume]
+delta f     = -6.63634375674e-01   [per monomer volume]
+
+Species:
+    i      mu(homo)            phi(homo)     
+    0   2.30685281944e+00   5.00000000000e-01
+    1   2.30685281944e+00   5.00000000000e-01
+

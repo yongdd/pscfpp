@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+
+# Thermo files: a file with two thermo blocks (WRITE_THERMO used twice
+# with one file name), blank lines that contain spaces, and the
+# environment-modified stress of a thin film, which lists only the
+# flexible lattice parameters, each with its parameter id.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails. A read that does not return within 10 s
+# counts as a failure.
+
+import os
+import signal
+import sys
+import tempfile
+from pscfpp.output import Thermo
+
+failures = []
+
+def check(condition, message):
+   if not condition:
+      raise AssertionError(message)
+
+def run(test):
+   try:
+      test()
+      print(test.__name__ + ': passed')
+   except Exception as e:
+      failures.append(test.__name__)
+      print(test.__name__ + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+class Timeout(Exception):
+   pass
+
+def onAlarm(signum, frame):
+   raise Timeout('Thermo did not return within 10 s')
+
+# Read a thermo file, with a time limit
+def readThermo(filename):
+   signal.signal(signal.SIGALRM, onAlarm)
+   signal.alarm(10)
+   try:
+      t = Thermo(filename)
+   finally:
+      signal.alarm(0)
+   return t
+
+# Values of the first block of in/thermo_twice
+def checkLamellar(t):
+   check(t.fHelmholtz == -2.75154924313e+01, 'fHelmholtz ' + str(t.fHelmholtz))
+   check(t.pressure == 3.24415250695e+01, 'pressure ' + str(t.pressure))
+   check(t.fInter == 6.94152506949e+00, 'fInter ' + str(t.fInter))
+   check(len(t.polymers) == 1, 'polymers')
+   check(t.polymers[0].mu == 2.74031671640e+01, 'polymer mu')
+   check(len(t.solvents) == 1, 'solvents')
+   check(t.solvents[0].mu == -3.51022037753e-01, 'solvent mu')
+   check(t.cellParams == [1.62132470010e+01], 'cellParams ' + str(t.cellParams))
+
+# A file with two thermo blocks: the first one is read
+def testTwoBlocks():
+   checkLamellar(readThermo('in/thermo_twice'))
+
+# The first block, with spaces on its blank lines
+def testSpaceLines():
+   with open('in/thermo_twice') as f:
+      text = f.read()
+   first = text.index('fHelmholtz')
+   end = text.index('fHelmholtz', first + 1)
+   lines = text[first:end].split('\n')
+   lines = [line if line.strip() else '    ' for line in lines]
+   with tempfile.TemporaryDirectory() as dir:
+      name = os.path.join(dir, 'thermo')
+      with open(name, 'w') as f:
+         f.write('\n'.join(lines))
+      checkLamellar(readThermo(name))
+
+# Environment-modified stress of a film with a rigid parameter 0
+def testEnvironmentStress():
+   t = readThermo('in/thermo_film')
+   check(t.cellParams == [3.1, 1.6], 'cellParams ' + str(t.cellParams))
+   check(t.stress == [4.45063054134e-02, 1.32940261737e-02],
+         'stress ' + str(t.stress))
+   check(t.environmentStress == [None, 1.32940261737e-02],
+         'environmentStress ' + str(t.environmentStress))
+
+   # Written with the parameter id of the file
+   s = str(t)
+   block = s[s.index('environment-modified stress:'):].split('\n')
+   rows = []
+   for line in block[1:]:
+      if line.strip() == '':
+         break
+      rows.append(line.split())
+   check(rows == [['1', '1.32940261737e-02']], 'written rows ' + str(rows))
+
+   # Write and read again
+   with tempfile.TemporaryDirectory() as dir:
+      name = os.path.join(dir, 'thermo')
+      t.write(name)
+      t2 = readThermo(name)
+      check(t2.stress == t.stress, 'stress after write')
+      check(t2.environmentStress == t.environmentStress,
+            'environmentStress after write ' + str(t2.environmentStress))
+
+run(testTwoBlocks)
+run(testSpaceLines)
+run(testEnvironmentStress)
+
+if failures:
+   sys.exit(1)

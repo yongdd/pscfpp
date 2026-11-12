@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+
+# Field files written without a space group (e.g., by FTS runs) have no
+# group_name entry in their header. Check that r-grid and k-grid files
+# of this form are read completely, that they give the same data as the
+# same files with a group_name entry, and that they are written back
+# unchanged.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import os
+import sys
+import tempfile
+from pscfpp.field import Field
+
+failures = []
+
+def check(condition, message):
+   if not condition:
+      raise AssertionError(message)
+
+def run(test):
+   try:
+      test()
+      print(test.__name__ + ': passed')
+   except Exception as e:
+      failures.append(test.__name__)
+      print(test.__name__ + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Number of header lines of the input files (no group_name)
+nHeader = 13
+
+# Header labels of the input files, in order
+labels = ['format', 'dim', 'crystal_system', 'N_cell_param',
+          'cell_param', 'N_monomer', 'mesh']
+
+# Rows of numbers after the header of a file
+def fileRows(filename, nHeader):
+   with open(filename) as f:
+      lines = f.readlines()
+   rows = []
+   for line in lines[nHeader:]:
+      if line.split():
+         rows.append([float(x) for x in line.split()])
+   return rows
+
+def checkField(f, filename, type, nRow):
+   rows = fileRows(filename, nHeader)
+   check(len(rows) == nRow, filename + ' has ' + str(len(rows)) + ' rows')
+   check(f.type == type, 'type ' + f.type)
+   check(list(f.header.keys()) == labels,
+         'header labels ' + str(list(f.header.keys())))
+   check(f.header['mesh'] == [4, 4, 4], 'mesh ' + str(f.header['mesh']))
+   check(len(f.data) == nRow, 'len(data) = ' + str(len(f.data)))
+   for i in range(nRow):
+      row = [float(x) for x in f.data[i]]
+      check(row == rows[i], 'data[' + str(i) + '] = ' + str(row))
+
+# Are two lists of rows equal within a relative tolerance? (The k-grid
+# writer keeps one digit less than the files written by PSCF.)
+def isClose(rows1, rows2):
+   if len(rows1) != len(rows2):
+      return False
+   for r1, r2 in zip(rows1, rows2):
+      if len(r1) != len(r2):
+         return False
+      for x, y in zip(r1, r2):
+         if abs(x - y) > 1.0E-11*(abs(x) + abs(y)):
+            return False
+   return True
+
+# Insert a group_name entry into the header of a field file
+def addGroupName(filename, newname):
+   with open(filename) as f:
+      lines = f.readlines()
+   i = lines.index('N_monomer\n')
+   lines[i:i] = ['group_name\n', '          P_1\n']
+   with open(newname, 'w') as f:
+      f.writelines(lines)
+
+def checkFile(filename, type, nRow):
+   f = Field(filename)
+   checkField(f, filename, type, nRow)
+
+   with tempfile.TemporaryDirectory() as dir:
+
+      # The same file with a group_name gives the same data
+      name = os.path.join(dir, 'group')
+      addGroupName(filename, name)
+      g = Field(name)
+      check(g.header['group_name'] == 'P_1', 'group_name')
+      check(g.data == f.data, 'data with group_name differ')
+
+      # Write and read again
+      name = os.path.join(dir, 'copy')
+      f.write(name)
+      g = Field(name)
+      check(g.header == f.header, 'header after write')
+      check(isClose(g.data, f.data), 'data after write')
+
+def testRGrid():
+   checkFile('in/w_nogroup.rf', 'rgrid', 64)
+
+def testKGrid():
+   checkFile('in/w_nogroup.kf', 'kgrid', 48)
+   f = Field('in/w_nogroup.kf')
+   check(f.data[0][0] == 0, 'first wavevector ' + str(f.data[0][0]))
+
+run(testRGrid)
+run(testKGrid)
+
+if failures:
+   sys.exit(1)

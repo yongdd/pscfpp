@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+
+# Homogeneous comparison blocks of pscf_1d state files. Mode 0
+# (COMPARE_HOMOGENEOUS 0, or homogeneousMode 0 in a Sweep) writes two
+# values and a species table with three columns; mode 1 writes seven
+# values and four columns. Read state files of both modes and the
+# state files of a sweep with homogeneousMode 0, and write them back.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import os
+import sys
+import tempfile
+from pscfpp.output import State, Sweep
+
+failures = []
+
+def check(condition, message):
+   if not condition:
+      raise AssertionError(message)
+
+def run(test):
+   try:
+      test()
+      print(test.__name__ + ': passed')
+   except Exception as e:
+      failures.append(test.__name__)
+      print(test.__name__ + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Write a state and read it again: the same homogeneous block
+def checkWrite(s):
+   with tempfile.TemporaryDirectory() as dir:
+      name = os.path.join(dir, 'state')
+      s.write(name)
+      s2 = State(name)
+      check(s2.thermo.homogeneous == s.thermo.homogeneous,
+            'homogeneous after write ' + str(s2.thermo.homogeneous))
+      check(s2.thermo.homogeneousSpecies == s.thermo.homogeneousSpecies,
+            'species after write ' + str(s2.thermo.homogeneousSpecies))
+      check(s2.thermo.fHelmholtz == s.thermo.fHelmholtz,
+            'fHelmholtz after write')
+
+def testMode0():
+   s = State('in/state_homo0')
+   check(s.thermo.fHelmholtz == 2.94260807740e+00, 'fHelmholtz')
+   h = {'f (homo)': 4.0, 'delta f': -1.05739192260e+00}
+   check(s.thermo.homogeneous == h, 'homogeneous ' + str(s.thermo.homogeneous))
+   sp = [{'i': 0, 'mu(homo)': 10.0, 'phi(homo)': 1.0}]
+   check(s.thermo.homogeneousSpecies == sp,
+         'species ' + str(s.thermo.homogeneousSpecies))
+   checkWrite(s)
+
+def testMode1():
+   s = State('in/state_homo1')
+   h = s.thermo.homogeneous
+   keys = ['f (homo)', 'p (homo)', 'delta f', 'delta p', 'Phi (ex)',
+           'F (ex)', 'V(tot)/v']
+   check(list(h.keys()) == keys, 'homogeneous keys ' + str(list(h.keys())))
+   check(h['f (homo)'] == 4.0 and h['V(tot)/v'] == 1.7,
+         'homogeneous ' + str(h))
+   sp = [{'i': 0, 'mu': -1.51435891161e+01, 'phi(homo)': 1.0, 'deltaV': 0.0}]
+   check(s.thermo.homogeneousSpecies == sp,
+         'species ' + str(s.thermo.homogeneousSpecies))
+   checkWrite(s)
+
+def testSweepMode0():
+   sw = Sweep('in/sweep_homo0/')
+   check(len(sw) == 3, 'number of states ' + str(len(sw)))
+   fHomo = [-1.93147180560e-01, -1.30647180560e-01, -6.81471805599e-02]
+   for i in range(3):
+      s = sw[i]
+      check(list(s.thermo.homogeneous.keys()) == ['f (homo)', 'delta f'],
+            'state ' + str(i) + ' ' + str(s.thermo.homogeneous))
+      check(s.thermo.homogeneous['f (homo)'] == fHomo[i],
+            'state ' + str(i) + ' f (homo)')
+      check(len(s.thermo.homogeneousSpecies) == 2,
+            'state ' + str(i) + ' species')
+      checkWrite(s)
+   values = sw.summary(['param.Interaction.chi[0][1]', 'thermo.fHelmholtz'])
+   check([v[0] for v in values] == [6.0, 6.25, 6.5], 'chi ' + str(values))
+
+run(testMode0)
+run(testMode1)
+run(testSweepMode0)
+
+if failures:
+   sys.exit(1)
