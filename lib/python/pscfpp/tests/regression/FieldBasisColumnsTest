@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+
+# The Miller indices and the star size in the data section of a basis
+# field file are separate columns, also where an index fills five
+# characters (-1000 or less, or 10000 or more). Check that the Field
+# class reads such a file (in/w_wide_indices.bf: lines of a file written
+# by pscf_rpc for a 2 x 20002 mesh with group p_1) with integer columns,
+# and that it writes the data lines back unchanged, as it does for a
+# file whose indices are all narrow (../in/w.bf). The Python writer
+# merged wide indices with the previous column ('0-1000'), which were
+# then read back as strings.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import os
+import sys
+import tempfile
+from pscfpp.field import Field
+
+failures = []
+
+def check(condition, message):
+   if not condition:
+      raise AssertionError(message)
+
+def run(test):
+   try:
+      test()
+      print(test.__name__ + ': passed')
+   except Exception as e:
+      failures.append(test.__name__)
+      print(test.__name__ + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Data lines of a basis field file (the lines after N_basis and its value)
+def dataLines(filename):
+   with open(filename) as f:
+      lines = f.read().split('\n')
+   i = [k for k, line in enumerate(lines) if line.strip() == 'N_basis'][0]
+   return [line for line in lines[i+2:] if line.strip()]
+
+# Check the columns of a basis field: nMonomer floats, dim indices and
+# the star size, all integers as in the file
+def checkColumns(f, filename):
+   nMonomer = f.header['N_monomer']
+   dim = f.header['dim']
+   lines = dataLines(filename)
+   check(len(f.data) == len(lines), 'len(data) = ' + str(len(f.data)))
+   for row, line in zip(f.data, lines):
+      words = line.split()
+      check(len(row) == nMonomer + dim + 1, 'row ' + str(row))
+      for j in range(nMonomer, nMonomer + dim + 1):
+         check(type(row[j]) is int, 'row ' + str(row))
+         check(row[j] == int(words[j]), 'row ' + str(row))
+
+# Read a file, write it, and compare the data lines and the data
+def checkFile(filename):
+   f = Field(filename)
+   check(f.type == 'basis', 'type ' + f.type)
+   checkColumns(f, filename)
+   with tempfile.TemporaryDirectory() as dir:
+      name = os.path.join(dir, 'copy')
+      f.write(name)
+      check(dataLines(name) == dataLines(filename),
+            'data lines written differ')
+      g = Field(name)
+      checkColumns(g, name)
+      check(g.data == f.data, 'data read back differ')
+
+def testWideIndices():
+   checkFile('in/w_wide_indices.bf')
+   f = Field('in/w_wide_indices.bf')
+   indices = [row[2:4] for row in f.data]
+   for pair in ([0, -1000], [1, -1000], [0, 10000], [1, -10000]):
+      check(pair in indices, 'indices ' + str(pair))
+
+def testNarrowIndices():
+   checkFile('../in/w.bf')
+
+run(testWideIndices)
+run(testNarrowIndices)
+
+if failures:
+   sys.exit(1)
