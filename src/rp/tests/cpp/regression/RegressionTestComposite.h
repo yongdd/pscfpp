@@ -10,6 +10,7 @@
 #include "FilmSweepTest.h"
 #include "ScftSweepTest.h"
 #include "CommandTest.h"
+#include "FtsAnalyzerTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -19,6 +20,7 @@ TEST_COMPOSITE_ADD_UNIT(FilmMaskCheckTest);
 TEST_COMPOSITE_ADD_UNIT(FilmSweepTest);
 TEST_COMPOSITE_ADD_UNIT(ScftSweepTest);
 TEST_COMPOSITE_ADD_UNIT(CommandTest);
+TEST_COMPOSITE_ADD_UNIT(FtsAnalyzerTest);
 TEST_COMPOSITE_END
 
 #endif
