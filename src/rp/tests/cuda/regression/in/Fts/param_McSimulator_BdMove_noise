@@ -1,0 +1,17 @@
+McSimulator{
+   seed              1784106389
+   McMoveManager{
+      BdMove{
+         probability   1.0
+         mobility      1.0e-4
+         nStep         1
+      }
+   }
+   LrAmCompressor{
+      epsilon      1.0e-6
+      maxItr       200
+      maxHist      30
+      verbose      0
+      errorType    rms
+   }
+}
