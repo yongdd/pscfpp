@@ -156,7 +156,7 @@ namespace Rp {
       double mobility_;
 
       // Number of BD steps per MC move.
-      double nStep_;
+      int nStep_;
 
       // Number of BD steps attempted since the last setup.
       long nBdStep_;

@@ -24,6 +24,9 @@
 #include <pscf/math/IntVec.h>
 #include <util/misc/Log.h>
 
+#include <cctype>
+#include <string>
+
 namespace Pscf {
 namespace Rp {
 
@@ -42,6 +45,7 @@ namespace Rp {
       etaNewPtr_(nullptr),
       etaOldPtr_(nullptr),
       mobility_(0.0),
+      nStep_(0),
       nBdStep_(0),
       nBdStepFail_(0)
    {  ParamComposite::setClassName("BdMove"); }
@@ -55,6 +59,15 @@ namespace Rp {
       McMoveT::readProbability(in);
       ParamComposite::read(in, "mobility", mobility_);
       ParamComposite::read(in, "nStep", nStep_);
+
+      // A non-integer value (e.g., 2.5 or 1e2) leaves characters of
+      // the same word in the stream after its integer part
+      int next = in.peek();
+      bool isWordEnd = (next == std::char_traits<char>::eof())
+                       || std::isspace(next);
+      if (nStep_ < 1 || !isWordEnd) {
+         UTIL_THROW("BdMove: nStep must be a positive integer");
+      }
 
       // Allocate memory
       int nMonomer = system().mixture().nMonomer();
