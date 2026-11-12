@@ -25,6 +25,7 @@
 #include "ScftScaleStressTest.h"
 #include "FieldIoStarsHeaderTest.h"
 #include "CommandExpandTest.h"
+#include "FilmOrthogonalityTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -49,6 +50,7 @@ TEST_COMPOSITE_ADD_UNIT(CommandReadHTest);
 TEST_COMPOSITE_ADD_UNIT(ScftScaleStressTest);
 TEST_COMPOSITE_ADD_UNIT(FieldIoStarsHeaderTest);
 TEST_COMPOSITE_ADD_UNIT(CommandExpandTest);
+TEST_COMPOSITE_ADD_UNIT(FilmOrthogonalityTest);
 TEST_COMPOSITE_END
 
 #endif
