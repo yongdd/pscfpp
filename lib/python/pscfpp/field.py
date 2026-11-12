@@ -7,7 +7,7 @@
 #  A field file contains both a header section and a data section. 
 #  This class can read and parse all of the field file formats used by
 #  PSCF programs including the basis, rgrid, and kgrid formats used by
-#  the pscf_rpc and pscf_rpg programs to represent periodic fields, and 
+#  the pscf_rpc and pscf_rpg programs to represent periodic fields, and
 #  the simpler file format used by pscf_1d for one-dimensional fields.
 #  For detail on these file formats see the section of the web manual
 #  on \ref user_field_page "field files". Users can access and modify
@@ -38,6 +38,14 @@
 #
 #  The 'type' attribute is a string with possible values 'fd1d', 
 #  'basis', 'rgrid' or 'kgrid'. 
+#
+#  The listings of waves and stars written by the WRITE_WAVES and
+#  WRITE_STARS commands of pscf_rpc and pscf_rpg use the header of a
+#  periodic field file (without N_monomer) followed by a table with one
+#  row per wave or star. They can also be read, and are given the types
+#  'waves' and 'stars'. The space group files written by WRITE_GROUP
+#  (the format of the files in data/groups) are not field files and are
+#  rejected with an exception.
 #
 #  **Construction:**
 #
@@ -134,6 +142,12 @@ class Field:
       elif l[0] == 'nx':
          self.type ='fd1d'
          self.header['nx'] = getValue(l[1])
+      elif l[0] == 'dim':
+         name = str(getattr(openFile, 'name', 'this file'))
+         raise Exception('Not a field file: ' + name
+                         + ' is a space group file (as written by'
+                         + ' WRITE_GROUP), which the Field class'
+                         + ' does not read.')
       else:
          raise Exception('Not valid field file.')
 
@@ -160,7 +174,13 @@ class Field:
             else:
                self.header[name] = getValue(l[0])
             if name == 'N_basis' or name == 'N_star':
+               # Basis field file, or listing of stars (WRITE_STARS);
+               # the two are distinguished by the first data row
                self.type = 'basis'
+               break
+            if name == 'N_wave':
+               # Listing of waves (WRITE_WAVES)
+               self.type = 'waves'
                break
             if name == 'mesh' or name == 'ngrid':
                break
@@ -196,7 +216,20 @@ class Field:
          l = line.split()
          
 
-      if self.type != 'basis' and self.type != 'fd1d':
+      if self.type == 'basis':
+         # Integer-valued fields are valid basis files too. Recognise
+         # star listings by their column count, preserving a basis file
+         # when its N_monomer makes both interpretations possible.
+         starColumns = self.header['dim'] + 6
+         if 'N_star' in self.header:
+            starColumns += 1
+         basisColumns = self.header.get('N_monomer', -1) + self.header['dim'] + 1
+         if (self.data and len(self.data[0]) == starColumns
+             and len(self.data[0]) != basisColumns
+             and all(isinstance(x, int) for x in self.data[0])):
+            self.type = 'stars'
+
+      if self.type == '':
          if type(self.data[0][0]) is int:
             self.type = 'kgrid'
          else:
@@ -272,6 +305,30 @@ class Field:
             if self.type == 'rgrid':
                val = f'{self.data[i][j]:.15e}'
                row += f'{val:>23}'
+
+            if self.type == 'waves':
+               # Columns: i, waveId, D wave indices, starId, Re(c), Im(c)
+               nc = len(self.data[i])
+               if j < 2:
+                  row += ' ' + f'{self.data[i][j]:>7}'
+               elif j < nc - 3:
+                  row += ' ' + f'{self.data[i][j]:>4}'
+               elif j == nc - 3:
+                  row += ' ' + f'{self.data[i][j]:>5}'
+               else:
+                  row += '  ' + f'{self.data[i][j]:>15.7e}'
+
+            if self.type == 'stars':
+               # Columns: basisId, starId, size, beginId, endId,
+               # starInvert, cancel (N_star files only), D wave indices
+               widths = [5, 5, 4, 7, 7, 3]
+               if 'N_star' in self.header:
+                  widths.append(3)
+               if j < len(widths):
+                  w = widths[j]
+               else:
+                  w = 5
+               row += ' ' + f'{self.data[i][j]:>{w}}'
 
             if self.type == 'kgrid':
                if j == 0:

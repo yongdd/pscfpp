@@ -32,6 +32,17 @@ allowed values "fd1d", "basis", "rgrid", and "kgrid". The type "fd1d"
 is used for the files of pscf_1d that start with an nx line, including
 the block concentration files written by the WRITE_BLOCK_C command.
 
+The Field class can also read the listings of waves and stars written
+by the \ref scft_command_pc_wave_page "WRITE_WAVES" and
+\ref scft_command_pc_star_page "WRITE_STARS" commands of pscf_rpc and
+pscf_rpg, which use the header of a periodic field file followed by a
+table with one row per wave or star. These are given the types "waves"
+and "stars". The files written by the
+\ref scft_command_pc_group_page "WRITE_GROUP" command list the
+symmetry operations of a space group in the format of the group files
+in the data/groups directory, which is not a field file format: the
+Field class raises an exception for such a file.
+
 The Field class provides several methods that can change the format of
 the data table, including methods to add a new column (to allow for
 addition of a new monomer type), delete a column, or change the order
