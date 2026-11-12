@@ -65,11 +65,11 @@ namespace Rp
             UTIL_THROW("ERROR: beta and gamma must be 90 degrees");
          }
       } else if (normalVecId() == 1) {
-         if (alpha > 1e-8 || gamma > 1e-8) {
+         if (std::abs(alpha) > 1e-8 || std::abs(gamma) > 1e-8) {
             UTIL_THROW("ERROR: alpha and gamma must be 90 degrees");
          }
       } else { // normalVecId == 2
-         if (std::abs(alpha) > 1e-8 || beta > 1e-8) {
+         if (std::abs(alpha) > 1e-8 || std::abs(beta) > 1e-8) {
             UTIL_THROW("ERROR: alpha and beta must be 90 degrees");
          }
       }
@@ -199,9 +199,37 @@ namespace Rp
          updated[4] = false;
          updated[5] = false;
 
-         // Allow the angle between the two lattice basis vectors that are 
-         // not normalVecId to be flexible
-         updated[normalVecId_+3] = current[normalVecId_+3];
+         // Allow the angle between the two lattice basis vectors that are
+         // not normalVecId to be flexible. The triclinic parameters are
+         // (a, b, c, phi, theta, gamma): b lies in the x-y plane at angle
+         // gamma from a, and c has polar angle theta and azimuth phi.
+         //  - normalVecId = 2: theta = 0; the free angle is gamma (5).
+         //  - normalVecId = 1: gamma = 90 deg, phi = 0; the angle between
+         //    a and c is 90 deg - theta, so the free angle is theta (4).
+         //  - normalVecId = 0: gamma = phi = 90 deg; the angle between
+         //    b and c is 90 deg - theta, so the free angle is theta (4).
+         //    (phi would tilt c out of the plane normal to a.)
+         int angleId = (normalVecId_ == 2) ? 5 : 4;
+         updated[angleId] = current[angleId];
+
+         // Theta is the in-plane angle only if phi has the value assumed
+         // above. At theta = 0 the orthogonality check passes for any
+         // phi, but relaxing theta would then tilt c toward the wall
+         // normal. Require phi explicitly when theta is flexible.
+         if (angleId == 4 && updated[4]) {
+            double phi = cell.parameter(3);
+            bool phiOk = (normalVecId_ == 0)
+                         ? (std::abs(std::cos(phi)) < 1.0E-8)
+                         : (std::abs(std::sin(phi)) < 1.0E-8);
+            if (!phiOk) {
+               Log::file()
+                  << "Triclinic film with a flexible angle theta: phi must"
+                  << " be " << ((normalVecId_ == 0) ? "pi/2" : "0")
+                  << " for walls normal to lattice vector " << normalVecId_
+                  << ".\nphi = " << phi << "\n";
+               UTIL_THROW("Triclinic film: phi incompatible with flexible theta");
+            }
+         }
 
       }
       
