@@ -1,0 +1,10 @@
+BdSimulator{
+   AnalyzerManager{
+      baseInterval    1
+      HamiltonianAnalyzer{
+         interval          1
+         outputFileName    out/FtsAnalyzeBd_hamiltonian
+         nSamplePerOutput  1
+      }
+   }
+}

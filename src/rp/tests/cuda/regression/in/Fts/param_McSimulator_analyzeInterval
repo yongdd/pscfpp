@@ -1,0 +1,10 @@
+McSimulator{
+   AnalyzerManager{
+      baseInterval    1
+      HamiltonianAnalyzer{
+         interval          4
+         outputFileName    out/FtsAnalyzeIntervalMc_hamiltonian
+         nSamplePerOutput  1
+      }
+   }
+}

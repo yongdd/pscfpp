@@ -1,0 +1,16 @@
+McSimulator{
+   seed              1784106389
+   McMoveManager{
+      RealMove{
+         probability   1.0
+         sigma         1.0
+      }
+   }
+   LrAmCompressor{
+      epsilon      1.0e-6
+      maxItr       200
+      maxHist      20
+      verbose      0
+      errorType    rms
+   }
+}
