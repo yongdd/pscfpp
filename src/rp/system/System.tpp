@@ -859,6 +859,14 @@ namespace Rp {
                Log::file() << replicas[i] << " times ";
                Log::file() << "\n";
             }
+            for (int i = 0; i < D; i++) {
+               if (replicas[i] <= 0) {
+                  Log::file() << "\nError: The numbers of replicas "
+                              << "must be positive" << std::endl;
+                  UTIL_THROW("Invalid number of replicas in "
+                             "REPLICATE_UNIT_CELL");
+               }
+            }
             fieldIo.replicateUnitCell(inFileName, outFileName, replicas);
 
          } else
