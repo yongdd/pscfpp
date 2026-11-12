@@ -8,9 +8,13 @@
 #include <test/CompositeTestRunner.h>
 
 #include "CoreBasisTest.h"
+#include "CoreLuSolverTest.h"
+#include "CoreFhInteractionTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
+TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
+TEST_COMPOSITE_ADD_UNIT(CoreFhInteractionTest);
 TEST_COMPOSITE_END
 
 #endif
