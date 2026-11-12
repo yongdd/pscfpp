@@ -236,14 +236,14 @@ public:
       // Check that the right film thickness was found
       double param = system.domain().unitCell().parameter(0);
       //double paramRef = 2.061207269;  // old value
-      double paramRef = 2.06121822708647739475e+00; // changed v1.3.4
+      double paramRef = 2.06125919113e+00; // regenerated after the mask stress correction (was 2.06121822708647739475e+00)
       double paramErr = std::abs(param - paramRef);
       if (verbose() > 0) {
          std::cout << "\nFilm thickness       = " << Dbl(param, 20, 12);
          std::cout << "\nFilm thickness error = " << Dbl(paramErr, 20, 12) ;
       }
       TEST_ASSERT(paramErr < 1.0e-5);
-      TEST_ASSERT(abs(system.mask().phiTot() - 0.8059299672) < 1.0e-5);
+      TEST_ASSERT(abs(system.mask().phiTot() - 0.8059348561) < 1.0e-5);
 
       // Check converged field is correct by comparing to ref files in in/
       UnitCell<1> unitCell; // UnitCell object to pass to FieldIo functions
@@ -261,12 +261,12 @@ public:
       // Check thermo parameters
       if (verbose() > 0) {
          std::cout << "\nFree Energy error = " 
-                   << (system.scft().fHelmholtz() - 3.80033554388);
+                   << (system.scft().fHelmholtz() - 3.80031010180);
          std::cout << "\nPressure error = " 
-                   << (system.scft().pressure() + 12.9408830685);
+                   << (system.scft().pressure() + 12.9405444065);
       }
-      TEST_ASSERT(abs(system.scft().fHelmholtz() - 3.80033554388) < 1e-5);
-      TEST_ASSERT(abs(system.scft().pressure() + 12.9408830685) < 1e-4);
+      TEST_ASSERT(abs(system.scft().fHelmholtz() - 3.80031010180) < 1e-5);
+      TEST_ASSERT(abs(system.scft().pressure() + 12.9405444065) < 1e-4);
    }
 
    void testSolve1DGrid() // solve a 1D system with an FilmEnvironment
@@ -422,7 +422,7 @@ public:
       // Check that the right film thickness was found
       double param = system.domain().unitCell().parameter(0);
       //double paramRef = 2.061207269; // old reference value
-      double paramRef = 2.06121822708647739475e+00; // changed v1.3.4
+      double paramRef = 2.06125919113e+00; // regenerated after the mask stress correction (was 2.06121822708647739475e+00)
       //double paramErr = system.domain().unitCell().parameter(0) - 2.061207269;
       double paramErr = param - paramRef;
       if (verbose() > 0) {
@@ -430,7 +430,7 @@ public:
          std::cout << "\nFilm thickness error = " << Dbl(paramErr, 20, 12);
       }
       TEST_ASSERT(abs(paramErr) < 1e-5);
-      TEST_ASSERT(abs(system.mask().phiTot() - 0.8059299672) < 1e-5);
+      TEST_ASSERT(abs(system.mask().phiTot() - 0.8059348561) < 1e-5);
 
       // Check converged field is correct by comparing to ref files in in/
       UnitCell<1> unitCell; // UnitCell object to pass to FieldIo functions
@@ -448,12 +448,12 @@ public:
       // Check thermo parameters
       if (verbose() > 0) {
          std::cout << "\nFree Energy error = " 
-                   << (system.scft().fHelmholtz() - 3.80033554388);
+                   << (system.scft().fHelmholtz() - 3.80031010180);
          std::cout << "\nPressure error = " 
-                   << (system.scft().pressure() + 12.9408830685);
+                   << (system.scft().pressure() + 12.9405444065);
       }
-      TEST_ASSERT(abs(system.scft().fHelmholtz() - 3.80033554388) < 1.0e-5);
-      TEST_ASSERT(abs(system.scft().pressure() + 12.9408830685) < 1.0e-4);
+      TEST_ASSERT(abs(system.scft().fHelmholtz() - 3.80031010180) < 1.0e-5);
+      TEST_ASSERT(abs(system.scft().pressure() + 12.9405444065) < 1.0e-4);
    }
 
    // Read parameter file to create a System object

@@ -327,8 +327,10 @@ public:
       system.compute();
 
       // Call stress and check that the result is correct
+      // (reference regenerated after the mask stress correction,
+      // previously 0.4212395769)
       TEST_ASSERT(eq(mask.stress(0),0.0));
-      TEST_ASSERT(std::abs(mask.stress(1) - 0.4212395769) < 1e-5);
+      TEST_ASSERT(std::abs(mask.stress(1) - 0.4211949121) < 1e-5);
    }
 
    void testModifyStress() // test FilmFieldGenMask::modifyStress

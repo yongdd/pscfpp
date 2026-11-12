@@ -251,7 +251,10 @@ public:
       
       // Check that the right film thickness was found
       double paramVal = system.domain().unitCell().parameter(0);
-      double paramRef = 2.06121822708647739475e+00;
+      // Reference values regenerated after the mask stress correction
+      // (exact d(phiTot)/dL instead of excludedThickness/L^2)
+      //double paramRef = 2.06121822708647739475e+00; // before
+      double paramRef = 2.06125919708e+00;
       double paramErr = std::abs(paramVal - paramRef);
       //double paramErr = system.domain().unitCell().parameter(0) - 2.061207269;
       if (verbose() > 0) {
@@ -259,12 +262,12 @@ public:
          std::cout << "\nCell parameter diff  = " << Dbl(paramErr, 12, 20);
       }
       TEST_ASSERT(paramErr < 1.0e-5);
-      TEST_ASSERT(std::abs(system.mask().phiTot() - 0.8059299672) < 1e-5);
+      TEST_ASSERT(std::abs(system.mask().phiTot() - 0.8059348567) < 1e-5);
 
       // Check converged field is correct by comparing to ref files in in/
       UnitCell<1> unitCell; // UnitCell object to pass to FieldIo functions
       DArray< DArray<double> > wFieldsCheck; // Copy of reference field
-      system.domain().fieldIo().readFieldsBasis("in/wRef1D_2.bf", 
+      system.domain().fieldIo().readFieldsBasis("in/wRef1D_2.bf",
                                                 wFieldsCheck, unitCell);
       BFieldComparison bComparison(0); // object to compare fields
       bComparison.compare(system.w().basis(), wFieldsCheck);
@@ -279,12 +282,12 @@ public:
       // Check thermo parameters
       if (verbose() > 0) {
          std::cout << "\nFree energy error = " 
-                   << (system.scft().fHelmholtz() - 3.80033554388) << "\n";
-         std::cout << "\nPressure error = " 
-                   << (system.scft().pressure() + 12.9408830685) << "\n";
+                   << (system.scft().fHelmholtz() - 3.80031009905) << "\n";
+         std::cout << "\nPressure error = "
+                   << (system.scft().pressure() + 12.9405443827) << "\n";
       }
-      TEST_ASSERT(std::abs(system.scft().fHelmholtz() - 3.80033554388) < 1e-5);
-      TEST_ASSERT(std::abs(system.scft().pressure() + 12.9408830685) < 1e-4);
+      TEST_ASSERT(std::abs(system.scft().fHelmholtz() - 3.80031009905) < 1e-5);
+      TEST_ASSERT(std::abs(system.scft().pressure() + 12.9405443827) < 1e-4);
    }
 
    // Read parameter file to create a System object
