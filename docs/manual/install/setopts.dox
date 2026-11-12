@@ -65,15 +65,15 @@ or out-of-source compilation, respectively.
 The CUDA feature enables conditional compilation of CUDA code on machines
 that have an appropriate nVidia GPU and a CUDA development kit. Compilation
 of CUDA code is disabled by default.  Compilation of CUDA code can be
-enabled or disabled by invoking a setopts script with the "-c" option,
+enabled or disabled by invoking a setopts script with the "-u" option,
 with an option parameter "1" to enable CUDA compilation or "0" to disable
 CUDA compilation. One could thus enter
 \code
-./setopts -c1
+./setopts -u1
 \endcode
 to enable CUDA compilation, or 
 \code
-./setopts -c0
+./setopts -u0
 \endcode
 to disable it.
 Executing the setopts script with the -c option from the PSCF root

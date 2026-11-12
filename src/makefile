@@ -1,6 +1,6 @@
 include config.mk
 
-.PHONY: all util pscf r1 rp test \
+.PHONY: all util pscf r1 rp pscf_1d pscf_rp test \
         clean clean-tests veryclean
 
 # ======================================================================
@@ -29,10 +29,13 @@ pscf_1d:
 	cd r1; $(MAKE) all
 
 # Build pscf_rpc and/or pscf_rpg (install in BIN_DIR)
-rp: 
+rp:
 	cd util; $(MAKE) all
 	cd pscf; $(MAKE) all
 	cd rp; $(MAKE) all
+
+# Same as rp; this is the target name used by the root makefile
+pscf_rp: rp
 
 # ======================================================================
 # Test targets
