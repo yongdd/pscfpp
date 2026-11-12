@@ -32,6 +32,7 @@ public:
 
 TEST_BEGIN(R1LinearSweepTest)
 TEST_ADD(R1LinearSweepTest, testIdsOutOfRange)
+TEST_ADD(R1LinearSweepTest, testEndsAtOne)
 TEST_END(R1LinearSweepTest)
 
 #endif

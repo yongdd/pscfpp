@@ -40,6 +40,7 @@ public:
 
 TEST_BEGIN(ScftLinearSweepTest)
 TEST_ADD(ScftLinearSweepTest, testIdsOutOfRange)
+TEST_ADD(ScftLinearSweepTest, testEndsAtOne)
 TEST_END(ScftLinearSweepTest)
 
 #endif
