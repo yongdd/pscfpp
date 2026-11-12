@@ -255,6 +255,10 @@ string parameter named "errorType":
        e = \frac{|{\bf R}}{|{\bf X}|} \quad,
     \f]
     as in Stasiak and Matsen, Eur. Phys. J. E <b> 34 </b>, 110 (2011).
+    The error is 0 if the residual vanishes (also if the state vector
+    vanishes). Classes whose state vector is not a field, such as the
+    compressors used in field theoretic simulations, divide by the
+    norm of another reference vector, as described on their pages.
 
 An iteration algorithm successfully converges if it terminates with
 \f$ e({\bf R}) < \epsilon \f$ in fewer than the maximum allowed number

@@ -309,6 +309,14 @@ namespace Rp {
    void LrAmCompressor<D,T>::outputToLog()
    {}
 
+   /*
+   * Norm of the reference vector for the relNorm error: norm of the
+   * target total concentration (1 at every grid point).
+   */
+   template <int D, class T>
+   double LrAmCompressor<D,T>::relNormReference(VectorT const &)
+   {  return std::sqrt(double(system().domain().mesh().size())); }
+
 }
 }
 #endif

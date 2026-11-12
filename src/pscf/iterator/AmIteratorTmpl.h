@@ -201,6 +201,21 @@ namespace Pscf {
       double computeError(int verbose);
 
       /**
+      * Norm of the reference vector for the "relNorm" error type.
+      *
+      * The relNorm error is the l2 norm of the residual divided by the
+      * value returned by this function. The default implementation
+      * returns the l2 norm of the state vector, as appropriate when
+      * the state vector is a field. A subclass whose state vector may
+      * vanish where the error must be meaningful (e.g., a state vector
+      * that is a change relative to the initial state) must override
+      * this function.
+      *
+      * \param state  current state vector
+      */
+      virtual double relNormReference(T const & state);
+
+      /**
       * Compute ramped prefactor of mixing parameter lambda.
       *
       * \return prefactor 1 - r^{nBasis} multiplying lambda.
@@ -435,6 +450,17 @@ namespace Pscf {
       void addEqVectors(T& v,
                         RingBuffer<T> const & basis,
                         DArray<double> coeffs);
+
+      /**
+      * Norm of a residual relative to relNormReference(state).
+      *
+      * Returns 0 if normRes is 0 (an exact solution), also if the
+      * reference norm vanishes.
+      *
+      * \param normRes  l2 norm of the residual vector
+      * \param state  state vector
+      */
+      double relativeNorm(double normRes, T const & state);
 
       // Private virtual functions with a default implementation 
 

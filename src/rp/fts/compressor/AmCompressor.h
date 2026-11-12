@@ -180,6 +180,20 @@ namespace Rp {
       */
       void outputToLog() override;
 
+      /**
+      * Norm of the reference vector for the "relNorm" error type.
+      *
+      * The state vector of a compressor is the change of the pressure
+      * field since the start of compress(), which vanishes at the first
+      * iteration. The residual is the deviation of the total monomer
+      * concentration from 1, so the reference is the target total
+      * concentration, 1 at every grid point, with norm sqrt(meshSize).
+      * The relNorm error is thus equal to the rms error.
+      *
+      * \param state  current state vector (unused)
+      */
+      double relNormReference(VectorT const & state) override;
+
    };
 
    // Explicit instantiation declarations

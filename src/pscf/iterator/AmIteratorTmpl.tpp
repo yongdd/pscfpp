@@ -669,8 +669,7 @@ namespace Pscf
          } else if (errorType == "rmsResid") {
             error = normRes/sqrt(nElements());
          } else if (errorType == "relNormResid") {
-            double normField = norm(stateTrial);
-            error = normRes/normField;
+            error = relativeNorm(normRes, stateTrial);
          } else {
             UTIL_THROW("Invalid iterator error type in parameter file.");
          }
@@ -684,8 +683,7 @@ namespace Pscf
          double rmsRes = normRes/sqrt(nElements());
    
          // Find norm of residual vector relative to state
-         double normField = norm(stateTrial);
-         double relNormRes = normRes/normField;
+         double relNormRes = relativeNorm(normRes, stateTrial);
    
          // Set error value
          if (errorType == "maxResid") {
@@ -709,6 +707,27 @@ namespace Pscf
       }
 
       return error;
+   }
+
+   /*
+   * Norm of the reference vector for the relNorm error (default).
+   */
+   template <class Iterator, class T>
+   double AmIteratorTmpl<Iterator,T>::relNormReference(T const & state)
+   {  return norm(state); }
+
+   /*
+   * Norm of the residual relative to the reference norm.
+   */
+   template <class Iterator, class T>
+   double AmIteratorTmpl<Iterator,T>::relativeNorm(double normRes,
+                                                   T const & state)
+   {
+      // An exact solution has error 0, also if the reference norm is
+      // 0. Otherwise a vanishing reference norm gives an infinite (not
+      // a NaN) error, which is not converged.
+      if (normRes == 0.0) return 0.0;
+      return normRes/relNormReference(state);
    }
 
    /*
