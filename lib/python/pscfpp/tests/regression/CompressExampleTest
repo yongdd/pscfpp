@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+
+# Run the example rpc/scf/compress/bcc with each of its parameter files
+# (param_am, param_lr and param_lram), as its run scripts do, on a copy
+# of the example. Check that the program reads the parameter file and
+# writes out/c_rf, and that the script Incompress_check.py then reports
+# a small total deviation of the concentration from 1.
+#
+# The test requires the pscf_rpc program in PATH, and is skipped if it
+# is not found.
+#
+# Run in this directory, with lib/python in PYTHONPATH. Exits with
+# status 1 if a check fails.
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+import pscfpp
+
+failures = []
+
+def run(name, test):
+   try:
+      result = test()
+      print(name + ': ' + result)
+   except Exception as e:
+      failures.append(name)
+      print(name + ': FAILED, ' + type(e).__name__ + ': ' + str(e))
+
+# Root directory of the package source tree
+testDir = os.path.dirname(os.path.abspath(__file__))
+root = os.path.abspath(os.path.join(testDir, '..', '..', '..', '..', '..'))
+example = os.path.join(root, 'examples', 'rpc', 'scf', 'compress', 'bcc')
+
+# Directory that contains the pscfpp package
+packageDir = os.path.dirname(os.path.dirname(os.path.abspath(pscfpp.__file__)))
+
+program = shutil.which('pscf_rpc')
+
+def makeTest(param):
+
+   def test():
+      if program is None:
+         return 'skipped (pscf_rpc not found)'
+      with tempfile.TemporaryDirectory() as dir:
+         for name in ['command', 'Incompress_check.py', param]:
+            shutil.copy(os.path.join(example, name), dir)
+         shutil.copytree(os.path.join(example, 'in'),
+                         os.path.join(dir, 'in'))
+         os.mkdir(os.path.join(dir, 'out'))
+
+         # Run the program
+         result = subprocess.run([program, '-d', '3', '-p', param,
+                                  '-c', 'command', '-e'],
+                                 cwd=dir, stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT,
+                                 universal_newlines=True, timeout=600)
+         if result.returncode != 0:
+            message = ''
+            for line in result.stdout.split('\n'):
+               if 'Message' in line:
+                  message = ': ' + line.strip()
+            raise RuntimeError('pscf_rpc exited with status '
+                               + str(result.returncode) + message)
+         if not os.path.isfile(os.path.join(dir, 'out', 'c_rf')):
+            raise RuntimeError('no out/c_rf written')
+
+         # Run the check script
+         env = dict(os.environ)
+         path = env.get('PYTHONPATH', '')
+         env['PYTHONPATH'] = packageDir + (os.pathsep + path if path else '')
+         result = subprocess.run([sys.executable, 'Incompress_check.py'],
+                                 cwd=dir, env=env, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True, timeout=120)
+         if result.returncode != 0:
+            raise RuntimeError('Incompress_check.py exited with status '
+                               + str(result.returncode))
+         value = float(result.stdout.split()[-1])
+         if not value < 1.0E-6:
+            raise RuntimeError('sum of deviations ' + repr(value))
+      return 'passed'
+
+   return test
+
+for param in ['param_am', 'param_lr', 'param_lram']:
+   run(param, makeTest(param))
+
+if failures:
+   sys.exit(1)
