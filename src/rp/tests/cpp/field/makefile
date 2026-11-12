@@ -39,7 +39,7 @@ clean:
 # -------------------------------------------------------------------------
 # Include dependency files
 
--include Test.d
+-include $(TEST).d
 -include $(rp_DEPS)
 -include $(pscf_DEPS)
 -include $(util_DEPS)
