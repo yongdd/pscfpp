@@ -1092,6 +1092,9 @@ namespace Pscf {
       UTIL_CHECK(d > 1);
       UTIL_CHECK(d <= 3);
       UTIL_CHECK(newGridDimensions.capacity() == (d - 1));
+      for (int i = 0; i < d - 1; ++i) {
+         UTIL_CHECK(newGridDimensions[i] > 0);
+      }
 
 
       // Obtain number of monomer types
@@ -1208,6 +1211,7 @@ namespace Pscf {
       // Check validity of expanded dimension d and newGridDimensions
       UTIL_CHECK(d == 3);
       UTIL_CHECK(newGridDimensions.capacity() == 1);
+      UTIL_CHECK(newGridDimensions[0] > 0);
 
       // Obtain number of monomer types
       int nMonomer = fields.capacity();

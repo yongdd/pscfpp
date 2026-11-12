@@ -804,8 +804,13 @@ namespace Rp {
             int d;
             in >> d;
             checkCommandInput(in, command);
-            UTIL_CHECK(d > D);
             Log::file() << Str("Expand dimension to: ") << d << "\n";
+            if (d <= D || d > 3) {
+               Log::file() << "\nError: The expanded dimension must be "
+                           << "greater than " << D << " and at most 3"
+                           << std::endl;
+               UTIL_THROW("Invalid dimension in EXPAND_RGRID_DIMENSION");
+            }
 
             // Read numbers of grid points along added dimensions
             DArray<int> newGridDimensions;
@@ -820,6 +825,14 @@ namespace Rp {
                Log::file() << newGridDimensions[i] << " ";
             }
             Log::file() << "\n";
+            for (int i = 0; i < d-D; i++) {
+               if (newGridDimensions[i] <= 0) {
+                  Log::file() << "\nError: The numbers of grid points "
+                              << "in added dimensions must be positive"
+                              << std::endl;
+                  UTIL_THROW("Invalid grid size in EXPAND_RGRID_DIMENSION");
+               }
+            }
 
             fieldIo.expandRGridDimension(inFileName, outFileName,
                                          d, newGridDimensions);
