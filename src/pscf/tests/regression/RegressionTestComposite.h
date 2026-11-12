@@ -23,6 +23,7 @@
 #include "CoreSweepTmplTest.h"
 #include "CoreAmIteratorTest.h"
 #include "CoreFhMixtureUnderflowTest.h"
+#include "CoreLuSolverSingularTest.h"
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
@@ -47,6 +48,7 @@ TEST_COMPOSITE_ADD_UNIT(CoreGroupFileTest);
 TEST_COMPOSITE_ADD_UNIT(CoreSweepTmplTest);
 TEST_COMPOSITE_ADD_UNIT(CoreAmIteratorTest);
 TEST_COMPOSITE_ADD_UNIT(CoreFhMixtureUnderflowTest);
+TEST_COMPOSITE_ADD_UNIT(CoreLuSolverSingularTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
 TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);
