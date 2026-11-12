@@ -23,6 +23,7 @@ run-quiet: $(TEST)
 clean-outputs:
 	rm -f log count 
 	rm -f $(SRC_DIR)/r1/tests/regression/out/Core/*
+	rm -f $(SRC_DIR)/r1/tests/regression/out/*
 
 clean:
 	rm -f $(TEST) 
