@@ -226,18 +226,18 @@ namespace Pscf
 
    template <typename WT> inline 
    Monomer const & Composition<WT>::monomer(int id) const
-   {  
-      UTIL_CHECK(id < nMonomer_);
-      return monomers_[id]; 
+   {
+      UTIL_CHECK(id >= 0 && id < nMonomer_);
+      return monomers_[id];
    }
 
    // Inline protected member function
 
-   template <typename WT> inline 
+   template <typename WT> inline
    Monomer& Composition<WT>::monomer(int id)
-   {  
-      UTIL_CHECK(id < nMonomer_);
-      return monomers_[id]; 
+   {
+      UTIL_CHECK(id >= 0 && id < nMonomer_);
+      return monomers_[id];
    }
 
    // Explicit instantiation declaration
