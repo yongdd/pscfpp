@@ -62,6 +62,14 @@ namespace Pscf {
       criPlan_(0),
       ccfPlan_(0),
       cciPlan_(0),
+      rcfUnalignedPlan_(0),
+      criUnalignedPlan_(0),
+      ccfUnalignedPlan_(0),
+      cciUnalignedPlan_(0),
+      rAlignment_(0),
+      kAlignment_(0),
+      cInAlignment_(0),
+      cOutAlignment_(0),
       isSetup_(false)
    {}
 
@@ -83,6 +91,10 @@ namespace Pscf {
       if (cciPlan_) {
          fftw_destroy_plan(cciPlan_);
       }
+      if (rcfUnalignedPlan_) fftw_destroy_plan(rcfUnalignedPlan_);
+      if (criUnalignedPlan_) fftw_destroy_plan(criUnalignedPlan_);
+      if (ccfUnalignedPlan_) fftw_destroy_plan(ccfUnalignedPlan_);
+      if (cciUnalignedPlan_) fftw_destroy_plan(cciUnalignedPlan_);
    }
 
    /*
@@ -136,10 +148,52 @@ namespace Pscf {
       UTIL_CHECK(meshDimensions == cFieldOut.meshDimensions());
       UTIL_CHECK(cFieldOut.capacity() == rSize_);
 
-      // Make FFTW plans (see explicit specializations in FFT.cpp)
+      // Make aligned plans and fallback plans for associated slices
       makePlans(rField, kFieldCopy_, cFieldIn, cFieldOut);
 
       isSetup_ = true;
+   }
+
+   /*
+   * Make normal plans and alignment-independent fallback plans.
+   *
+   * FFTW new-array execution requires the planning arrays' alignment.
+   * An associated field slice need not share it. Keep optimized plans for
+   * the usual allocated arrays, selecting FFTW_UNALIGNED only when needed.
+   * Both kinds are created during setup, not inside transform execution.
+   */
+   template <int D>
+   void FFT<D,CPT>::makePlans(RField<D,CPT>& rField,
+                              RFieldDft<D,CPT>& kField,
+                              CField<D,CPT>& cFieldIn,
+                              CField<D,CPT>& cFieldOut)
+   {
+      int dims[D];
+      for (int i = 0; i < D; ++i) dims[i] = meshDimensions_[i];
+      rAlignment_ = fftw_alignment_of(&rField[0]);
+      kAlignment_ = fftw_alignment_of(&kField[0][0]);
+      cInAlignment_ = fftw_alignment_of(&cFieldIn[0][0]);
+      cOutAlignment_ = fftw_alignment_of(&cFieldOut[0][0]);
+
+      unsigned int flags = FFTW_ESTIMATE;
+      rcfPlan_ = fftw_plan_dft_r2c(D, dims, &rField[0], &kField[0], flags);
+      criPlan_ = fftw_plan_dft_c2r(D, dims, &kField[0], &rField[0], flags);
+      ccfPlan_ = fftw_plan_dft(D, dims, &cFieldIn[0], &cFieldOut[0],
+                             FFTW_FORWARD, flags);
+      cciPlan_ = fftw_plan_dft(D, dims, &cFieldOut[0], &cFieldIn[0],
+                             FFTW_BACKWARD, flags);
+      flags |= FFTW_UNALIGNED;
+      rcfUnalignedPlan_ = fftw_plan_dft_r2c(D, dims, &rField[0],
+                                          &kField[0], flags);
+      criUnalignedPlan_ = fftw_plan_dft_c2r(D, dims, &kField[0],
+                                          &rField[0], flags);
+      ccfUnalignedPlan_ = fftw_plan_dft(D, dims, &cFieldIn[0],
+                                       &cFieldOut[0], FFTW_FORWARD, flags);
+      cciUnalignedPlan_ = fftw_plan_dft(D, dims, &cFieldOut[0],
+                                       &cFieldIn[0], FFTW_BACKWARD, flags);
+      UTIL_CHECK(rcfPlan_ && criPlan_ && ccfPlan_ && cciPlan_);
+      UTIL_CHECK(rcfUnalignedPlan_ && criUnalignedPlan_ &&
+                 ccfUnalignedPlan_ && cciUnalignedPlan_);
    }
 
    // Real <-> Complex Transforms
@@ -160,8 +214,11 @@ namespace Pscf {
 
       // Execute preplanned forward transform
       // (See note at top of file explaining this use of const_cast)
-      fftw_execute_dft_r2c(rcfPlan_, const_cast<double*>(&rField[0]),
-                           &kField[0]);
+      double* in = const_cast<double*>(&rField[0]);
+      bool aligned = fftw_alignment_of(in) == rAlignment_ &&
+                     fftw_alignment_of(&kField[0][0]) == kAlignment_;
+      fftw_execute_dft_r2c(aligned ? rcfPlan_ : rcfUnalignedPlan_,
+                           in, &kField[0]);
 
       // Rescale the resulting array
       double scale = 1.0/double(rSize_);
@@ -188,7 +245,10 @@ namespace Pscf {
       UTIL_CHECK(kField.meshDimensions() == meshDimensions_);
 
       // Execute preplanned inverse transform
-      fftw_execute_dft_c2r(criPlan_, &kField[0], &rField[0]);
+      bool aligned = fftw_alignment_of(&kField[0][0]) == kAlignment_ &&
+                     fftw_alignment_of(&rField[0]) == rAlignment_;
+      fftw_execute_dft_c2r(aligned ? criPlan_ : criUnalignedPlan_,
+                           &kField[0], &rField[0]);
    }
 
    /*
@@ -225,8 +285,11 @@ namespace Pscf {
 
       // Execute preplanned forward transform
       // (See note at top of file explaining this use of const_cast)
-      fftw_execute_dft(ccfPlan_, const_cast<fftw_complex*>(&rField[0]),
-                       &kField[0]);
+      fftw_complex* in = const_cast<fftw_complex*>(&rField[0]);
+      bool aligned = fftw_alignment_of(&in[0][0]) == cInAlignment_ &&
+                     fftw_alignment_of(&kField[0][0]) == cOutAlignment_;
+      fftw_execute_dft(aligned ? ccfPlan_ : ccfUnalignedPlan_,
+                       in, &kField[0]);
 
       // Rescale the resulting array
       double scale = 1.0/double(rSize_);
@@ -254,8 +317,11 @@ namespace Pscf {
 
       // Execute preplanned inverse transform
       // (See note at top of file explaining this use of const_cast)
-      fftw_execute_dft(cciPlan_, const_cast<fftw_complex*>(&kField[0]),
-                       &rField[0]);
+      fftw_complex* in = const_cast<fftw_complex*>(&kField[0]);
+      bool aligned = fftw_alignment_of(&in[0][0]) == cOutAlignment_ &&
+                     fftw_alignment_of(&rField[0][0]) == cInAlignment_;
+      fftw_execute_dft(aligned ? cciPlan_ : cciUnalignedPlan_,
+                       in, &rField[0]);
    }
 
    // Static function

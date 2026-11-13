@@ -230,6 +230,18 @@ namespace Pscf {
       /// Plan for an inverse complex-to-complex transform.
       fftw_plan cciPlan_;
 
+      /// Fallback plans for associated slices with different alignment.
+      fftw_plan rcfUnalignedPlan_;
+      fftw_plan criUnalignedPlan_;
+      fftw_plan ccfUnalignedPlan_;
+      fftw_plan cciUnalignedPlan_;
+
+      /// FFTW alignment classes of the arrays used for the normal plans.
+      int rAlignment_;
+      int kAlignment_;
+      int cInAlignment_;
+      int cOutAlignment_;
+
       /// Have array dimensions and plans been initialized?
       bool isSetup_;
 
@@ -240,29 +252,6 @@ namespace Pscf {
                      CField<D,CPT>& cFieldIn, CField<D,CPT>& cFieldOut);
 
    };
-
-   // Declarations of explicit specializations
-
-   template <>
-   void FFT<1,CPT>::makePlans(
-		            RField<1,CPT>& rField, 
-                            RFieldDft<1,CPT>& kField,
-                            CField<1,CPT>& cFieldIn, 
-                            CField<1,CPT>& cFieldOut);
-
-   template <>
-   void FFT<2,CPT>::makePlans(
-                            RField<2,CPT>& rField, 
-                            RFieldDft<2,CPT>& kField,
-                            CField<2,CPT>& cFieldIn, 
-                            CField<2,CPT>& cFieldOut);
-
-   template <>
-   void FFT<3,CPT>::makePlans(
-		            RField<3,CPT>& rField, 
-                            RFieldDft<3,CPT>& kField,
-                            CField<3,CPT>& cFieldIn, 
-                            CField<3,CPT>& cFieldOut);
 
    // Inline member functions
 
