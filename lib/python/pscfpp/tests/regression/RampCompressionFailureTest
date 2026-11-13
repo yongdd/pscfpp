@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Stop BD/MC before publishing a state whose ramp recompression failed."""
+import argparse
+import json
+import math
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--program', action='append', choices=['rpc', 'rpg'])
+parser.add_argument('--output', type=Path)
+args = parser.parse_args()
+OUT = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix='ramp-compression-'))
+OUT.mkdir(parents=True, exist_ok=True)
+MESH = 8
+MU = math.log(0.5)
+rows = []
+
+
+def grid(lines, start):
+    return [[float(x) for x in line.split()]
+            for line in lines[start:start + MESH]]
+
+
+def read_field(path):
+    lines = path.read_text().splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip() == 'mesh') + 2
+    return grid(lines, start)
+
+
+def read_frames(path):
+    lines = path.read_text().splitlines()
+    frames = []
+    for i, line in enumerate(lines):
+        if line.startswith('i ='):
+            start = next(j for j in range(i + 1, len(lines))
+                         if lines[j].strip() == 'mesh') + 2
+            frames.append(grid(lines, start))
+    return frames
+
+
+for backend in args.program or ['rpc']:
+    for simulator in ['BdSimulator', 'McSimulator']:
+        for n_step in [1, 2]:
+            for case, max_itr, change in [('failure', 1, math.log(3)),
+                                          ('converged', 100, math.log(3)),
+                                          ('zero_change', 1, 0.0)]:
+                directory = OUT / f'{backend}_{simulator}_{n_step}_{case}'
+                directory.mkdir()
+                dynamics = ('ExplicitBdStep{ mobility 0 }' if simulator == 'BdSimulator'
+                            else 'McMoveManager{ RealMove{ probability 1 sigma 0 } }')
+                (directory / 'param').write_text(f'''System{{
+ Mixture{{ nMonomer 2 monomers[ 1 1 ] nPolymer 2
+ Polymer{{ type linear nBlock 1 blocks[ 0 1 ] mu {MU:.17g} }}
+ Polymer{{ type linear nBlock 1 blocks[ 1 1 ] mu {MU:.17g} }}
+ vMonomer .01 ds .05 }}
+ Interaction{{ chi( 0 1 10 ) }} Domain{{ mesh {MESH} lattice lamellar }}
+ {simulator}{{ seed 1234 {dynamics}
+ LrCompressor{{ epsilon 1e-10 maxItr {max_itr} verbose 1 errorType max }}
+ LinearRamp{{ nParameter 1 parameters[ mu_polymer 0 {change:.17g} ] }}
+ AnalyzerManager{{ baseInterval 1
+ TrajectoryWriter{{ interval 1 outputFileName trajectory }}
+ HamiltonianAnalyzer{{ interval 1 outputFileName energy nSamplePerOutput 1 }}
+ }} }} }}
+''')
+                (directory / 'w').write_text(
+                    'format 1 0\ndim\n1\ncrystal_system\nlamellar\nN_cell_param\n1\n'
+                    'cell_param\n1\nN_monomer\n2\nmesh\n8\n' + '0 0\n' * MESH)
+                (directory / 'command').write_text(
+                    f'READ_W_RGRID w\nSIMULATE {n_step}\nWRITE_W_RGRID final_w\n'
+                    'WRITE_C_RGRID final_c\nFINISH\n')
+                result = subprocess.run(
+                    [shutil.which('pscf_' + backend), '-d', '1', '-p', 'param',
+                     '-c', 'command'], cwd=directory, capture_output=True,
+                    text=True, timeout=60)
+                log = result.stdout + result.stderr
+                (directory / 'log').write_text(log)
+                frames = read_frames(directory / 'trajectory')
+                energy = []
+                for line in (directory / 'energy.dat').read_text().splitlines():
+                    try:
+                        values = [float(x) for x in line.split()]
+                    except ValueError:
+                        continue
+                    if len(values) >= 4:
+                        energy.append(values)
+                failed = case == 'failure'
+                row = dict(backend=backend, simulator=simulator, n_step=n_step,
+                           case=case, returncode=result.returncode,
+                           frame_count=len(frames), energy_count=len(energy),
+                           subsequent_write=(directory / 'final_w').exists())
+                rows.append(row)
+                (OUT / 'results.json').write_text(json.dumps(rows, indent=2) + '\n')
+                assert (result.returncode != 0) == failed, row
+                assert len(frames) == (1 if failed else n_step + 1), row
+                # An uncaught CLI exception can discard the buffered initial
+                # energy row. It must never publish a post-ramp energy sample.
+                assert len(energy) <= 1 if failed else len(energy) == len(frames), row
+                assert row['subsequent_write'] != failed, row
+                if failed:
+                    assert 'Compression failed after a ramp step' in log, row
+                    assert not (directory / 'final_c').exists(), row
+                for step, frame in enumerate(frames):
+                    increment = change * step / n_step
+                    pressure = math.log((math.exp(increment) + 1.0) / 2.0)
+                    for point in frame:
+                        assert max(abs(w - pressure) for w in point) < 1e-8, row
+                        density = sum(math.exp(MU + delta - w)
+                                      for delta, w in zip([increment, 0.0], point))
+                        assert abs(density - 1.0) < 1e-8, row
+                for step, sample in enumerate(energy):
+                    increment = change * step / n_step
+                    pressure = math.log((math.exp(increment) + 1.0) / 2.0)
+                    expected_h = 100.0 * (-1.0 - pressure + 2.5)
+                    assert sample[0] == step, row
+                    # HamiltonianAnalyzer writes eight significant digits.
+                    assert abs(sample[-1] - expected_h) < 5e-6, row
+                if not failed:
+                    c = read_field(directory / 'final_c')
+                    pressure = math.log((math.exp(change) + 1.0) / 2.0)
+                    expected_c = [math.exp(MU + change - pressure),
+                                  math.exp(MU - pressure)]
+                    for point in c:
+                        assert max(abs(a - b) for a, b in zip(point, expected_c)) < 1e-8, row
+                print(json.dumps(row), flush=True)
+
+print(f'Passed {len(rows)} ramp compression and sampling cases.')

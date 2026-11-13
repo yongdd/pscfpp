@@ -209,7 +209,9 @@ namespace Rp {
       Simulator<D,T>::compressor().clearCache();
       int compress = Simulator<D,T>::compressor().compress();
       if (compress != 0) {
-         Log::file() << "Warning: compressor failed after a ramp step\n";
+         Simulator<D,T>::clearData();
+         Simulator<D,T>::system().clearCFields();
+         UTIL_THROW("Compression failed after a ramp step; simulation cannot continue");
       }
       if (!Simulator<D,T>::system().c().hasData()) {
          Simulator<D,T>::system().compute();
@@ -260,10 +262,7 @@ namespace Rp {
          bool converged;
          converged = bdStep().step();
 
-         // Accept step iff compressor converged
-         if (converged){
-            iStep_++;
-         } else {
+         if (!converged) {
             Log::file() << "Step: "<< iTotalStep_
                         << " failed to converge" << "\n";
          }
@@ -274,6 +273,11 @@ namespace Rp {
          if (Simulator<D,T>::hasRamp()) {
             Simulator<D,T>::ramp().setParameters(iTotalStep_ + 1);
             updateState();
+         }
+
+         // Count the step only after any ramp recompression succeeds.
+         if (converged) {
+            iStep_++;
          }
 
          // Analysis (if any) of an accepted step
