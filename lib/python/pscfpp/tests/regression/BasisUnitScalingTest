@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Regressions for length-unit invariant basis and S(q).
+
+Uses constant fields and an exact cosine spectrum, with integer shell membership
+as an independent oracle. Outputs are confined to a temporary/selected directory.
+"""
+import argparse
+import json
+import math
+from pathlib import Path
+import subprocess
+import tempfile
+
+T = Path(__file__).resolve().parents[5]
+
+def verify(out, programs):
+    out.mkdir(parents=True, exist_ok=True)
+    rows = []
+
+    def run(work, backend, dim):
+        with (work/'run.log').open('w') as log:
+            p = subprocess.run([str(T/'bin'/('pscf_'+backend)), '-d', str(dim),
+                                '-p', 'param', '-c', 'commands'], cwd=work,
+                               stdout=log, stderr=subprocess.STDOUT, timeout=45)
+        return p.returncode
+
+    for backend in programs:
+        for length in [1., .01, .001, .0001]:
+            for group in ['p_6_m_m', None]:
+                work = out/f'{backend}_basis_{length}_{group}'
+                work.mkdir(exist_ok=True)
+                group_param = 'groupName '+group if group else ''
+                (work/'param').write_text(f'''System{{
+     Mixture{{ nMonomer 2
+     monomers[ {length} {length} ]
+     nPolymer 1
+     Polymer{{ type linear nBlock 2 blocks[ 0 0.5 1 0.5 ] phi 1.0 }}
+     ds 0.05 }}
+     Interaction{{ chi( 1 0 0.0 ) }}
+     Domain{{ mesh 24 24 lattice hexagonal {group_param} }}
+    }}
+    ''')
+                gh = 'group_name\n '+group+'\n' if group else ''
+                (work/'w.rf').write_text(f'''format 1 0
+    dim
+     2
+    crystal_system
+     hexagonal
+    N_cell_param
+     1
+    cell_param
+     {length}
+    {gh}N_monomer
+     2
+    mesh
+     24 24
+    '''+'0.0 0.0\n'*576)
+                (work/'commands').write_text('READ_W_RGRID w.rf\nCOMPUTE\nWRITE_C_RGRID c.rf\nWRITE_THERMO thermo\nFINISH\n')
+                row = dict(kind='basis', backend=backend, length=length, group=group, rc=run(work,backend,2))
+                if (work/'c.rf').exists():
+                    data=(work/'c.rf').read_text().splitlines()[-576:]
+                    assert len(data) == 576 and all(len(line.split()) == 2 for line in data)
+                    assert all(math.isfinite(float(v)) for line in data for v in line.split())
+                    row['concentration_error']=max(abs(float(v)-.5) for line in data for v in line.split())
+                rows.append(row)
+                print(json.dumps(row), flush=True)
+
+    (out/'results.json').write_text(json.dumps(rows,indent=2)+'\n')
+
+    for row in rows:
+        assert row['rc'] == 0, row
+        if row['kind'] == 'basis':
+            assert row.get('concentration_error', float('inf')) < 1e-12, row
+        else:
+            assert row.get('observed_shells') == row.get('exact_shells') == 32, row
+            assert row['wave_error'] < 1e-7, row
+            assert row['max_shell_error'] < 1e-6, row
+    print('All scaled-cell symmetry and structure-factor cases passed.')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--program', action='append', choices=['rpc', 'rpg'])
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    programs = args.program or ['rpc']
+    if args.output:
+        verify(args.output.resolve(), programs)
+    else:
+        with tempfile.TemporaryDirectory(prefix='basisunitscalingtest-') as work:
+            verify(Path(work), programs)

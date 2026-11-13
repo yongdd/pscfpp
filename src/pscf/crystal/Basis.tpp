@@ -14,6 +14,7 @@
 #include <pscf/crystal/UnitCell.h>
 #include <pscf/crystal/SpaceGroup.h>
 #include <pscf/crystal/shiftToMinimum.h>
+#include <pscf/crystal/waveNorm.h>
 #include <pscf/mesh/Mesh.h>
 #include <pscf/mesh/MeshIterator.h>
 #include <util/signal/Signal.h>
@@ -26,6 +27,14 @@
 #include <fstream>
 
 namespace Pscf {
+
+   namespace {
+      // Cell headers retain eleven significant digits. Allow the relative
+      // metric error of a serialized symmetry angle, while keeping the
+      // comparison independent of length units. Minimum-image selection
+      // uses its own tighter tolerance and is unchanged by this value.
+      double const basisNormTolerance = 1.0E-10;
+   }
 
    /*
    * Constructor.
@@ -201,7 +210,6 @@ namespace Pscf {
       double Gsq_max;
       double phase_diff;
       const double twoPi = 2.0*Constants::Pi;
-      const double epsilon = 1.0E-8;
       IntVec<D> meshDimensions = mesh().dimensions();
       IntVec<D> rootVecMin;  // Min indices for root of this star
       IntVec<D> rootVecStd;  // Std indices for root of this star
@@ -376,7 +384,7 @@ namespace Pscf {
             newList = true;
          } else {
             Gsq = waves_[i].sqNorm;
-            if (Gsq > Gsq_max + epsilon) {
+            if (!equalWaveNorm(Gsq, Gsq_max, basisNormTolerance)) {
                Gsq_max = Gsq;
                bunchEnd = i;
                bunchSize = bunchEnd - bunchBegin;
@@ -395,8 +403,9 @@ namespace Pscf {
                wave.indicesMin = waves_[j].indicesMin;
                wave.sqNorm = waves_[j].sqNorm;
                if (j > bunchBegin) {
-                  UTIL_CHECK( std::abs(wave.sqNorm-waves_[j].sqNorm)
-                                 < 2.0*epsilon );
+                  UTIL_CHECK(equalWaveNorm(wave.sqNorm,
+                                            waves_[bunchBegin].sqNorm,
+                                            basisNormTolerance));
                }
                bunch.insert(wave);
             }
@@ -438,7 +447,8 @@ namespace Pscf {
                   vec = rootVecMin*group[j];
 
                   // Check that rotated vector has the same norm as root
-                  UTIL_CHECK(std::abs(Gsq - unitCell().ksq(vec)) < epsilon);
+                  UTIL_CHECK(equalWaveNorm(Gsq, unitCell().ksq(vec),
+                                            basisNormTolerance));
 
                   // Initialize BWave object associated with rotated wave
                   wave.sqNorm = Gsq;
@@ -1059,7 +1069,7 @@ namespace Pscf {
          // Check sqNorm
          v = waves_[iw].indicesMin;
          Gsq = unitCell().ksq(v);
-         if (std::abs(Gsq - waves_[iw].sqNorm) > 1.0E-8) {
+         if (!equalWaveNorm(Gsq, waves_[iw].sqNorm, basisNormTolerance)) {
             std::cout << "\n";
             std::cout << "Incorrect sqNorm:" << "\n"
                       << "wave.indicesMin = " << "\n"
