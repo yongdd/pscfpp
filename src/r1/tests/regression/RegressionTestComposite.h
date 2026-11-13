@@ -29,6 +29,8 @@
 
 #include "MeshTransformBoundsTest.h"
 
+#include "DomainResizeTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreMixtureTest);
 TEST_COMPOSITE_ADD_UNIT(R1IteratorTest);
@@ -48,6 +50,7 @@ TEST_COMPOSITE_ADD_UNIT(R1SweepCellParamTest);
 TEST_COMPOSITE_ADD_UNIT(FieldReadTransactionTest);
 TEST_COMPOSITE_ADD_UNIT(DerivedOutputValidityTest);
 TEST_COMPOSITE_ADD_UNIT(MeshTransformBoundsTest);
+TEST_COMPOSITE_ADD_UNIT(DomainResizeTest);
 TEST_COMPOSITE_END
 
 #endif
