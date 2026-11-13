@@ -49,6 +49,8 @@
 
 #include "DiluteThermodynamicsTest.h"
 
+#include "SimultaneousChiRampTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
 TEST_COMPOSITE_ADD_UNIT(FieldIoRegressionTest);
@@ -94,6 +96,7 @@ TEST_COMPOSITE_ADD_UNIT(ScftNyquistGroupTest);
 TEST_COMPOSITE_ADD_UNIT(FtsLrNyquistTest);
 TEST_COMPOSITE_ADD_UNIT(FtsLrResponseTest);
 TEST_COMPOSITE_ADD_UNIT(DiluteThermodynamicsTest);
+TEST_COMPOSITE_ADD_UNIT(SimultaneousChiRampTest);
 TEST_COMPOSITE_END
 
 #endif

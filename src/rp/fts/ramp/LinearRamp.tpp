@@ -71,19 +71,25 @@ namespace Rp {
       // Update the system parameter values
       double newVal;
       bool hasPhi = false;
+      bool hasChi = false;
       for (int i = 0; i < nParameter_; ++i) {
          newVal = parameters_[i].initial() + s*parameters_[i].change();
          parameters_[i].update(newVal);
 
-         // Update chiEvals and chiEvecs if parameter is chi
+         // A simultaneous chi ramp is valid as a complete matrix, not
+         // necessarily after each individual entry has been changed.
          if (parameters_[i].type() == "chi") {
-            Ramp<D,T>::simulator().analyzeChi();
+            hasChi = true;
          }
 
          if (parameters_[i].type() == "phi_polymer" ||
              parameters_[i].type() == "phi_solvent")
          {  hasPhi = true; }
 
+      }
+
+      if (hasChi) {
+         Ramp<D,T>::simulator().analyzeChi();
       }
 
       // If every species is closed, the changes in volume fractions
