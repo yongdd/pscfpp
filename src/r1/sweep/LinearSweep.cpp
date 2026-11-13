@@ -89,7 +89,7 @@ namespace R1 {
    }
 
    void LinearSweep::outputSummary(std::ostream& out)
-   {}
+   {  Sweep::outputSummary(out); }
 
 }
 }

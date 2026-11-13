@@ -156,12 +156,30 @@ public:
       TEST_ASSERT(std::abs(phi0 - 0.95/1.0000005) < 1.0E-13);
    }
 
+   void testSummaryRows()
+   {
+      printMethod(TEST_FUNC);
+      openLogFile("out/R1LinearSweepSummary.log");
+      TEST_ASSERT(sweepMessage("chi 0 1 0.5") == "");
+      std::istringstream in(fileContents("out/R1LinearSweepIds_log"));
+      int index, count = 0;
+      double coordinate, freeEnergy, pressure;
+      while (in >> index >> coordinate >> freeEnergy >> pressure) {
+         TEST_ASSERT(index == count);
+         TEST_ASSERT(std::abs(coordinate - 0.5*count) < 1.0E-12);
+         TEST_ASSERT(std::isfinite(freeEnergy) && std::isfinite(pressure));
+         ++count;
+      }
+      TEST_ASSERT(count == 3);
+   }
+
 };
 
 TEST_BEGIN(R1LinearSweepTest)
 TEST_ADD(R1LinearSweepTest, testIdsOutOfRange)
 TEST_ADD(R1LinearSweepTest, testEndsAtOne)
 TEST_ADD(R1LinearSweepTest, testClosedPhiSum)
+TEST_ADD(R1LinearSweepTest, testSummaryRows)
 TEST_END(R1LinearSweepTest)
 
 #endif
