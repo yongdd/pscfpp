@@ -66,6 +66,10 @@ namespace Pscf {
    const
    {
 
+      for (int i = 0; i < D; ++i) {
+         UTIL_CHECK(dimensions[i] > 0);
+      }
+
       // ---------------------------------------------------------------
       // Check compatibility of mesh dimensions & translations
       // ---------------------------------------------------------------
@@ -117,39 +121,31 @@ namespace Pscf {
       // Check compatibility of mesh dimensions & point group operations
       // ---------------------------------------------------------------
 
-      // Identify pairs of directions that are related by point group ops
-      FMatrix<bool, D, D> areRelated;
+      // The image of one mesh step in direction j has coordinate
+      // R(i,j)/dimensions[j] in direction i. It is a mesh point iff
+      // dimensions[i]*R(i,j) is divisible by dimensions[j]. Cancel the
+      // gcd first, avoiding overflow in that product (or abs(R(i,j))).
       for (int i = 0; i < D; ++i) {
          for (int j = 0; j < D; ++j) {
-            areRelated(i, j) = false;
-         }
-         areRelated(i, i) = true;
-      }
-      for (int k = 0; k < size(); ++k) {
-         for (int i = 0; i < D; ++i) {
-            for (int j = 0; j < D; ++j) {
-               if (i != j) {
-                  if ( (*this)[k].R(i,j) != 0) {
-                     areRelated(i, j) = true;
-                     areRelated(j, i) = true;
-                  }
-               }
+            int a = dimensions[i];
+            int b = dimensions[j];
+            while (b != 0) {
+               int remainder = a % b;
+               a = b;
+               b = remainder;
             }
-         }
-      }
-
-      // Check if mesh dimensions are equal for related directions
-      for (int i = 0; i < D; ++i) {
-         for (int j = 0; j < i; ++j) {
-            if (areRelated(i,j) && (dimensions[i] != dimensions[j])) {
-               Log::file() 
-                 << "\n"
-                 << "Mesh dimensions incompatible with the space group - \n"
-                 << "Unequal dimensions for related directions:\n"
-                 << "  dimensions[" << i << "] = " << dimensions[i] << "\n"
-                 << "  dimensions[" << j << "] = " << dimensions[j] 
-                 << "\n\n";
-               UTIL_THROW("Error: Mesh not incompatible with space group");
+            int divisor = dimensions[j] / a;
+            for (int k = 0; k < size(); ++k) {
+               if ((*this)[k].R(i,j) % divisor != 0) {
+                  Log::file()
+                    << "\nMesh dimensions incompatible with the space group:\n"
+                    << "  operation " << k << ", R(" << i << "," << j
+                    << ") = " << (*this)[k].R(i,j) << "\n"
+                    << "  dimensions[" << i << "] = " << dimensions[i] << "\n"
+                    << "  dimensions[" << j << "] = " << dimensions[j]
+                    << "\n  The image of a mesh step is not a mesh point.\n\n";
+                  UTIL_THROW("Mesh not compatible with space group");
+               }
             }
          }
       }

@@ -66,6 +66,8 @@
 
 #include "IdentityGroupReloadTest.h"
 
+#include "AnisotropicMirrorMeshTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -113,6 +115,7 @@ TEST_COMPOSITE_ADD_UNIT(WaveShellScaleTest);
 TEST_COMPOSITE_ADD_UNIT(WaveShellScaleGpuTest);
 #endif
 TEST_COMPOSITE_ADD_UNIT(IdentityGroupReloadTest);
+TEST_COMPOSITE_ADD_UNIT(AnisotropicMirrorMeshTest);
 TEST_COMPOSITE_END
 
 #endif
