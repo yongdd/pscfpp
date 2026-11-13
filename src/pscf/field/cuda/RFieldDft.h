@@ -201,32 +201,57 @@ namespace Pscf {
    void RFieldDft<D,CUT>::serialize(Archive& ar, 
 		                            const unsigned int version)
    {
-      int capacity;
-      if (Archive::is_saving()) {
-         capacity = capacity_;
-      }
+      int capacity = Archive::is_saving() ? capacity_ : 0;
       ar & capacity;
+      UTIL_CHECK(capacity >= 0);
       if (Archive::is_loading()) {
-         if (!isAllocated()) {
-            if (capacity > 0) {
-               allocate(capacity);
-            }
-         } else {
-            if (capacity != capacity_) {
-               UTIL_THROW("Inconsistent Field capacities");
-            }
+         if (isAllocated()) {
+            UTIL_CHECK(capacity == capacity_);
          }
       }
 
-      if (isAllocated()) {
-         HostSendArray<cudaComplex,CUT> tempData(capacity);
-         tempData = this; // copy this object's data from device to host
-         for (int i = 0; i < capacity_; ++i) {
+      HostSendArray<cudaComplex,CUT> tempData;
+      if (capacity > 0) {
+         tempData.allocate(capacity);
+         if (Archive::is_saving()) {
+            tempData = *this;
+         }
+         for (int i = 0; i < capacity; ++i) {
             ar & tempData[i].x;
             ar & tempData[i].y;
          }
       }
-      ar & meshDimensions_;
+      IntVec<D> dimensions(0);
+      if (Archive::is_saving() && capacity > 0) {
+         dimensions = meshDimensions_;
+      }
+      ar & dimensions;
+      if (Archive::is_loading()) {
+         // Reconstruct the Fourier mesh from its real-space dimensions,
+         // without adding a redundant member to the archive record.
+         IntVec<D> dftDimensions(0);
+         int size = capacity > 0 ? 1 : 0;
+         for (int i = 0; i < D; ++i) {
+            if (capacity > 0) {
+               UTIL_CHECK(dimensions[i] > 0);
+               dftDimensions[i] = i == D-1 ? dimensions[i]/2 + 1
+                                          : dimensions[i];
+               UTIL_CHECK(size <= capacity / dftDimensions[i]);
+               size *= dftDimensions[i];
+            } else {
+               UTIL_CHECK(dimensions[i] == 0);
+            }
+         }
+         UTIL_CHECK(size == capacity);
+         if (capacity > 0) {
+            if (!isAllocated()) {
+               allocate(dimensions);
+            }
+            *this = tempData;
+         }
+         meshDimensions_ = dimensions;
+         dftDimensions_ = dftDimensions;
+      }
    }
 
 } // namespace Pscf
