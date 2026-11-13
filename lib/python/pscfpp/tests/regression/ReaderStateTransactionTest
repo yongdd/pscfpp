@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+"""Reader replacement, rollback and native interoperability regressions.
+
+Run with lib/python on PYTHONPATH. --program rpc is the default; repeat it
+with --program rpg to test CUDA in an allocated GPU environment. --output DIR
+retains all inputs, command logs and measurements. No installed data is changed.
+"""
+
+import argparse
+import io
+import json
+import math
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import traceback
+
+from pscfpp.field import Field
+from pscfpp.output import State, Thermo
+
+
+PREFIX = """format 1 0
+dim
+1
+crystal_system
+lamellar
+N_cell_param
+1
+cell_param
+1
+"""
+HEADER = PREFIX + "N_monomer\n2\nmesh\n8\n"
+PARAM = """System{
+ Mixture{
+  nMonomer 2
+  monomers[ 1 1 ]
+  nPolymer 2
+  Polymer{ type linear nBlock 1 blocks[ 0 1 ] phi .5 }
+  Polymer{ type linear nBlock 1 blocks[ 1 1 ] phi .5 }
+  ds .05
+ }
+ Interaction{ chi( 0 1 10 ) }
+ Domain{ mesh 8 lattice lamellar }
+}
+"""
+MINIMAL_THERMO = """fHelmholtz 1
+pressure 2
+
+polymers:
+             phi                 mu
+    0        1                   3
+
+"""
+
+
+def same_field(left, right):
+    assert left.type == right.type
+    assert left.header == right.header
+    assert left.data == right.data
+
+
+def check_field_replacement(folder):
+    folder.mkdir(parents=True)
+    mesh = PREFIX + "N_monomer\n2\nmesh\n4\n"
+    grouped = PREFIX + "group_name\nP_-1\nN_monomer\n2\n"
+    fixtures = [
+        ("basis", "basis", grouped + "N_basis\n3\n"
+         "0.5 0.5 0 1\n0.125 -0.25 1 2\n0 0 2 1\n"),
+        ("rgrid", "rgrid", mesh + "1 2\n3 4\n5 6\n7 8\n"),
+        ("kgrid", "kgrid", mesh + "+0 1 0 2 0\n"
+         "1 .25 -.5 .125 .25\n2 0 0 0 0\n"),
+        ("fd1d", "fd1d", "nx 3\nnm 2\n"
+         "0 .125 .25\n1 .375 .5\n2 .625 .75\n"),
+        ("grouped_rgrid", "rgrid", grouped + "mesh\n4\n"
+         "1 2\n3 4\n5 6\n3 4\n"),
+        ("new_shape", "rgrid", PREFIX.replace("cell_param\n1\n",
+         "cell_param\n2\n") + "N_monomer\n1\nmesh\n3\n3\n-4\n5\n"),
+    ]
+    reused = None
+    for name, expected_type, text in fixtures:
+        filename = folder / name
+        filename.write_text(text)
+        fresh = Field(str(filename))
+        assert fresh.type == expected_type, (name, fresh.type)
+        if reused is None:
+            reused = Field(str(filename))
+        # Repeat the read as well as switching format, shape and group header.
+        for unused in range(2):
+            with filename.open() as stream:
+                reused.read(stream)
+            same_field(reused, fresh)
+        copy = folder / (name + ".copy")
+        reused.write(str(copy))
+        same_field(Field(str(copy)), fresh)
+    return {"formats": len(fixtures), "replacement_reads": 2*len(fixtures)}
+
+
+def check_thermo_replacement(folder):
+    folder.mkdir(parents=True)
+    inputs = Path(__file__).resolve().parent / "in"
+    # Existing native reports exercise optional external energy, solvents,
+    # lattice data, ordinary/environment stress, and R1 homogeneous data.
+    rich = [
+        ("film", str(Thermo(str(inputs / "thermo_film")))),
+        ("solvent", str(Thermo(str(inputs / "thermo_twice")))),
+        ("homogeneous", str(State(str(inputs / "state_homo0")).thermo)),
+    ]
+    optional = ("fIdeal", "fInter", "fExt", "solvents", "cellParams",
+                "homogeneous", "homogeneousSpecies", "homogeneousSpeciesHeader",
+                "stress", "environmentStress")
+    reused = Thermo()
+    for name, text in rich:
+        reused.read(io.StringIO(text))
+        assert any(getattr(reused, key) is not None for key in optional)
+        fresh = Thermo()
+        fresh.read(io.StringIO(MINIMAL_THERMO))
+        reused.read(io.StringIO(MINIMAL_THERMO))
+        assert str(reused) == str(fresh)
+        assert all(getattr(reused, key) is None for key in optional)
+        path = folder / (name + ".thermo")
+        reused.write(str(path))
+        assert str(Thermo(str(path))) == str(fresh)
+    return {"optional_section_removals": len(rich)}
+
+
+def rejected_read_preserves(value, text):
+    before = str(value)
+    try:
+        value.read(io.StringIO(text))
+    except Exception:
+        pass
+    else:
+        raise AssertionError("Malformed input was accepted")
+    assert str(value) == before, "Failed read changed previous contents"
+
+
+def check_rollback(folder):
+    folder.mkdir(parents=True)
+    path = folder / "valid_field"
+    path.write_text(HEADER + "1 2\n"*8)
+    value = Field(str(path))
+    invalid_fields = [
+        "format 2 0\ndim\n2\n",  # changes header before premature EOF
+        "not_a_field\n",
+        HEADER + "1 2\n3\n",  # inconsistent row widths
+        HEADER + "0.0 1 0 2 0\n1 0 0 0 0\n",  # noninteger Fourier index
+    ]
+    for text in invalid_fields:
+        rejected_read_preserves(value, text)
+    inputs = Path(__file__).resolve().parent / "in"
+    thermo = Thermo(str(inputs / "thermo_film"))
+    invalid_thermo = [
+        "fHelmholtz 999\npressure invalid\n",
+        "fHelmholtz 999\npressure 1\n\n",  # missing required polymers
+        MINIMAL_THERMO.replace("fHelmholtz 1", "fHelmholtz 999")
+        + "stress:\ninvalid 2\n\n",
+    ]
+    for text in invalid_thermo:
+        rejected_read_preserves(thermo, text)
+    return {"field_rejections": len(invalid_fields),
+            "thermo_rejections": len(invalid_thermo)}
+
+
+def difference(a, b):
+    assert len(a) == len(b)
+    assert all(len(x) == len(y) for x, y in zip(a, b))
+    return max(abs(x-y) for aa, bb in zip(a, b) for x, y in zip(aa, bb))
+
+
+def check_native(program, folder):
+    binary = shutil.which("pscf_" + program)
+    if binary is None:
+        binary = Path(__file__).resolve().parents[5] / "bin" / ("pscf_" + program)
+    binary = str(Path(binary).resolve())
+    folder.mkdir(parents=True)
+
+    def run(name, field, external=None, stress=False):
+        work = folder / name
+        work.mkdir()
+        (work / "param").write_text(PARAM)
+        (work / "w").write_text(field)
+        command = "READ_W_RGRID w\n"
+        if external is not None:
+            (work / "h").write_text(external)
+            command += "READ_H_RGRID h\n"
+        command += ("COMPUTE\nWRITE_W_RGRID native_w\nWRITE_C_RGRID c\n"
+                    "WRITE_THERMO thermo\n")
+        if stress:
+            command += "WRITE_STRESS thermo\n"
+        (work / "command").write_text(command + "FINISH\n")
+        result = subprocess.run([binary, "-d", "1", "-p", "param", "-c", "command"],
+                                cwd=work, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, timeout=40)
+        (work / "log").write_text(result.stdout)
+        assert result.returncode == 0, (name, result.returncode, result.stdout[-1500:])
+        return work
+
+    zero = HEADER + "0 0\n"*8
+    cosine = HEADER + "".join("%.17g %.17g\n" %
+        (math.cos(2*math.pi*i/8), -math.cos(2*math.pi*i/8)) for i in range(8))
+    old = run("first", zero, HEADER + "1 2\n"*8, True)
+    new = run("second", cosine)
+    fresh = Field(str(new / "native_w"))
+    reused = Field(str(old / "native_w"))
+    with (new / "native_w").open() as stream:
+        reused.read(stream)
+    same_field(reused, fresh)
+    assert len(reused.data) == 8
+    reused.write(str(folder / "reused.w"))
+    fresh.write(str(folder / "fresh.w"))
+    actual = run("reused", (folder / "reused.w").read_text())
+    control = run("fresh", (folder / "fresh.w").read_text())
+    old_c, new_c = Field(str(old / "c")).data, Field(str(new / "c")).data
+    assert difference(old_c, new_c) > .1, "Probe did not change concentration"
+    reused_error = difference(Field(str(actual / "c")).data, new_c)
+    fresh_error = difference(Field(str(control / "c")).data, new_c)
+    assert reused_error < 1e-11, reused_error
+    assert fresh_error < 1e-11, fresh_error
+
+    thermo = Thermo(str(old / "thermo"))
+    assert thermo.fExt == 1.5 and thermo.stress is not None
+    with (new / "thermo").open() as stream:
+        thermo.read(stream)
+    expected = Thermo(str(new / "thermo"))
+    assert str(thermo) == str(expected)
+    assert thermo.fExt is None and thermo.stress is None
+    energy_error = abs(thermo.fHelmholtz - thermo.fIdeal - thermo.fInter)
+    assert energy_error < 1e-10, energy_error  # native output has11 decimal digits
+    thermo.write(str(folder / "reused.thermo"))
+    assert str(Thermo(str(folder / "reused.thermo"))) == str(expected)
+    return {"cli_cases": 4, "reused_concentration_error": reused_error,
+            "fresh_concentration_error": fresh_error, "energy_sum_error": energy_error}
+
+
+def execute(folder, programs):
+    folder.mkdir(parents=True, exist_ok=True)
+    tests = [("field_replacement", check_field_replacement),
+             ("thermo_replacement", check_thermo_replacement),
+             ("rollback", check_rollback)]
+    tests += [("native_" + program,
+               lambda path, program=program: check_native(program, path))
+              for program in programs]
+    results = {}
+    for name, test in tests:
+        try:
+            results[name] = {"status": "passed", "measurements": test(folder / name)}
+            print(name + ": passed", flush=True)
+        except Exception:
+            results[name] = {"status": "failed", "traceback": traceback.format_exc()}
+            print(name + ": FAILED\n" + results[name]["traceback"], flush=True)
+    (folder / "results.json").write_text(json.dumps(results, indent=2) + "\n")
+    return 0 if all(r["status"] == "passed" for r in results.values()) else 1
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--program", action="append", choices=("rpc", "rpg"))
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    programs = list(dict.fromkeys(args.program or ["rpc"]))
+    if args.output is not None:
+        return execute(args.output.resolve(), programs)
+    with tempfile.TemporaryDirectory(prefix="pscf-reader-") as name:
+        return execute(Path(name), programs)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -213,10 +213,17 @@ class Thermo:
    #
    # This function reads a thermo block from a file that is open for 
    # reading and stores the property values in this Thermo object. 
+   # A successful read replaces all properties, including absent optional
+   # blocks. An unsuccessful read leaves the previous contents unchanged.
    #
    # \param file  an open-file object.
    #
    def read(self, file):
+      parsed = Thermo()
+      parsed._read(file)
+      self.__dict__.update(parsed.__dict__)
+
+   def _read(self, file):
       line = self.skipEmptyLine(file)
 
       # Read fHelmholtz and pressure (required)

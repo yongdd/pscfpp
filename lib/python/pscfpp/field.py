@@ -130,11 +130,22 @@ class Field:
    # This function reads the passed-in open-file object line
    # by line and update the read items into instance
    # variables. The reading stops when all lines in file are
-   # read.
+   # read. A successful read replaces the previous file; an unsuccessful
+   # read leaves the previous contents unchanged.
    #
    # \param openFile  a file object, open for reading
    #
    def read(self, openFile):
+      parsed = Field.__new__(Field)
+      parsed.data = []
+      parsed.header = {}
+      parsed.type = ''
+      parsed._read(openFile)
+      self.data = parsed.data
+      self.header = parsed.header
+      self.type = parsed.type
+
+   def _read(self, openFile):
       line = openFile.readline()
       l = line.split()
       if l[0] == 'format':
