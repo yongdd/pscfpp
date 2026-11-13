@@ -234,7 +234,9 @@ namespace Pscf {
       // species loses its relative precision when its phi is tiny (e.g.
       // 2e-9 at the edge of a strongly segregated interface), and then
       // the residual cannot reach the tolerance; an absent species
-      // cannot take the role at all.
+      // cannot take the role at all. Reconsider this choice at each
+      // Newton iteration, since the initially largest species can
+      // become dilute as the composition changes.
       int mDep = -1;
       for (int m = 0; m < nMolecule_; ++m) {
          if (!isAbsent_[m] && (mDep < 0 || phi[m] > phi[mDep])) {
@@ -268,7 +270,7 @@ namespace Pscf {
       }
       UTIL_CHECK(sum <= 1.0);
       phi_[mDep] = 1.0 - sum;
-      lnPhi_[mDep] = log(phi_[mDep]);
+      lnPhi_[mDep] = std::log1p(-sum);
       computeC();
       hasComposition_ = true;
 
@@ -301,6 +303,28 @@ namespace Pscf {
       int t1, t2; // monomer type indices
 
       for (int it = 0; it < 50; ++it) {
+
+         // Change coordinates only between Newton steps. The xi column
+         // moves with mDep; every other present species keeps its stored
+         // ln(phi), including finite logs whose fractions underflow to 0.
+         int largest = mDep;
+         for (int m = 0; m < nMolecule_; ++m) {
+            if (!isAbsent_[m] && phi_[m] > phi_[largest]) largest = m;
+         }
+         if (largest != mDep) {
+            mDep = largest;
+            sum = 0.0;
+            for (int m = 0; m < nMolecule_; ++m) {
+               if (m != mDep) sum += phi_[m];
+            }
+            phi_[mDep] = 1.0 - sum;
+            lnPhi_[mDep] = std::log1p(-sum);
+            computeC();
+            computeMuFromLnPhi(interaction, xi);
+            adjustXi(mu, xi);
+            computeResidual(mu, error);
+            if (error < epsilon) return;
+         }
 
          // Compute matrix of derivative dWdC (C = monomer fraction)
          interaction.computeDwDc(c_, dWdC_);
@@ -403,7 +427,7 @@ namespace Pscf {
          for (int j = 0; j < 30; ++j) {
 
             // Update volume fractions (those of absent species stay 0)
-            double sum = 0.0;
+            sum = 0.0;
             for (m1 = 0; m1 < nMolecule_; ++m1) {
                if (m1 == mDep || isAbsent_[m1]) continue;
                lnPhi_[m1] = lnPhiOld_[m1] - dX_[m1];
@@ -434,7 +458,7 @@ namespace Pscf {
 
          }
          if (inRange) {
-            lnPhi_[mDep] = log(phi_[mDep]);
+            lnPhi_[mDep] = std::log1p(-sum);
             xi = xi - dX_[mDep];
          } else {
             UTIL_THROW("Volume fractions remain out of range");

@@ -107,6 +107,11 @@ namespace Pscf {
       /**
       * Compute composition from chemical potentials.
       *
+      * Newton iteration uses logarithmic fractions for independent species.
+      * The largest present fraction is reselected between steps to enforce
+      * incompressibility without subtractive loss of dilute fractions.
+      * Species with mu = -infinity remain absent.
+      *
       * \param interaction  excess free energy model (input)
       * \param mu  target molecular chemical potentials (input)
       * \param phi guess of molecular volume fractions (input)

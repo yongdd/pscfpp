@@ -15,6 +15,7 @@
 #include "CorePolymerTopologyTest.h"
 #include "CoreEdgeTest.h"
 #include "CoreFhMixtureTest.h"
+#include "FhMixtureDependentSpeciesTest.h"
 #include "CoreGroupInputTest.h"
 #include "CoreKSqOverflowTest.h"
 #include "CoreBasisOutputTest.h"
@@ -90,6 +91,7 @@ TEST_COMPOSITE_ADD_UNIT(CoreAmbdInteractionTest);
 TEST_COMPOSITE_ADD_UNIT(CorePolymerTopologyTest);
 TEST_COMPOSITE_ADD_UNIT(CoreEdgeTest);
 TEST_COMPOSITE_ADD_UNIT(CoreFhMixtureTest);
+TEST_COMPOSITE_ADD_UNIT(FhMixtureDependentSpeciesTest);
 TEST_COMPOSITE_ADD_UNIT(CoreGroupInputTest);
 TEST_COMPOSITE_ADD_UNIT(CoreKSqOverflowTest);
 TEST_COMPOSITE_ADD_UNIT(CoreBasisOutputTest);
