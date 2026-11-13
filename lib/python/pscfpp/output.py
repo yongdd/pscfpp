@@ -22,6 +22,8 @@ import os
 #  Users can access and modify values of properties stored in a Thermo 
 #  object after it has been used to parse a thermo file block using the 
 #  Python dot syntax for object attributes.  
+#  The energy contributions fIdeal, fInter and fExt are independently
+#  optional; any subset can be read and written, in any input order.
 #
 #  **Construction and Parsing:**
 #
@@ -242,17 +244,11 @@ class Thermo:
       hasPolymersBlock = False
       while line != '':
 
-         # Read free energy contributions (optional)
-         if line.startswith('fIdeal'):
-            while line.strip() != '':
-               l = line.split()
-               if l[0] == 'fIdeal':
-                  self.fIdeal = float(l[-1])
-               if l[0] == 'fInter':
-                  self.fInter = float(l[-1])
-               if l[0] == 'fExt':
-                  self.fExt = float(l[-1])
-               line = file.readline()
+         # Each free energy contribution is optional and may come first.
+         # Consume one record at a time so the next block is not swallowed.
+         if line.split()[0] in ('fIdeal', 'fInter', 'fExt'):
+            label, *values = line.split()
+            setattr(self, label, float(values[-1]))
             line = self.skipEmptyLine(file)
 
          # Read polymers block

@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Optional energy subsets survive Thermo and State serialization.
+
+Run with lib/python on PYTHONPATH. --output DIR retains generated records.
+"""
+import argparse
+import io
+import itertools
+from pathlib import Path
+import tempfile
+import unittest
+
+from pscfpp.output import State, Sweep, Thermo
+
+MINIMAL = """fHelmholtz 1
+pressure 2
+
+polymers:
+             phi                 mu
+    0        1                   3
+
+"""
+VALUES = {"fIdeal": 0.5, "fInter": 0.25, "fExt": 0.125}
+INPUTS = Path(__file__).resolve().parent.parent
+OUTPUT = None
+
+
+def parse(text):
+    thermo = Thermo()
+    thermo.read(io.StringIO(text))
+    return thermo
+
+
+def snapshot(thermo):
+    return (thermo.fHelmholtz, thermo.pressure,
+            [getattr(thermo, key) for key in VALUES],
+            [(p.phi, p.mu) for p in thermo.polymers], thermo.cellParams)
+
+
+class ThermoOptionalEnergyTest(unittest.TestCase):
+    def setUp(self):
+        if OUTPUT is None:
+            temporary = tempfile.TemporaryDirectory()
+            self.addCleanup(temporary.cleanup)
+            self.folder = Path(temporary.name)
+        else:
+            self.folder = OUTPUT / self._testMethodName
+            self.folder.mkdir(parents=True, exist_ok=True)
+
+    def test_subsets(self):
+        for mask in range(8):
+            with self.subTest(mask=mask):
+                thermo = parse(MINIMAL)
+                for bit, key in enumerate(VALUES):
+                    if mask & (1 << bit):
+                        setattr(thermo, key, VALUES[key])
+                path = self.folder / (str(mask) + '.thermo')
+                thermo.write(path)
+                self.assertEqual(snapshot(Thermo(path)), snapshot(thermo))
+                self.assertEqual(snapshot(parse(str(thermo))), snapshot(thermo))
+
+    def test_energy_and_block_order(self):
+        head, polymers = MINIMAL.split('polymers:', 1)
+        polymers = 'polymers:' + polymers
+        cell = 'cellParams:\n    0 2\n\n'
+        for count in range(4):
+            for keys in itertools.permutations(VALUES, count):
+                energy = ''.join(key + ' ' + str(VALUES[key]) + '\n'
+                                 for key in keys)
+                # Test both blank-separated and adjacent energy records.
+                for separator in ('\n', ''):
+                    for before in (False, True):
+                        with self.subTest(keys=keys, separator=separator,
+                                          before=before):
+                            block = energy + separator if energy else ''
+                            text = head + (block + polymers if before else
+                                           polymers + block) + cell
+                            expected = parse(MINIMAL)
+                            expected.cellParams = [2.0]
+                            for key in keys:
+                                setattr(expected, key, VALUES[key])
+                            self.assertEqual(snapshot(parse(text)), snapshot(expected))
+                            path = self.folder / (str(count) + '_' + '_'.join(keys)
+                                                 + '_' + str(before)
+                                                 + '_' + str(bool(separator)))
+                            path.write_text(text)
+
+    def test_state_roundtrip(self):
+        for include_ideal in (False, True):
+            with self.subTest(include_ideal=include_ideal):
+                state = State(INPUTS / 'in/state')
+                state.thermo.read(io.StringIO(MINIMAL))
+                state.thermo.fInter = 0.25
+                if include_ideal:
+                    state.thermo.fIdeal = 0.5
+                path = self.folder / (str(include_ideal) + '.stt')
+                state.write(path)
+                restored = State(path)
+                self.assertEqual(snapshot(restored.thermo), snapshot(state.thermo))
+                self.assertEqual(str(restored.param), str(state.param))
+
+    def test_native_controls(self):
+        controls = [Thermo(INPUTS / 'in/thermo'),
+                    Thermo(INPUTS / 'regression/in/thermo_film'),
+                    Thermo(INPUTS / 'regression/in/thermo_twice'),
+                    State(INPUTS / 'regression/in/state_homo0').thermo]
+        for i, thermo in enumerate(controls):
+            with self.subTest(record=i):
+                thermo.fInter = 0.25
+                path = self.folder / (str(i) + '.thermo')
+                thermo.write(path)
+                self.assertEqual(str(Thermo(path)), str(thermo))
+
+    def test_sweep_control(self):
+        sweep = Sweep(str(INPUTS / 'regression/in/sweep_homo0') + '/')
+        fields = ['param.Mixture.nMonomer', 'thermo.fHelmholtz']
+        expected = [[state.param.Mixture.nMonomer, state.thermo.fHelmholtz]
+                    for state in sweep.sweep]
+        self.assertEqual(len(expected), 3)
+        self.assertEqual(sweep.summary(fields), expected)
+        self.assertEqual(sweep.summary(fields, index=True),
+                         [[i]+row for i, row in enumerate(expected)])
+        lines = sweep.summaryString(fields).strip().splitlines()
+        self.assertEqual(len(lines), 4)
+        for i, line in enumerate(lines[1:]):
+            cells = line.split()
+            self.assertEqual([int(cells[0]), int(cells[1])], [i, expected[i][0]])
+            self.assertEqual(cells[2], format(expected[i][1], '.7e'))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path)
+    args, remaining = parser.parse_known_args()
+    OUTPUT = args.output
+    unittest.main(argv=[__file__] + remaining, verbosity=2)
