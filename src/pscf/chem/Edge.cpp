@@ -53,6 +53,7 @@ namespace Pscf
    void Edge::setNBead(int nBead)
    {
       UTIL_CHECK(PolymerModel::isBead());  
+      UTIL_CHECK(nBead > 0);
       nBead_ = nBead; 
    }
 
@@ -84,7 +85,10 @@ namespace Pscf
          in >> block.length_;
       } else 
       if (PolymerModel::isBead()) {
-         in >> block.nBead_;
+         int nBead;
+         in >> nBead;
+         UTIL_CHECK(!in.fail());
+         block.setNBead(nBead);
       }
 
       // For branched polyimers, read topology information 
