@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Regressions for length-unit invariant basis and S(q).
+
+Uses constant fields and an exact cosine spectrum, with integer shell membership
+as an independent oracle. Outputs are confined to a temporary/selected directory.
+"""
+import argparse
+import json
+import math
+from pathlib import Path
+import subprocess
+import tempfile
+
+T = Path(__file__).resolve().parents[5]
+
+def verify(out, programs):
+    out.mkdir(parents=True, exist_ok=True)
+    rows = []
+
+    def run(work, backend, dim):
+        with (work/'run.log').open('w') as log:
+            p = subprocess.run([str(T/'bin'/('pscf_'+backend)), '-d', str(dim),
+                                '-p', 'param', '-c', 'commands'], cwd=work,
+                               stdout=log, stderr=subprocess.STDOUT, timeout=45)
+        return p.returncode
+
+
+    for backend in programs:
+        for length in [1., 1e4, 1e5, 1e6]:
+            work = out/f'{backend}_shells_{length}'
+            work.mkdir(exist_ok=True)
+            # Scale every length and monomer volume; dimensionless problem is identical.
+            (work/'param').write_text(f'''System{{
+     Mixture{{ nMonomer 2
+     monomers[ {length} {length} ]
+     nPolymer 1
+     Polymer{{ type linear nBlock 2 blocks[ 0 0.5 1 0.5 ] phi 1.0 }}
+     vMonomer {0.01*length**3:.17e}
+     ds 0.05 }}
+     Interaction{{ chi( 1 0 10.0 ) }}
+     Domain{{ mesh 8 8 8 lattice cubic }}
+     BdSimulator{{
+     AnalyzerManager{{ baseInterval 1
+     BinaryStructureFactor{{ interval 1 outputFileName sf writeWaveData 1 }}
+     }}
+     }}
+    }}
+    ''')
+            tr=f'format 1 0\ndim\n3\ncrystal_system\ncubic\nN_cell_param\n1\ncell_param\n{length}\nN_monomer\n2\n\n'
+            for frame in range(2):
+                tr+=f'i = {frame}\ncell_param {length}\nmesh\n8 8 8\n'
+                for z in range(8):
+                    for y in range(8):
+                        for x in range(8):
+                            v=math.cos(2*math.pi*z/8)
+                            tr+=f'{5+v:.16e} {5-v:.16e}\n'
+            (work/'trajectory').write_text(tr)
+            (work/'commands').write_text('ANALYZE 0 1 RGridTrajectoryReader trajectory\nFINISH\n')
+            row=dict(kind='shells',backend=backend,length=length,rc=run(work,backend,3))
+            if (work/'sf_ave').exists():
+                ave=[[float(v) for v in line.split()] for line in (work/'sf_ave').read_text().splitlines() if line.strip()]
+                wave=[[float(v) for v in line.split()] for line in (work/'sf_wave').read_text().splitlines() if line.strip()]
+                assert len(wave) == 320 and all(len(row) == 4 for row in wave)
+                assert all(math.isfinite(v) for row in wave+ave for v in row)
+                groups={}
+                wave_error=0.
+                for kx,ky,kz,s in wave:
+                    expected=20. if [kx,ky,kz]==[0.,0.,1.] else -5.
+                    wave_error=max(wave_error, abs(s*length**3-expected))
+                    norm=min(kx,8-kx)**2+min(ky,8-ky)**2+kz**2
+                    weight=1 if kz in [0.,4.] else 2
+                    total,count=groups.get(norm,(0.,0.))
+                    groups[norm]=(total+weight*expected,count+weight)
+                exact=[[2*math.pi*math.sqrt(k),total/count] for k,(total,count) in sorted(groups.items())]
+                normalized=[[q*length,s*length**3] for q,s in ave]
+                (work/'exact_dimensionless.json').write_text(json.dumps(exact,indent=2)+'\n')
+                row.update(observed_shells=len(ave),exact_shells=len(exact),first_shell=normalized[0],exact_first_shell=exact[0],wave_error=wave_error)
+                if len(ave)==len(exact):
+                    row['max_shell_error']=max(abs(a-e) for actual,expected in zip(normalized,exact) for a,e in zip(actual,expected))
+            rows.append(row)
+            print(json.dumps(row), flush=True)
+    (out/'results.json').write_text(json.dumps(rows,indent=2)+'\n')
+
+    for row in rows:
+        assert row['rc'] == 0, row
+        if row['kind'] == 'basis':
+            assert row.get('concentration_error', float('inf')) < 1e-12, row
+        else:
+            assert row.get('observed_shells') == row.get('exact_shells') == 32, row
+            assert row['wave_error'] < 1e-7, row
+            assert row['max_shell_error'] < 1e-6, row
+    print('All scaled-cell symmetry and structure-factor cases passed.')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--program', action='append', choices=['rpc', 'rpg'])
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    programs = args.program or ['rpc']
+    if args.output:
+        verify(args.output.resolve(), programs)
+    else:
+        with tempfile.TemporaryDirectory(prefix='structurefactorunitscalingtest-') as work:
+            verify(Path(work), programs)

@@ -14,6 +14,7 @@
 #include <pscf/crystal/UnitCell.h>
 #include <pscf/crystal/shiftToMinimum.h>
 #include <pscf/crystal/hasVariableAngle.h>
+#include <pscf/crystal/waveNorm.h>
 
 #include <pscf/mesh/MeshIterator.h>
 #include <pscf/mesh/Mesh.h>
@@ -288,9 +289,8 @@ namespace Pscf {
       }
 
       // Construct sortedBunches_ array and set nBunch_
-      double epsilon = 1.0E-8;
       sortedBunches_.clear();
-      Sort::findBunches(items, sortedBunches_, epsilon);
+      findWaveBunches(items, sortedBunches_, waveNormTolerance<double>());
       nBunch_ = sortedBunches_.size();
 
       // Fill bunchIds_ array

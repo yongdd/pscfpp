@@ -37,5 +37,29 @@ namespace Pscf {
       return std::abs(a-b) <= tolerance*std::max(a,b);
    }
 
+   /** Group sorted wavevector norms using the same relative criterion. */
+   inline void findWaveBunches(std::vector< Sort::Item<double> > const & items,
+                              Util::GArray< Sort::Bunch >& bunches,
+                              double tolerance)
+   {
+      UTIL_CHECK(!items.empty());
+      bunches.clear();
+      Sort::Bunch bunch;
+      bunch[0] = 0;
+      for (int i = 0; i < int(items.size()); ++i) {
+         UTIL_CHECK(std::isfinite(items[i].value) && items[i].value >= 0.0);
+         if (i == 0) continue;
+         UTIL_CHECK(items[i].value >= items[i-1].value);
+         if (!equalWaveNorm(items[i].value, items[bunch[0]].value,
+                            tolerance)) {
+            bunch[1] = i;
+            bunches.append(bunch);
+            bunch[0] = i;
+         }
+      }
+      bunch[1] = items.size();
+      bunches.append(bunch);
+   }
+
 }
 #endif

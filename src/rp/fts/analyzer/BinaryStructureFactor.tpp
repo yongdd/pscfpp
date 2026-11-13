@@ -19,6 +19,7 @@
 #include <pscf/mesh/MeshIterator.h>
 #include <pscf/mesh/Mesh.h>
 #include <pscf/math/IntVec.h>
+#include <pscf/crystal/waveNorm.h>
 
 #include <util/param/ParamComposite.h>
 #include <util/containers/Array.h>
@@ -223,6 +224,7 @@ namespace Rp {
 
       // Set bunchWavenumbers_, waveBunchIds_, and waveWeights_
       double wavenumberSq, newWavenumber, oldWavenumberSq;
+      double const normTolerance = waveNormTolerance<typename T::Real>();
       double count, sum, tot;
       int begin, end, k, iw;
       int nw = 0;
@@ -236,11 +238,11 @@ namespace Rp {
          UTIL_CHECK(wavenumberSq >= 0.0);
          newWavenumber = std::sqrt(wavenumberSq);
          bunchWavenumbers_[ib] = newWavenumber;
-         // The wave list starts a new bunch where k^2 exceeds the first
-         // k^2 of the previous bunch by more than 1.0E-8; check the
-         // same criterion (a 1.0E-8 gap in |k| rejects valid cells)
+         // Use the same dimensionless norm comparison as WaveList.
          if (ib > 0) {
-            UTIL_CHECK(wavenumberSq - oldWavenumberSq > 1.0E-8);
+            UTIL_CHECK(wavenumberSq > oldWavenumberSq);
+            UTIL_CHECK(!equalWaveNorm(wavenumberSq, oldWavenumberSq,
+                                      normTolerance));
          }
          oldWavenumberSq = wavenumberSq;
 
@@ -260,7 +262,7 @@ namespace Rp {
             // count = 1.0;   // Uncomment to weight waves equally
             waveWeights_[iw] = count;
             sum += count;
-            UTIL_CHECK(std::abs(kSq[iw] - wavenumberSq) < 1.0E-8);
+            UTIL_CHECK(equalWaveNorm(kSq[iw], wavenumberSq, normTolerance));
          }
 
          // Normalize weights for all waves in this bunch
