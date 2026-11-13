@@ -77,6 +77,9 @@
 
 #include "FieldReadInvalidationTest.h"
 
+
+#include "MaskReadTransactionTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
 TEST_COMPOSITE_ADD_UNIT(FieldIoRegressionTest);
@@ -136,6 +139,7 @@ TEST_COMPOSITE_ADD_UNIT(SolventNormalizationTest);
 TEST_COMPOSITE_ADD_UNIT(RampCompressionFailureTest);
 TEST_COMPOSITE_ADD_UNIT(BeadCountResizeTest);
 TEST_COMPOSITE_ADD_UNIT(FieldReadInvalidationTest);
+TEST_COMPOSITE_ADD_UNIT(MaskReadTransactionTest);
 TEST_COMPOSITE_END
 
 #endif

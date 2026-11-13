@@ -272,26 +272,32 @@ namespace Rp {
       // Preconditions
       UTIL_CHECK(readUnitCellPtr_);
 
-      // If necessary, allocate rgrid_ fields
-      if (!isAllocatedRGrid_) {
-         Mesh<D> const & mesh = fieldIo().mesh();
-         UTIL_CHECK(mesh.size() > 0);
-         allocateRGrid(mesh.dimensions());
-      }
-      UTIL_CHECK(isAllocatedRGrid_);
-  
-      // Read field file in r-grid format (array rgrid_)
-      fieldIo().readFieldRGrid(in, rgrid_, *readUnitCellPtr_);
+      // Read and convert in temporary storage. CPU field input writes through
+      // a HostSendArray alias, so reading directly into rgrid_ can leave a
+      // partial replacement paired with an old basis after a parse failure.
+      RField<D,T> rgrid;
+      fieldIo().readFieldRGrid(in, rgrid, *readUnitCellPtr_);
+      DArray<double> basis;
 
       // Optionally convert to basis form
       if (isSymmetric) {
-         if (!isAllocatedBasis_) {
-            Basis<D> const & basis = fieldIo().basis();
-            UTIL_CHECK(basis.isInitialized());
-            allocateBasis(basis.nBasis());
-         }
-         fieldIo().convertRGridToBasis(rgrid_, basis_);
+         Basis<D> const & fieldBasis = fieldIo().basis();
+         UTIL_CHECK(fieldBasis.isInitialized());
+         basis.allocate(fieldBasis.nBasis());
+         fieldIo().convertRGridToBasis(rgrid, basis);
       }
+
+      // Commit only after the complete field has been read and converted.
+      if (!isAllocatedRGrid_) {
+         allocateRGrid(rgrid.meshDimensions());
+      }
+      if (isSymmetric) {
+         if (!isAllocatedBasis_) {
+            allocateBasis(basis.capacity());
+         }
+         basis_ = basis;
+      }
+      rgrid_ = rgrid;
 
       hasData_ = true;
       isSymmetric_ = isSymmetric;
