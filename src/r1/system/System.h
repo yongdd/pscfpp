@@ -532,6 +532,13 @@ namespace R1 {
       bool hasFields_;
 
       /**
+      * Have current command inputs been successfully computed?
+      *
+      * Guards derived command output after READ_W or a failed solve.
+      */
+      bool hasCFields_;
+
+      /**
       * Does this system have a Sweep object?
       */
       bool hasSweep_;

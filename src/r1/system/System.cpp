@@ -77,6 +77,7 @@ namespace R1
       hasMixture_(0),
       hasDomain_(0),
       hasFields_(0),
+      hasCFields_(false),
       hasSweep_(0)
    {  
       setClassName("System"); 
@@ -301,6 +302,18 @@ namespace R1
          }
          Log::file() << command;
 
+         // These commands describe the solution of the current input fields.
+         // Reading replacement w fields requires another successful solve.
+         if (command == "WRITE_C" || command == "WRITE_BLOCK_C" ||
+             command == "WRITE_THERMO" || command == "COMPARE_HOMOGENEOUS" ||
+             command == "WRITE_Q_SLICE" || command == "WRITE_Q_TAIL" ||
+             command == "WRITE_Q_VERTEX" || command == "WRITE_Q" ||
+             command == "WRITE_Q_ALL") {
+            if (!hasCFields_) {
+               UTIL_THROW("Current fields require COMPUTE or successful ITERATE before derived output");
+            }
+         }
+
          if (command == "FINISH") {
             Log::file() << std::endl;
             readNext = false;
@@ -308,6 +321,7 @@ namespace R1
          if (command == "READ_W") {
             readEcho(inBuffer, filename);
             fieldIo_.readFields(wFields(), filename);  
+            hasCFields_ = false;
          } else
          if (command == "COMPUTE") {
             // Solve the modified diffusion equation, without iteration
@@ -494,6 +508,7 @@ namespace R1
    void System::compute()
    {
       //UTIL_CHECK(hasWFields_);
+      hasCFields_ = false;
 
       // Solve the modified diffusion equation (without iteration)
       mixture_.compute(wFields(), cFields_);
@@ -503,7 +518,7 @@ namespace R1
       // (they were computed only after a converged ITERATE)
       computeFreeEnergy();
 
-      //hasCFields_ = true;
+      hasCFields_ = true;
    }
 
    /*
@@ -512,7 +527,7 @@ namespace R1
    int System::iterate(bool isContinuation)
    {
       // UTIL_CHECK(hasWFields_);
-      // hasCFields_ = false;
+      hasCFields_ = false;
 
       Log::file() << std::endl;
 
@@ -524,6 +539,7 @@ namespace R1
       // If converged, compute related properties
       if (!error) {   
          computeFreeEnergy();
+         hasCFields_ = true;
          writeThermo(Log::file());
       }
       return error;
