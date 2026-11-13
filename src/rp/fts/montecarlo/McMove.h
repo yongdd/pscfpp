@@ -12,6 +12,7 @@
 #include <util/misc/Timer.h>            // member
 #include <util/global.h>
 #include <pscf/backend/TmplDeclare.h>
+#include <cmath>
 
 // Forward declarations
 namespace Util { 
@@ -375,7 +376,11 @@ namespace Rp {
    */
    template <int D, class T> inline
    void McMove<D,T>::setProbability(double probability)
-   {  probability_ = probability; }
+   {
+      UTIL_CHECK(std::isfinite(probability));
+      UTIL_CHECK(probability >= 0.0 && probability <= 1.0);
+      probability_ = probability;
+   }
 
    // Explicit instantiation declarations
    PSCF_TMPL_DECLARE(McMove)

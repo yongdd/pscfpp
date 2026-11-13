@@ -52,7 +52,10 @@ namespace Rp {
    */
    template <int D, class T>
    void McMove<D,T>::readProbability(std::istream &in)
-   {  read<double>(in, "probability", probability_); }
+   {
+      read<double>(in, "probability", probability_);
+      setProbability(probability_);
+   }
 
    /*
    * Setup at beginning of loop.

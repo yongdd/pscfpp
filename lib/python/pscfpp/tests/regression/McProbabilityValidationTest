@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""ANALYZE preserves saved frames; MC rejects invalid individual weights."""
+import argparse
+import json
+import math
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[5]
+PREFIX = '''System{
+ Mixture{ nMonomer 2 monomers[ 1 1 ] nPolymer 1
+ Polymer{ type linear nBlock 2 blocks[ 0 .5 1 .5 ] phi 1 }
+ vMonomer .01 ds .05 }
+ Interaction{ chi( 0 1 10 ) }
+ Domain{ mesh 16 lattice lamellar }
+'''
+HEADER = '''format 1 0
+dim
+1
+crystal_system
+lamellar
+N_cell_param
+1
+cell_param
+1
+N_monomer
+2
+'''
+
+
+def compressor(epsilon):
+    return 'LrCompressor{ epsilon %s maxItr 100 errorType max }\n' % epsilon
+
+
+def analyzers():
+    return '''AnalyzerManager{ baseInterval 1
+ TrajectoryWriter{ interval 1 outputFileName rewritten }
+ HamiltonianAnalyzer{ interval 1 outputFileName energy nSamplePerOutput 1 }
+ }\n'''
+
+
+def run(root, name, executable, param, command, trajectory=None):
+    work = root / name
+    work.mkdir()
+    w = HEADER + 'mesh\n16\n' + ''.join(
+        '%.17g %.17g\n' % ((5 + .1 * math.cos(2 * math.pi * i / 16),) * 2)
+        for i in range(16))
+    (work / 'param').write_text(param)
+    (work / 'command').write_text(command)
+    (work / 'w').write_text(w)
+    if trajectory is not None:
+        (work / 'trajectory').write_text(trajectory)
+    with (work / 'log').open('w') as log:
+        result = subprocess.run([executable, '-d', '1', '-p', 'param', '-c', 'command'],
+                                cwd=work, stdout=log, stderr=subprocess.STDOUT,
+                                timeout=90)
+    return work, result.returncode
+
+
+def frames(text):
+    lines = text.splitlines()
+    result = []
+    for i, line in enumerate(lines):
+        if line.startswith('i ='):
+            j = i + 1
+            if lines[j].startswith('cell_param'):
+                j += 1
+            assert lines[j].strip() == 'mesh'
+            assert lines[j + 1].strip() == '16'
+            values = [[float(v) for v in row.split()]
+                      for row in lines[j + 2:j + 18]]
+            assert len(values) == 16 and all(len(row) == 2 for row in values)
+            result.append(values)
+    return result
+
+
+def check(root, programs):
+    rows = []
+    for program in programs:
+        executable = shutil.which('pscf_' + program) or str(ROOT / 'bin' / ('pscf_' + program))
+        for name, p0, p1, valid in [('negative', -.5, 1.5, False),
+                                    ('negative_second', 1.5, -.5, False),
+                                    ('balanced', .5, .5, True),
+                                    ('zero_first', 0, 1, True),
+                                    ('zero_second', 1, 0, True),
+                                    ('normalization', .50001, .5, True)]:
+            prm = PREFIX + '''McSimulator{ seed 1234
+ McMoveManager{
+ RealMove{ probability %s sigma 0 }
+ RealMove{ probability %s sigma 0 }
+ }
+''' % (p0, p1) + compressor('.05') + '}\n}\n'
+            work, rc = run(root, program + '_probability_' + name, executable, prm,
+                           'READ_W_RGRID w\nSIMULATE 100\nFINISH\n')
+            assert (rc == 0) == valid, (name, rc)
+            text = (work / 'log').read_text()
+            if not valid:
+                assert 'probability' in text and 'Move Statistics:' not in text
+            rows.append(dict(name=work.name, accepted=(rc == 0), expected_accepted=valid))
+    (root / 'results.json').write_text(json.dumps(rows, indent=2) + '\n')
+    print('PASS: %d analysis/probability cases, programs %s' % (len(rows), ','.join(programs)))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--program', choices=['rpc', 'rpg'], action='append')
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    if args.output:
+        args.output.mkdir(parents=True, exist_ok=True)
+        check(args.output, args.program or ['rpc', 'rpg'])
+    else:
+        with tempfile.TemporaryDirectory(prefix='mcprobabilityvalidationtest-') as tmp:
+            check(Path(tmp), args.program or ['rpc', 'rpg'])
