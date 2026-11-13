@@ -85,7 +85,7 @@ namespace Rp {
             } else {
                length = (double) polymerPtr->nBead();
             }
-            if (phi > 1.0E-08) {
+            if (phi > 0.0) {
                fIdeal_ += phi*( mu - 1.0 ) / length;
                // Recall: mu = ln(phi/q)
             }
@@ -101,7 +101,7 @@ namespace Rp {
             phi = solventPtr->phi();
             mu = solventPtr->mu();
             size = solventPtr->size();
-            if (phi > 1.0E-08) {
+            if (phi > 0.0) {
                fIdeal_ += phi*( mu - 1.0 )/size;
             }
          }
@@ -227,7 +227,7 @@ namespace Rp {
             } else {
                length = (double) polymerPtr->nBead();
             }
-            if (phi > 1.0E-08) {
+            if (phi > 0.0) {
                pressure_ += mu * phi / length;
             }
          }
@@ -242,7 +242,7 @@ namespace Rp {
             phi = solventPtr->phi();
             mu = solventPtr->mu();
             size = solventPtr->size();
-            if (phi > 1.0E-08) {
+            if (phi > 0.0) {
                pressure_ += mu * phi / size;
             }
          }

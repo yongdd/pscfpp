@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+import argparse
+
+
+import math
+
+
+from pathlib import Path
+
+
+import re
+
+
+import shutil
+
+
+import subprocess
+
+
+import tempfile
+
+
+SOURCE = Path(__file__).resolve().parents[5]
+
+
+def execute(root, name, program, param, field, command):
+    work = root / name
+    work.mkdir()
+    (work / 'param').write_text(param)
+    if field is not None:
+        (work / 'w').write_text(field)
+    (work / 'command').write_text(command)
+    exe = shutil.which('pscf_' + program)
+    if exe is None:
+        exe = str(SOURCE / 'bin' / ('pscf_' + program))
+    args = [exe] + ([] if program == '1d' else ['-d', '1'])
+    args += ['-p', 'param', '-c', 'command']
+    run = subprocess.run(args, cwd=work, capture_output=True, text=True,
+                         timeout=60)
+    log = run.stdout + run.stderr
+    (work / 'log').write_text(log)
+    return work, run.returncode, log
+
+
+def mixture(phi, solvent=False):
+    minor = ('Solvent{ monomerId 1 size 1 phi %.17g }' % phi if solvent else
+             'Polymer{ type linear nBlock 1 blocks[ 1 1 ] phi %.17g }' % phi)
+    return '''Mixture{
+ nMonomer 2 monomers[ 1 1 ]
+ nPolymer %d nSolvent %d
+ Polymer{ type linear nBlock 1 blocks[ 0 1 ] phi %.17g }
+ %s
+ ds .05
+}
+''' % (1 if solvent else 2, 1 if solvent else 0, 1-phi, minor)
+
+
+def dilute_r1(root):
+    for solvent in [False, True]:
+        for phi in [0., 5e-9, 1e-8, 1.01e-8, .1]:
+            exact = ((1-phi)*(math.log1p(-phi)-1) +
+                     (phi*(math.log(phi)-1) if phi else 0) +
+                     10*phi*(1-phi))
+            energies = []
+            for shift in [0., 20.]:
+                name = 'r1_dilute_%s_%s_%s' % (solvent, phi, shift)
+                param = ('System{\n' + mixture(phi, solvent) +
+                         'Interaction{ chi( 0 1 10 ) }\n'
+                         'Domain{ mode planar xMin 0 xMax 1 nx 5 }\n'
+                         'AmIterator{ epsilon 1e-10 maxItr 100 maxHist 20 }\n}\n')
+                field = 'nx 5\nnm 2\n' + ''.join(
+                    '%d %.17g %.17g\n' % (i, shift, shift) for i in range(5))
+                work, rc, log = execute(
+                    root, name, '1d', param, field,
+                    'READ_W w\nCOMPUTE\nWRITE_THERMO thermo\nFINISH\n')
+                assert rc == 0, (name, rc, log[-1000:])
+                text = (work / 'thermo').read_text()
+                f = float(re.search(r'fHelmholtz\s+(\S+)', text)[1])
+                pressure = float(re.search(r'pressure\s+(\S+)', text)[1])
+                assert abs(f-exact) < 5e-11, (name, f, exact)
+                exact_pressure = shift + 1 - 10*phi*(1-phi)
+                assert abs(pressure-exact_pressure) < 5e-10, (name, pressure)
+                energies.append(f)
+            assert abs(energies[0]-energies[1]) < 5e-11
+    print('1d: dilute polymer/solvent thermodynamics and gauge controls passed')
+
+
+def run(root, programs):
+    root.mkdir(parents=True, exist_ok=True)
+    dilute_r1(root)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--program', action='append', choices=['1d'])
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    programs = args.program or [['1d'][0]]
+    if args.output:
+        run(args.output.resolve(), programs)
+    else:
+        with tempfile.TemporaryDirectory(prefix='diluter1thermodynamicstest-') as directory:
+            run(Path(directory), programs)
