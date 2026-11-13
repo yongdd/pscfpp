@@ -77,7 +77,8 @@ namespace Rp {
       ns_(-1),
       nParams_(0),
       isAllocated_(false),
-      hasExpKsq_(false)
+      hasExpKsq_(false),
+      safeBead_(false)
    {
       propagator(0).setBlock(*this);
       propagator(1).setBlock(*this);
@@ -283,7 +284,8 @@ namespace Rp {
    */
    template <int D>
    void
-   Block<D,CPT>::setupSolver(RField<D,CPT> const& w, double wShift)
+   Block<D,CPT>::setupSolver(RField<D,CPT> const& w, double wShift,
+                             bool safeBead)
    {
       // Preconditions
       int nx = mesh().size();
@@ -292,6 +294,7 @@ namespace Rp {
 
       // Store the constant subtracted from w
       BlockTmplT::setWShift(wShift);
+      safeBead_ = safeBead;
 
       // Compute expW arrays for the shifted field w - wShift
       double arg;
@@ -307,7 +310,7 @@ namespace Rp {
          for (int i = 0; i < nx; ++i) {
             arg = -(w[i] - wShift);
             expW_[i]  = exp(arg);
-            expWInv_[i] = 1.0/expW_[i];
+            if (!safeBead) expWInv_[i] = 1.0/expW_[i];
          }
       }
 
@@ -557,6 +560,8 @@ namespace Rp {
       for (i = 0; i < nx; ++i) {
          cField()[i] = 0.0;
       }
+      if (prefactor == 0.0) return;
+      UTIL_CHECK(!safeBead_);
    
       // References to forward and reverse propagators
       Propagator<D,CPT> const & p0 = propagator(0);
@@ -575,6 +580,43 @@ namespace Rp {
       // Normalize the integral
       for (i = 0; i < nx; ++i) {
          cField()[i] *= prefactor;
+      }
+   }
+
+   /*
+   * Bead concentration without forming qf*qr/exp(-w).
+   */
+   template <int D>
+   void Block<D,CPT>::computeConcentrationBeadLog(double logPrefactor)
+   {
+      UTIL_CHECK(PolymerModel::isBead());
+      UTIL_CHECK(isAllocated_);
+      const int nx = mesh().size();
+      Propagator<D,CPT> const& p0 = propagator(0);
+      Propagator<D,CPT> const& p1 = propagator(1);
+      UTIL_CHECK(p0.isSolved() && p1.isSolved());
+      for (int i = 0; i < nx; ++i) cField()[i] = 0.0;
+      if (std::isinf(logPrefactor) && logPrefactor < 0.0) return;
+      UTIL_CHECK(std::isfinite(logPrefactor));
+
+      for (int j = 1; j < ns_ - 1; ++j) {
+         if (j == 1) {
+            if (p0.isHeadEnd()) {
+               qr_ = p0.head();
+            } else {
+               stepHalfBondBead(p0.head(), qr_);
+            }
+         } else {
+            stepBondBead(p0.q(j-1), qr_);
+         }
+         RField<D,CPT> const& reverse = p1.q(ns_-1-j);
+         for (int i = 0; i < nx; ++i) {
+            const double a = qr_[i], b = reverse[i];
+            if (a == 0.0 || b == 0.0) continue;
+            const double value = std::exp(logPrefactor + std::log(std::abs(a))
+                                                       + std::log(std::abs(b)));
+            cField()[i] += ((a < 0.0) != (b < 0.0)) ? -value : value;
+         }
       }
    }
 
@@ -674,6 +716,11 @@ namespace Rp {
       UTIL_CHECK(fft().isSetup());
       UTIL_CHECK(mesh().dimensions() == fft().meshDimensions());
       UTIL_CHECK(ns_ > 0);
+      if (prefactor == 0.0) {
+         stress_.clear();
+         for (int i = 0; i < unitCell().nParameter(); ++i) stress_.append(0.0);
+         return;
+      }
 
       // References to forward to reverse propagators
       Propagator<D,CPT> const & p0 = propagator(0);

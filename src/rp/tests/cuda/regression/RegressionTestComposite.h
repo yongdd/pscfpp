@@ -81,6 +81,7 @@
 
 #include "MaskReadTransactionTest.h"
 
+#include "BeadFieldNormalizationTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -143,6 +144,7 @@ TEST_COMPOSITE_ADD_UNIT(BeadCountResizeTest);
 TEST_COMPOSITE_ADD_UNIT(FieldReadInvalidationTest);
 TEST_COMPOSITE_ADD_UNIT(FlexibleParamsReuseTest);
 TEST_COMPOSITE_ADD_UNIT(MaskReadTransactionTest);
+TEST_COMPOSITE_ADD_UNIT(BeadFieldNormalizationTest);
 TEST_COMPOSITE_END
 
 #endif

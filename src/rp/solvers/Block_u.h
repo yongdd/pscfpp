@@ -175,10 +175,15 @@ namespace Rp {
       * which PolymerTmpl::solve removes from ln q. The value is stored
       * and returned by wShift().
       *
+      * In safeBead mode the reciprocal bead weight is not formed; use
+      * computeConcentrationBeadLog to reconstruct the pre-field factor.
+      *
       * \param w  chemical potential field for this monomer type
       * \param wShift  constant subtracted from w (default 0)
+      * \param safeBead omit reciprocal weights for strong bead fields
       */
-      void setupSolver(RField<D,CUT> const & w, double wShift = 0.0);
+      void setupSolver(RField<D,CUT> const & w, double wShift = 0.0,
+                       bool safeBead = false);
 
       ///@}
       /// \name MDE Step Functions
@@ -284,6 +289,18 @@ namespace Rp {
       * \param prefactor  constant multiplying sum over beads
       */
       void computeConcentrationBead(double prefactor);
+
+      /**
+      * Compute bead concentrations without reciprocal Boltzmann weights.
+      *
+      * Reconstruct the forward pre-field value by applying its bond
+      * operator, and combine it with the reverse weighted propagator.
+      * Products and normalization are evaluated in logarithmic form.
+      * Raw propagator slices and partition functions are unchanged.
+      *
+      * \param logPrefactor logarithm of phi/(nBead*qShifted), or -infinity
+      */
+      void computeConcentrationBeadLog(double logPrefactor);
 
       ///@}
       /// \name Stress Computation
@@ -434,6 +451,9 @@ namespace Rp {
 
       /// Are expKsq_ arrays up to date ? (initialize false)
       bool hasExpKsq_;
+
+      /// Reciprocal bead weights were omitted by the last setupSolver.
+      bool safeBead_;
 
       /// Use batched FFTs to compute stress? (faster, but 2X memory use)
       bool useBatchedFFT_;

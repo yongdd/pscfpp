@@ -15,6 +15,9 @@
 #include <pscf/backend/Reduce.h>
 #include <pscf/solvers/PolymerTmpl.tpp>
 #include <pscf/chem/PolymerModel.h>
+#include <cmath>
+#include <limits>
+#include <vector>
 
 namespace Pscf {
 namespace Rp {
@@ -61,22 +64,60 @@ namespace Rp {
    void Polymer<D,T>::compute(DArray< RField<D,T> > const & wFields,
                               double phiTot)
    {
-      // Setup solvers for all blocks. Each block solves the MDE in the
-      // field of its monomer type minus the spatial average of that
-      // field, which keeps q representable for long chains, and which
-      // is removed from ln q analytically by PolymerTmpl::solve
-      int monomerId;
-      double wShift;
+      // Retain the mean shift for ordinary fields. For bead chains, bound
+      // amplification over the entire molecule (including branch sources),
+      // not just the exponential for one bead. The direct concentration
+      // formula contains two propagators and one reciprocal bead weight.
+      std::vector<double> means(nBlock()), minima(nBlock());
+      double amplification = 0.0, inverseRange = 0.0, largestStep = 0.0;
       for (int j = 0; j < nBlock(); ++j) {
-         monomerId = block(j).monomerId();
+         const int monomerId = block(j).monomerId();
          RField<D,T> const & w = wFields[monomerId];
-         wShift = Reduce::sum(w) / double(w.capacity());
-         block(j).setupSolver(w, wShift);
+         means[j] = Reduce::sum(w) / double(w.capacity());
+         if (PolymerModel::isBead()) {
+            minima[j] = Reduce::min(w);
+            const double step = means[j] - minima[j];
+            amplification += block(j).nBead()*step;
+            largestStep = std::max(largestStep, step);
+            inverseRange = std::max(inverseRange, Reduce::max(w)-means[j]);
+         }
+      }
+      const double logLimit = std::log(std::numeric_limits<typename T::Real>::max()) - 32.0;
+      // Leave room for Fourier products, contour sums and normalization.
+      const double qLimit = std::exp(0.5*logLimit - 16.0)
+                           /wFields[block(0).monomerId()].capacity();
+      bool safeBead = PolymerModel::isBead()
+                  && !(2.0*amplification + inverseRange < logLimit);
+      bool useMinimum = safeBead && !(largestStep < logLimit);
+      for (int j = 0; j < nBlock(); ++j) {
+         block(j).setupSolver(wFields[block(j).monomerId()],
+                              useMinimum ? minima[j] : means[j], safeBead);
       }
 
       // Call base class PolymerTmpl solve() function
       // This solves the MDE for all propagators in a precalculated order
       PolymerTmplT::solve(phiTot);
+
+      // A mean-shifted Q can overflow even when the physical Q and all
+      // normalized observables are representable. Retry with bounded local
+      // weights before publishing concentrations. The raw q-slice convention
+      // is unchanged: these are still propagators in w - block.wShift().
+      if (PolymerModel::isBead()) {
+         if (!(qShifted() > 0.0) || !std::isfinite(qShifted())
+             || qShifted() > qLimit) {
+            if (!useMinimum) {
+               safeBead = true;
+               for (int j = 0; j < nBlock(); ++j) {
+                  block(j).setupSolver(wFields[block(j).monomerId()], minima[j], true);
+               }
+               PolymerTmplT::solve(phiTot);
+            }
+         }
+         if (!(qShifted() >= 1.0/qLimit && qShifted() <= qLimit)
+             || !std::isfinite(PolymerTmplT::lnQ()) || !std::isfinite(phi())) {
+            UTIL_THROW("Bead polymer normalization exceeds floating-point range");
+         }
+      }
 
       // Compute block concentration fields, normalizing products of
       // the shifted propagators by their own partition function
@@ -87,9 +128,19 @@ namespace Rp {
             block(i).computeConcentrationThread(prefactor);
          }
       } else {
-         prefactor = phi() / ( qShifted() * (double)nBead() );
+         prefactor = phi() / qShifted() / (double)nBead();
          for (int i = 0; i < nBlock(); ++i) {
-            block(i).computeConcentrationBead(prefactor);
+            if (safeBead) {
+               const double logPrefactor = std::log(phi()) - std::log(qShifted())
+                                         -std::log((double)nBead());
+               block(i).computeConcentrationBeadLog(logPrefactor);
+            } else {
+               block(i).computeConcentrationBead(prefactor);
+            }
+            Block<D,T> const& current = block(i);
+            if (!std::isfinite(Reduce::sum(current.cField()))) {
+               UTIL_THROW("Bead polymer concentration exceeds floating-point range");
+            }
          }
       }
 
@@ -111,7 +162,10 @@ namespace Rp {
             block(i).computeStressThread(prefactor);
          }
       } else {
-         prefactor = phi() / ( qShifted() * (double)nBead() );
+         prefactor = phi() / qShifted() / (double)nBead();
+         if (!std::isfinite(prefactor)) {
+            UTIL_THROW("Bead polymer stress normalization exceeds floating-point range");
+         }
          for (int i = 0; i < nBlock(); ++i) {
             block(i).computeStressBead(prefactor);
          }
@@ -127,6 +181,9 @@ namespace Rp {
       for (int i = 0; i < nBlock(); ++i) {
          for (int j = 0; j < nParam_; ++j){
             stress_[j] += block(i).stress(j);
+            if (PolymerModel::isBead() && !std::isfinite(stress_[j])) {
+               UTIL_THROW("Bead polymer stress exceeds floating-point range");
+            }
          }
       }
 

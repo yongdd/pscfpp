@@ -96,6 +96,12 @@ namespace Rp {
       * stored propagators are those of the shifted fields. Their
       * partition function is qShifted(); ln q, mu, phi and the block
       * concentrations do not depend on the shifts.
+      * For strong bead fields, concentrations use a pre-field factor to
+      * avoid reciprocal Boltzmann weights. If the mean-shifted partition
+      * function is unrepresentable, minimum shifts are tried instead.
+      * Propagator slices always retain their original, unscaled meaning in
+      * the shifted fields. An exception is thrown if the resulting partition
+      * function still cannot be normalized in floating-point arithmetic.
       *
       * The parameter phiTot is only relevant to problems such as thin
       * films in which the material is excluded from part of the unit

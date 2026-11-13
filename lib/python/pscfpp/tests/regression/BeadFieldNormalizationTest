@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Native bead COMPUTE must write analytic finite densities and free energies."""
+import json, math, os, re, shutil, subprocess, tempfile
+from pathlib import Path
+_temporary = tempfile.TemporaryDirectory(prefix='bead-normalization-')
+O=Path(os.environ.get('PROBE_OUTPUT', _temporary.name))/'polymer_normalization'
+O.mkdir(parents=True,exist_ok=True)
+results=[]
+backends=[name for name in ['rpc','rpg'] if shutil.which('pscf_'+name)]
+if not backends:
+ raise RuntimeError('Put pscf_rpc or pscf_rpg on PATH to run this test')
+for backend in backends:
+ for contrast,absent in [(2.,False),(600.,False),(800.,False),(2000.,False),(2000.,True)]:
+  d=O/f'{backend}_contrast{contrast:g}_absent{int(absent)}';d.mkdir(exist_ok=True)
+  # One-bead linear chains have exactly one local Boltzmann factor.
+  # With an absent polymer, the surviving component is an ordinary uniform solvent.
+  if absent:
+   mixture='Mixture{ nMonomer 2 monomers[ 1 1 ] nPolymer 1 nSolvent 1 Polymer{ type linear nBlock 1 blocks[ 0 1 ] phi 0 } Solvent{ monomerId 1 size 1 phi 1 } }'
+  else:
+   mixture='Mixture{ nMonomer 2 monomers[ 1 1 ] nPolymer 2 Polymer{ type linear nBlock 1 blocks[ 0 1 ] phi .5 } Polymer{ type linear nBlock 1 blocks[ 1 1 ] phi .5 } }'
+  (d/'param').write_text(f'System{{ polymerModel bead {mixture} Interaction{{ chi( 0 1 2 ) }} Domain{{ mesh 8 lattice lamellar }} }}\n')
+  rows=[]
+  for i in range(8):
+   a=contrast if i%2 else 0.;b=0. if absent else contrast-a
+   rows.append((a,b))
+  (d/'w').write_text('format 1 0\ndim\n1\ncrystal_system\nlamellar\nN_cell_param\n1\ncell_param\n1\nN_monomer\n2\nmesh\n8\n'+''.join(f'{a:.17g} {b:.17g}\n' for a,b in rows))
+  (d/'command').write_text('READ_W_RGRID w\nCOMPUTE\nWRITE_C_RGRID c\nWRITE_THERMO thermo\nFINISH\n')
+  p=subprocess.run([shutil.which('pscf_'+backend),'-d','1','-p','param','-c','command'],cwd=d,capture_output=True,text=True,timeout=30)
+  (d/'log').write_text(p.stdout+p.stderr)
+  e=math.exp(-contrast);lo=1/(1+e);hi=e/(1+e)
+  expected=[[0.,1.] if absent else ([lo,hi] if i%2==0 else [hi,lo]) for i in range(8)]
+  values=[]
+  if (d/'c').exists():
+   lines=(d/'c').read_text().splitlines();start=next(i for i,x in enumerate(lines) if x.strip()=='mesh')+2
+   values=[[float(v) for v in l.split()] for l in lines[start:] if l.strip()]
+  finite=bool(values) and all(math.isfinite(v) for row in values for v in row)
+  thermo=(d/'thermo').read_text() if (d/'thermo').exists() else ''
+  m=re.search(r'fHelmholtz\s+(\S+)',thermo)
+  row=dict(backend=backend,contrast=contrast,absent=absent,returncode=p.returncode,finite=finite,expected_c=expected,observed_c=[[v if math.isfinite(v) else str(v) for v in x] for x in values],observed_f=m[1] if m else None)
+  if finite:row['max_error']=max(abs(a-b) for x,y in zip(values,expected) for a,b in zip(x,y))
+  results.append(row);print(json.dumps(row),flush=True)
+(O/'results.json').write_text(json.dumps(results,indent=2)+'\n')
+# Check the analytical one-bead result, including the original silent-NaN cases.
+for r in results:
+ assert r['returncode']==0,r
+ assert r['finite'] and r['max_error']<1e-10,r
+ assert len(r['observed_c'])==8 and all(len(row)==2 for row in r['observed_c']),r
+ e=math.exp(-r['contrast'])
+ lo=1/(1+e); hi=e/(1+e)
+ exact_f=-1. if r['absent'] else -1.-math.log1p(e)-r['contrast']*hi+2*lo*hi
+ assert r['observed_f'] is not None,r
+ observed_f=float(r['observed_f'])
+ assert math.isfinite(observed_f) and abs(observed_f-exact_f)<1e-10,r
+print('Passed',len(results),'native bead normalization cases on', ', '.join(backends))

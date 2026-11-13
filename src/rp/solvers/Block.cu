@@ -34,6 +34,20 @@ namespace Rp {
    // CUDA kernels (anonymous namespace - only used in this file)
    namespace {
 
+      // Logarithmic product for the guarded bead concentration path.
+      __global__ void _addEqMulVVLog(cudaReal* out, cudaReal const* a,
+                                    cudaReal const* b, double logPrefactor,
+                                    int n)
+      {
+         for (int i = blockIdx.x*blockDim.x + threadIdx.x; i < n;
+              i += blockDim.x*gridDim.x) {
+            if (a[i] == 0.0 || b[i] == 0.0) continue;
+            const double value = exp(logPrefactor + log(fabs(a[i]))
+                                                 + log(fabs(b[i])));
+            out[i] += ((a[i] < 0.0) != (b[i] < 0.0)) ? -value : value;
+         }
+      }
+
       /*
       * Element-wise calculation of a = real(b * conj(c) * d), CUDA kernel
       */
@@ -273,6 +287,7 @@ namespace Rp {
       nParams_(0),
       isAllocated_(false),
       hasExpKsq_(false),
+      safeBead_(false),
       useBatchedFFT_(true)
    {
       propagator(0).setBlock(*this);
@@ -508,7 +523,8 @@ namespace Rp {
    */
    template <int D>
    void
-   Block<D,CUT>::setupSolver(RField<D,CUT> const & w, double wShift)
+   Block<D,CUT>::setupSolver(RField<D,CUT> const & w, double wShift,
+                             bool safeBead)
    {
       // Preconditions
       int nx = mesh().size();
@@ -517,6 +533,7 @@ namespace Rp {
 
       // Store the constant subtracted from w
       BlockTmplT::setWShift(wShift);
+      safeBead_ = safeBead;
 
       // Populate expW_ for the shifted field w - wShift, which is
       // stored temporarily in expW2_ (thread) or expWInv_ (bead)
@@ -527,7 +544,7 @@ namespace Rp {
       } else {
          VecOp::subVS(expWInv_, w, wShift);
          VecOp::expVc(expW_, expWInv_, -1.0);
-         VecOp::divSV(expWInv_, 1.0, expW_);
+         if (!safeBead) VecOp::divSV(expWInv_, 1.0, expW_);
       }
 
       // Compute expKsq arrays if necessary
@@ -710,6 +727,8 @@ namespace Rp {
 
       // Initialize cField to zero at all points
       VecOp::eqS(cField(), 0.0);
+      if (prefactor == 0.0) return;
+      UTIL_CHECK(!safeBead_);
 
       // References to forward and reverse propagators
       Propagator<D,CUT> const & p0 = propagator(0);
@@ -722,6 +741,41 @@ namespace Rp {
 
       // Scale cField() by prefactor
       VecOp::mulEqS(cField(), prefactor);
+   }
+
+   /*
+   * Bead concentration without forming qf*qr/exp(-w).
+   */
+   template <int D>
+   void Block<D,CUT>::computeConcentrationBeadLog(double logPrefactor)
+   {
+      UTIL_CHECK(PolymerModel::isBead());
+      UTIL_CHECK(isAllocated_);
+      const int nx = mesh().size();
+      Propagator<D,CUT> const& p0 = propagator(0);
+      Propagator<D,CUT> const& p1 = propagator(1);
+      UTIL_CHECK(p0.isSolved() && p1.isSolved());
+      VecOp::eqS(cField(), 0.0);
+      if (std::isinf(logPrefactor) && logPrefactor < 0.0) return;
+      UTIL_CHECK(std::isfinite(logPrefactor));
+      int nBlocks, nThreads;
+      ThreadArray::setThreadsLogical(nx, nBlocks, nThreads);
+
+      // Keep the reciprocal-weight array intact for other public calls.
+      RField<D,CUT> before(mesh().dimensions());
+      for (int j = 1; j < ns_ - 1; ++j) {
+         if (j == 1) {
+            if (p0.isHeadEnd()) {
+               VecOp::eqV(before, p0.head());
+            } else {
+               stepHalfBondBead(p0.head(), before);
+            }
+         } else {
+            stepBondBead(p0.q(j-1), before);
+         }
+         _addEqMulVVLog<<<nBlocks,nThreads>>>(cField().cArray(),
+            before.cArray(), p1.q(ns_-1-j).cArray(), logPrefactor, nx);
+      }
    }
 
    /*
@@ -859,6 +913,11 @@ namespace Rp {
       UTIL_CHECK(nParams_ > 0);
       UTIL_CHECK(meshDim == fft().meshDimensions());
       UTIL_CHECK(ns_ > 0);
+      if (prefactor == 0.0) {
+         stress_.clear();
+         for (int i = 0; i < nParams_; ++i) stress_.append(0.0);
+         return;
+      }
 
       // References to forward and reverse propagators
       Propagator<D,CUT>& p0 = propagator(0);
