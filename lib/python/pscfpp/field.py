@@ -208,10 +208,8 @@ class Field:
             self.header[l[0]] = getValue(l[1])
 
       while line != '':
-         d = []
-         for i in range(0, len(l)):
-            d.append(getValue(l[i]))
-         self.data.append(d)
+         if l:
+            self.data.append([getValue(v) for v in l])
          line = openFile.readline()
          l = line.split()
          
@@ -230,10 +228,24 @@ class Field:
             self.type = 'stars'
 
       if self.type == '':
-         if type(self.data[0][0]) is int:
+         # A mesh header is shared by real and Fourier grid formats.
+         # Numeric spelling is not a format marker: real coefficients
+         # may be integer literals, and Fourier indices may carry '+'.
+         nMonomer = self.header.get('N_monomer', 0)
+         if not self.data or nMonomer <= 0:
+            raise Exception('Missing mesh field data or N_monomer.')
+         nColumn = len(self.data[0])
+         if nColumn == nMonomer:
+            self.type = 'rgrid'
+         elif nColumn == 1 + 2*nMonomer:
             self.type = 'kgrid'
          else:
-            self.type = 'rgrid'
+            raise Exception('Invalid number of columns in mesh field data.')
+         for row in self.data:
+            if len(row) != nColumn:
+               raise Exception('Inconsistent number of mesh field columns.')
+            if self.type == 'kgrid' and not isinstance(row[0], int):
+               raise Exception('A k-grid row must begin with an integer index.')
 
    ##
    # Return string representation of this Field.
@@ -463,7 +475,7 @@ class Field:
 # \param v  a string represents a value.
 #
 def getValue(v):
-   if (v.isdigit() == True) or (v[0] == '-' and v[1:].isdigit() == True):
+   if v.isdigit() or (v[:1] in ('-', '+') and v[1:].isdigit()):
       val = int(v)  
    else:
       try:
