@@ -176,22 +176,23 @@ class RecordEditor:
          print('RecordEditor is not ready')
          return
  
-      oldfile = open(filename, 'r')
-      lines   = oldfile.readlines()
-      n       = len(lines)
-      oldfile.close()
-   
-      if (not self.isTest): 
-         newfile = open (filename, 'w')
-      found = False
+      with open(filename, 'r') as oldfile:
+         lines = oldfile.readlines()
+
+      # Finish parsing and editing before opening the original for writing.
+      # An invalid record must not leave only a prefix of the input file.
+      edited = []
       for line in lines:
          record = Record(line)
+         if record.size == 0:
+            edited.append(line)
+            continue
          if (self.filter == record.fields[self.filterField]):
             record.fields[self.dataField] = self.new
-         if (not self.isTest):
-            newfile.write(str(record) + '\n')
+         edited.append(str(record) + '\n')
       if (not self.isTest):
-         newfile.close()
+         with open(filename, 'w') as newfile:
+            newfile.writelines(edited)
 
 
 ##
