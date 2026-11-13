@@ -72,6 +72,10 @@
 #include "GpuComplexExpAliasTest.h"
 #endif
 
+#ifdef PSCF_CUDA
+#include "GpuThreadMeshDimensionTest.h"
+#endif
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -122,6 +126,9 @@ TEST_COMPOSITE_ADD_UNIT(IdentityGroupReloadTest);
 TEST_COMPOSITE_ADD_UNIT(AnisotropicMirrorMeshTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuComplexExpAliasTest);
+#endif
+#ifdef PSCF_CUDA
+TEST_COMPOSITE_ADD_UNIT(GpuThreadMeshDimensionTest);
 #endif
 TEST_COMPOSITE_END
 

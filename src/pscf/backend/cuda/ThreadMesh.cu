@@ -97,37 +97,29 @@ namespace ThreadMesh {
          init();
       }
 
-      // Check if requested number of threads matches the previous request
-      bool match = true;
-      if ((blockSize > 0) && (blockSize != THREADS_PER_BLOCK)) {
-         match = false;
-      } else if (invert) {
-         if (meshDims[D-1] != MESH_DIMS.x) match = false;
-         if (D > 1) { if (meshDims[D-2] != MESH_DIMS.y) match = false; }
-         if (D > 2) { if (meshDims[D-3] != MESH_DIMS.z) match = false; }
+      // Normalize all three axes before comparing with the cached request.
+      // Axes absent from a lower-dimensional mesh must also match (as 1).
+      dim3 requested(1, 1, 1);
+      if (invert) {
+         requested.x = meshDims[D-1];
+         if (D > 1) requested.y = meshDims[D-2];
+         if (D > 2) requested.z = meshDims[D-3];
       } else {
-         if (meshDims[0] != MESH_DIMS.x) match = false;
-         if (D > 1) { if (meshDims[1] != MESH_DIMS.y) match = false; }
-         if (D > 2) { if (meshDims[2] != MESH_DIMS.z) match = false; }
+         requested.x = meshDims[0];
+         if (D > 1) requested.y = meshDims[1];
+         if (D > 2) requested.z = meshDims[2];
       }
-
+      bool match = (requested.x == MESH_DIMS.x &&
+                    requested.y == MESH_DIMS.y &&
+                    requested.z == MESH_DIMS.z);
+      if ((blockSize > 0) && (blockSize != THREADS_PER_BLOCK)) match = false;
       if (match) {
          // Do nothing. Reuse previous execution configuration.
          return;
       }
 
       // Store meshDims in MESH_DIMS in dim3 format
-      MESH_DIMS.y = 1;
-      MESH_DIMS.z = 1;
-      if (invert) {
-         MESH_DIMS.x = meshDims[D-1];
-         if (D > 1) MESH_DIMS.y = meshDims[D-2];
-         if (D > 2) MESH_DIMS.z = meshDims[D-3];
-      } else {
-         MESH_DIMS.x = meshDims[0];
-         if (D > 1) MESH_DIMS.y = meshDims[1];
-         if (D > 2) MESH_DIMS.z = meshDims[2];
-      }
+      MESH_DIMS = requested;
       
       // Assign the total block size parameter if not provided
       bool manualBlockSize = false;
