@@ -9,6 +9,8 @@
 #include <pscf/math/RealVec.h>
 #include <util/containers/FArray.h>
 #include <util/global.h>
+#include <algorithm>
+#include <cmath>
 
 namespace Pscf {
 
@@ -85,8 +87,8 @@ namespace Pscf {
       * Move image r to a minimum image.
       *
       * Moves r by the image shift neighbor that lowers |k|^2 most, for
-      * as long as one lowers it by more than epsilon. The image is then
-      * moved to the largest (in the order of IntVec) of the neighboring
+      * as long as one lowers it beyond the relative tolerance epsilon.
+      * The image is then moved to the largest (in the order of IntVec) of the neighboring
       * images with equal |k|^2, repeatedly. The neighbors contain every
       * difference between tied minimum images (they are the Voronoi-
       * relevant vectors), so this reaches the largest tied image from
@@ -105,11 +107,12 @@ namespace Pscf {
          IntVec<D> u;
          for (;;) {
             int jBest = -1;
-            double GsqBest = Gsq - epsilon;
+            double GsqBest = Gsq;
             for (int j = 0; j < n; ++j) {
                u.add(r, nb[j]);
                double g = cell.ksq(u);
-               if (g < GsqBest) {
+               double tol = epsilon*std::max(g, GsqBest);
+               if (g < GsqBest - tol) {
                   jBest = j;
                   GsqBest = g;
                }
@@ -123,7 +126,9 @@ namespace Pscf {
             changed = false;
             for (int j = 0; j < n; ++j) {
                u.add(r, nb[j]);
-               if ((cell.ksq(u) < Gsq + epsilon) && (r < u)) {
+               double g = cell.ksq(u);
+               double tol = epsilon*std::max(g, Gsq);
+               if ((std::abs(g - Gsq) <= tol) && (r < u)) {
                   r = u;
                   changed = true;
                }
@@ -313,11 +318,12 @@ namespace Pscf {
                             IntVec<2> const & d,
                             UnitCell<2> const & cell)
    {
-      // Initialize minimum to input value
-      const double epsilon = 1.0E-8;
-      double Gsq = cell.ksq(v);
-      double Gsq_min_lo = Gsq - epsilon;
-      double Gsq_min_hi = Gsq + epsilon;
+      // Compare squared norms relatively: changing length units must not
+      // change the selected integer image. Zero is never tied with nonzero.
+      // Keep the band at rounding scale; a 1e-8 relative band treats small
+      // physical angle perturbations as ties and can break inversion pairs.
+      const double epsilon = 1.0E-12;
+      double GsqMin = cell.ksq(v);
 
       // Loop over neighboring images
       IntVec<2> r = v;               // Minimum image of v
@@ -328,13 +334,12 @@ namespace Pscf {
          u[0] = v[0] + s0*d[0];
          for (s1 = -q; s1 < q+1; ++s1) {
             u[1] = v[1] + s1*d[1];
-            Gsq = cell.ksq(u);
-            if (Gsq < Gsq_min_hi) {
-               if ((Gsq < Gsq_min_lo) || (r < u)) {
-                  Gsq_min_lo = Gsq - epsilon;
-                  Gsq_min_hi = Gsq + epsilon;
-                  r = u;
-               }
+            double Gsq = cell.ksq(u);
+            double tol = epsilon*std::max(Gsq, GsqMin);
+            if (Gsq < GsqMin - tol ||
+                (std::abs(Gsq - GsqMin) <= tol && r < u)) {
+               GsqMin = Gsq;
+               r = u;
             }
          }
       }
@@ -349,11 +354,12 @@ namespace Pscf {
                             IntVec<3> const & d,
                             UnitCell<3> const & cell)
    {
-      // Initialize minimum to input value
-      const double epsilon = 1.0E-8;
-      double Gsq = cell.ksq(v);
-      double Gsq_min_lo = Gsq - epsilon;
-      double Gsq_min_hi = Gsq + epsilon;
+      // Compare squared norms relatively: changing length units must not
+      // change the selected integer image. Zero is never tied with nonzero.
+      // Keep the band at rounding scale; a 1e-8 relative band treats small
+      // physical angle perturbations as ties and can break inversion pairs.
+      const double epsilon = 1.0E-12;
+      double GsqMin = cell.ksq(v);
 
       // Loop over neighboring images
       IntVec<3> r = v;               // Minimum image
@@ -366,13 +372,12 @@ namespace Pscf {
             u[1] = v[1] + s1*d[1];
             for (s2 = -q; s2 < q + 1; ++s2) {
                u[2] = v[2] + s2*d[2];
-               Gsq = cell.ksq(u);
-               if (Gsq < Gsq_min_hi) {
-                  if ((Gsq < Gsq_min_lo) || (r < u)) {
-                     Gsq_min_lo = Gsq - epsilon;
-                     Gsq_min_hi = Gsq + epsilon;
-                     r = u;
-                  }
+               double Gsq = cell.ksq(u);
+               double tol = epsilon*std::max(Gsq, GsqMin);
+               if (Gsq < GsqMin - tol ||
+                   (std::abs(Gsq - GsqMin) <= tol && r < u)) {
+                  GsqMin = Gsq;
+                  r = u;
                }
             }
          }
@@ -498,7 +503,7 @@ namespace Pscf {
       UTIL_CHECK(i >= 0 && j >= 0 && k >= 0);
       IntVec<D> r = u;
       r[i] = 0;
-      planeMinimum<D>(r, d, i, j, k, cell, 1.0E-8);
+      planeMinimum<D>(r, d, i, j, k, cell, 1.0E-12);
       r[i] = u[i];
       return r;
    }

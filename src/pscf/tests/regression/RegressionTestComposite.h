@@ -42,6 +42,12 @@
 #include "GpuNyquistGroupTest.h"
 #endif
 
+#include "MinimumImageScaleTest.h"
+
+#ifdef PSCF_CUDA
+#include "MinimumImageScaleGpuTest.h"
+#endif
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -74,6 +80,10 @@ TEST_COMPOSITE_ADD_UNIT(GpuFftTest);
 TEST_COMPOSITE_ADD_UNIT(GpuKSqOverflowTest);
 TEST_COMPOSITE_ADD_UNIT(GpuNyquistTest);
 TEST_COMPOSITE_ADD_UNIT(GpuNyquistGroupTest);
+#endif
+TEST_COMPOSITE_ADD_UNIT(MinimumImageScaleTest);
+#ifdef PSCF_CUDA
+TEST_COMPOSITE_ADD_UNIT(MinimumImageScaleGpuTest);
 #endif
 TEST_COMPOSITE_END
 

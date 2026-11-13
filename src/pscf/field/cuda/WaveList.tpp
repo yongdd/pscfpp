@@ -140,7 +140,7 @@ namespace Pscf {
       /*
       * Move image r to a minimum image, with the steps of the function
       * descendToMinimum in shiftToMinimum.cpp: move by the image shift
-      * that lowers kSq most while one lowers it by more than epsilon,
+      * that lowers kSq most beyond the relative tolerance epsilon,
       * then move to the largest neighboring image of equal kSq,
       * repeatedly. Returns true if r changed, and then sets kSq.
       */
@@ -154,13 +154,14 @@ namespace Pscf {
          bool moved = false;
          for (;;) {
             int jBest = -1;
-            cudaReal kSqBest = kSq - epsilon;
+            cudaReal kSqBest = kSq;
             for (int j = 0; j < shifts.n; ++j) {
                for (int i = 0; i < D; ++i) {
                   u[i] = r[i] + shifts.v[D*j + i];
                }
                cudaReal g = _kSqImage<D>(u, kBasis);
-               if (g < kSqBest) {
+               cudaReal tol = epsilon * (g > kSqBest ? g : kSqBest);
+               if (g < kSqBest - tol) {
                   jBest = j;
                   kSqBest = g;
                }
@@ -179,7 +180,9 @@ namespace Pscf {
                for (int i = 0; i < D; ++i) {
                   u[i] = r[i] + shifts.v[D*j + i];
                }
-               if (_kSqImage<D>(u, kBasis) < kSq + epsilon) {
+               cudaReal g = _kSqImage<D>(u, kBasis);
+               cudaReal tol = epsilon * (g > kSq ? g : kSq);
+               if (fabs(g - kSq) <= tol) {
                   // Is r < u in the order of IntVec?
                   bool less = false;
                   for (int i = 0; i < D; ++i) {
@@ -308,11 +311,11 @@ namespace Pscf {
             s1 = 0;
          }
 
-         // Set epsilon
+         // Relative squared-norm tolerance, independent of length units
          #ifdef SINGLE_PRECISION
          cudaReal epsilon = 1.0E-4;
          #else
-         cudaReal epsilon = 1.0E-8;
+         cudaReal epsilon = 1.0E-12;
          #endif
 
          // Declare dynamically allocated arrays in shared memory
@@ -343,11 +346,12 @@ namespace Pscf {
             if (paramID < kSize) { // only evaluate if on the k-grid
                if (imageID < stride) {
                   bool swap = false;
-                  if (kSqVals_[threadIdx.x+stride] <
-                                       (kSqVals_[threadIdx.x] - epsilon)) {
+                  cudaReal a = kSqVals_[threadIdx.x];
+                  cudaReal b = kSqVals_[threadIdx.x+stride];
+                  cudaReal tol = epsilon * (a > b ? a : b);
+                  if (b < a - tol) {
                      swap = true;
-                  } else if (kSqVals_[threadIdx.x+stride] <
-                                       (kSqVals_[threadIdx.x] + epsilon)) {
+                  } else if (fabs(b - a) <= tol) {
                      // kSq values effectively equal.
                      // Determine whether to swap based on hkl indices
                      for (int i = 0; i < 2; ++i) {
@@ -444,11 +448,11 @@ namespace Pscf {
             s2 = 0;
          }
 
-         // Set epsilon
+         // Relative squared-norm tolerance, independent of length units
          #ifdef SINGLE_PRECISION
          cudaReal epsilon = 1.0E-4;
          #else
-         cudaReal epsilon = 1.0E-8;
+         cudaReal epsilon = 1.0E-12;
          #endif
 
          // Declare dynamically allocated arrays in shared memory
@@ -484,11 +488,12 @@ namespace Pscf {
             if (paramID < kSize) { // only evaluate if on the k-grid
                if (imageID < stride) {
                   bool swap = false;
-                  if (kSqVals_[threadIdx.x+stride] <
-                                     (kSqVals_[threadIdx.x] - epsilon)) {
+                  cudaReal a = kSqVals_[threadIdx.x];
+                  cudaReal b = kSqVals_[threadIdx.x+stride];
+                  cudaReal tol = epsilon * (a > b ? a : b);
+                  if (b < a - tol) {
                      swap = true;
-                  } else if (kSqVals_[threadIdx.x+stride] <
-                                     (kSqVals_[threadIdx.x] + epsilon)) {
+                  } else if (fabs(b - a) <= tol) {
                      // kSq values effectively equal.
                      // Determine whether to swap based on hkl indices
                      for (int i = 0; i < 3; ++i) {
