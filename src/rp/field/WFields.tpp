@@ -286,6 +286,12 @@ namespace Rp {
       UTIL_CHECK(nMonomer_ > 0);
       UTIL_CHECK(readUnitCellPtr_);
 
+      // Parsing can modify the unit cell and either field representation.
+      // Keep data unusable until the entire read and conversion succeed.
+      hasData_ = false;
+      isSymmetric_ = false;
+      signal().notify();
+
       // Read field file header
       int nMonomerIn;
       bool isSymmetricIn;
@@ -360,6 +366,12 @@ namespace Rp {
       // Preconditions
       UTIL_CHECK(nMonomer_ > 0);
       UTIL_CHECK(readUnitCellPtr_);
+
+      // Invalidate before header parsing as well as before data writes.
+      // Observers must not retain results from a failed replacement read.
+      hasData_ = false;
+      isSymmetric_ = false;
+      signal().notify();
 
       // If necessary, allocate r-grid fields
       if (!isAllocatedRGrid_) {

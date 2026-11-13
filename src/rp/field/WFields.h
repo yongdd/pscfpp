@@ -224,6 +224,10 @@ namespace Rp {
       * This function also computes and stores the corresponding r-grid
       * representation. On return, hasData and isSymmetric are both true.
       *
+      * If parsing or conversion fails, hasData and isSymmetric are false
+      * and observers are notified. Partial field/cell changes are not
+      * rolled back; set or read valid fields before using this object.
+      *
       * As needed, r-grid and/or basis fields can be allocated within
       * this function, if not allocated on entry. An associated basis
       * will be initialized if not initialized on entry.
@@ -258,6 +262,10 @@ namespace Rp {
       * On return, hasData is true and the persistent isSymmetric flag
       * defined by the class is set to the value of the isSymmetric
       * input parameter.
+      *
+      * If parsing or conversion fails, hasData and isSymmetric are false
+      * and observers are notified. Partial field/cell changes are not
+      * rolled back; set or read valid fields before using this object.
       *
       * As needed, r-grid and/or basis fields may be allocated within
       * this function, if not allocated on entry. An associated basis
