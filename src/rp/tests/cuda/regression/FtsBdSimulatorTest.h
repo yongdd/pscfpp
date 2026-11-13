@@ -5,6 +5,7 @@
 #include <test/UnitTestRunner.h>
 
 #include <rp/system/System.h>
+#include <rp/tests/CompressedInitialState.h>
 #include <rp/fts/simulator/Simulator.h>
 #include <rp/fts/brownian/BdSimulator.h>
 #include <rp/solvers/Mixture.h>
@@ -198,6 +199,14 @@ public:
       Rp::BdSimulator<3,CUT> simulator(system);
       initSimulator(simulator, "in/Fts/param_BdSimulator_failStep");
       system.w().readRGrid("in/Fts/w_small.rf");
+      bool failedStartup = false;
+      try {
+         simulator.simulate(3);
+      } catch (Exception& e) {
+         failedStartup = true;
+      }
+      TEST_ASSERT(failedStartup);
+      Rp::prepareCompressedInitialState(system, simulator);
       simulator.simulate(3);
 
       // Every step failed

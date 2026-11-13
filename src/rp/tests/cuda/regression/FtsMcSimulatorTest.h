@@ -5,6 +5,7 @@
 #include <test/UnitTestRunner.h>
 
 #include <rp/system/System.h>
+#include <rp/tests/CompressedInitialState.h>
 #include <rp/fts/simulator/Simulator.h>
 #include <rp/fts/montecarlo/McSimulator.h>
 #include <rp/fts/montecarlo/McMove.h>
@@ -164,6 +165,7 @@ public:
       initSystem(system, "in/Fts/param_system_small_BdMove_fail");
       TEST_ASSERT(system.hasSimulator());
       system.w().readRGrid("in/Fts/w_small.rf");
+      Rp::prepareCompressedInitialState(system, system.simulator());
 
       bool success = true;
       try {

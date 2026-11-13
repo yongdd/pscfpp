@@ -151,7 +151,9 @@ namespace Rp {
       // that the compressor derived from them.
       if (isSimulation && Simulator<D,T>::hasCompressor()) {
          Simulator<D,T>::compressor().clearCache();
-         Simulator<D,T>::compressor().compress();
+         if (Simulator<D,T>::compressor().compress() != 0) {
+            UTIL_THROW("Initial compression failed; simulation cannot start");
+         }
          Simulator<D,T>::compressor().clearTimers();
       }
 

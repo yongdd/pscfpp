@@ -5,6 +5,7 @@
 #include <test/UnitTestRunner.h>
 
 #include <rp/system/System.h>
+#include <rp/tests/CompressedInitialState.h>
 #include <rp/fts/simulator/Simulator.h>
 #include <rp/fts/brownian/BdSimulator.h>
 #include <rp/fts/montecarlo/McSimulator.h>
@@ -172,6 +173,7 @@ public:
       Rp::BdSimulator<3,CUT> simulator(system);
       initSimulator(simulator, "in/Fts/linRamp_failBd");
       system.w().readRGrid("in/Fts/w_small.rf");
+      Rp::prepareCompressedInitialState(system, simulator);
       simulator.simulate(3);
 
       TEST_ASSERT(simulator.iTotalStep() == 3);
@@ -193,6 +195,7 @@ public:
       Rp::McSimulator<3,CUT> simulator(system);
       initSimulator(simulator, "in/Fts/linRamp_failMc");
       system.w().readRGrid("in/Fts/w_small.rf");
+      Rp::prepareCompressedInitialState(system, simulator);
       simulator.simulate(3);
 
       TEST_ASSERT(simulator.iTotalStep() == 3);

@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Reject failed initial compression before BD/MC sampling (CPU and CUDA)."""
+from pathlib import Path
+import json
+import math
+import re
+import subprocess
+import argparse
+import shutil
+import tempfile
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--program', action='append', choices=['rpc', 'rpg'])
+parser.add_argument('--output', type=Path)
+args = parser.parse_args()
+OUT = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix='initial-compression-'))
+OUT.mkdir(parents=True, exist_ok=True)
+
+MESH = 8
+EPS = 1e-10
+MU = math.log(0.5)
+rows = []
+
+
+def parameter(simulator, max_itr):
+    dynamics = ('ExplicitBdStep{ mobility 1e-12 }' if simulator == 'BdSimulator'
+                else 'McMoveManager{ RealMove{ probability 1 sigma 0 } }')
+    return f'''System{{
+ Mixture{{ nMonomer 2 monomers[ 1 1 ] nPolymer 2
+ Polymer{{ type linear nBlock 1 blocks[ 0 1 ] mu {MU:.17g} }}
+ Polymer{{ type linear nBlock 1 blocks[ 1 1 ] mu {MU:.17g} }}
+ vMonomer .01 ds .05 }}
+ Interaction{{ chi( 0 1 10 ) }}
+ Domain{{ mesh {MESH} lattice lamellar }}
+ {simulator}{{ seed 1234
+ {dynamics}
+ LrCompressor{{ epsilon {EPS:.17g} maxItr {max_itr} verbose 1 errorType max }}
+ AnalyzerManager{{ baseInterval 1
+ TrajectoryWriter{{ interval 1 outputFileName trajectory }}
+ HamiltonianAnalyzer{{ interval 1 outputFileName energy nSamplePerOutput 1 }}
+ }}
+ }}
+}}
+'''
+
+
+def fields(w):
+    return f'''format 1 0
+dim
+1
+crystal_system
+lamellar
+N_cell_param
+1
+cell_param
+1
+N_monomer
+2
+mesh
+{MESH}
+''' + ''.join(f'{w:.17g} {w:.17g}\n' for _ in range(MESH))
+
+
+def read_frames(path):
+    lines = path.read_text().splitlines()
+    frames = []
+    for k, line in enumerate(lines):
+        if not line.startswith('i ='):
+            continue
+        j = k + 1
+        if lines[j].startswith('cell_param'):
+            j += 1
+        assert lines[j].strip() == 'mesh'
+        assert int(lines[j + 1].strip()) == MESH
+        frames.append([[float(x) for x in row.split()]
+                       for row in lines[j + 2:j + 2 + MESH]])
+    return frames
+
+
+def read_field(path):
+    lines = path.read_text().splitlines()
+    k = next(i for i, line in enumerate(lines) if line.strip() == 'mesh')
+    assert int(lines[k + 1]) == MESH
+    return [[float(x) for x in line.split()]
+            for line in lines[k + 2:k + 2 + MESH]]
+
+
+def read_energy(path):
+    records = []
+    for line in path.read_text().splitlines():
+        try:
+            values = [float(x) for x in line.split()]
+        except ValueError:
+            continue
+        if len(values) >= 4:
+            records.append(values)
+    return records
+
+
+def run(backend, simulator, case, max_itr, w0, command):
+    directory = OUT / f'{backend}_{simulator}_{case}'
+    directory.mkdir()
+    (directory / 'param').write_text(parameter(simulator, max_itr))
+    (directory / 'w').write_text(fields(w0))
+    (directory / 'command').write_text('READ_W_RGRID w\n' + command)
+    with (directory / 'log').open('w') as log:
+        result = subprocess.run(
+            [shutil.which(f'pscf_{backend}'), '-d', '1',
+             '-p', 'param', '-c', 'command'], cwd=directory,
+            stdout=log, stderr=subprocess.STDOUT, timeout=45)
+    log = (directory / 'log').read_text()
+    row = dict(backend=backend, simulator=simulator, case=case,
+               max_itr=max_itr, input_w=w0, returncode=result.returncode,
+               compressor_failure_messages=log.count('Iterator failed to converge.'),
+               epsilon=EPS)
+    if (directory / 'trajectory').exists():
+        frames = read_frames(directory / 'trajectory')
+        row['n_frames'] = len(frames)
+        if frames:
+            first = frames[0]
+            row['first_frame_w'] = first[0]
+            row['first_frame_spatial_variation'] = max(
+                abs(first[k][i] - first[0][i])
+                for k in range(MESH) for i in range(2))
+            density = sum(math.exp(MU - wi) for wi in first[0])
+            row['initial_exact_density'] = density
+            row['initial_exact_incompressibility_error'] = abs(density - 1)
+            wp = sum(first[0]) / 2
+            wm = (first[0][0] - first[0][1]) / 2
+            row['initial_exact_hamiltonian'] = 100 * (
+                -density - wp + wm * wm / 10 + 10 / 4)
+            row['partial_saddle_hamiltonian'] = 150.0
+    if (directory / 'energy.dat').exists():
+        row['energy_rows'] = read_energy(directory / 'energy.dat')
+        if row['energy_rows'] and 'initial_exact_hamiltonian' in row:
+            row['first_energy_total'] = row['energy_rows'][0][-1]
+            row['first_energy_oracle_difference'] = abs(
+                row['first_energy_total'] - row['initial_exact_hamiltonian'])
+    if (directory / 'final_c').exists():
+        c = read_field(directory / 'final_c')
+        row['final_native_density_error'] = max(abs(sum(p) - 1) for p in c)
+    row['subsequent_write_executed'] = (directory / 'final_w').exists()
+    rows.append(row)
+    print(json.dumps(row), flush=True)
+    (OUT / 'results.json').write_text(json.dumps(rows, indent=2) + '\n')
+
+
+for backend in args.program or ['rpc']:
+    for simulator in ['BdSimulator', 'McSimulator']:
+        for case, max_itr, w0 in [('failure', 1, 1.0),
+                                  ('iterations_control', 100, 1.0),
+                                  ('saddle_control', 1, 0.0)]:
+            run(backend, simulator, case, max_itr, w0,
+                'SIMULATE 1\nWRITE_W_RGRID final_w\n'
+                'WRITE_C_RGRID final_c\nFINISH\n')
+    # A nearby public command already handles exactly the same failure.
+    run(backend, 'BdSimulator', 'compress_status_control', 1, 1.0,
+        'COMPRESS\nWRITE_W_RGRID final_w\nFINISH\n')
+
+
+for row in rows:
+    failed = row['case'] in ('failure', 'compress_status_control')
+    if failed:
+        assert row['returncode'] != 0, row
+        assert not row['subsequent_write_executed'], row
+        assert row.get('n_frames', 0) == 0, row
+        assert not row.get('energy_rows'), row
+        assert row['compressor_failure_messages'] > 0, row
+    else:
+        assert row['returncode'] == 0, row
+        assert row['n_frames'] > 0, row
+        assert row['subsequent_write_executed'], row
+        assert row['initial_exact_incompressibility_error'] < 1e-8, row
+        assert row['final_native_density_error'] < 1e-8, row
+        assert abs(row['first_energy_total'] - 150) < 1e-7, row
+print(f'Passed {len(rows)} startup compression cases')
