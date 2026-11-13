@@ -404,6 +404,33 @@ namespace Pscf
       if (!isAllocatedAM()) {
          allocateAM();
       } else {
+         // Public configuration changes, such as the number of flexible
+         // cell parameters, can change the state dimension between solves.
+         // All ring-buffer slots must be released, including inactive ones:
+         // clear() alone only resets their counters and retains the arrays.
+         const int nElem = nElements();
+         if (nElem != nElem_) {
+            RingBuffer<T>* buffers[] = {&stateHistory_, &residualHistory_,
+                                       &stateBasis_, &residualBasis_};
+            for (auto buffer : buffers) {
+               buffer->clear();
+               for (int i = 0; i < buffer->capacity(); ++i) {
+                  buffer->advance();
+                  if ((*buffer)[0].isAllocated()) {
+                     (*buffer)[0].deallocate();
+                  }
+               }
+               buffer->clear();
+            }
+            stateTrial_.deallocate();
+            residualTrial_.deallocate();
+            temp_.deallocate();
+            nElem_ = nElem;
+            stateTrial_.allocate(nElem_);
+            residualTrial_.allocate(nElem_);
+            temp_.allocate(nElem_);
+         }
+
          // Clear residual and state history buffers
          residualHistory_.clear();
          stateHistory_.clear();

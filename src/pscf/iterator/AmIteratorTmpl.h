@@ -166,6 +166,8 @@ namespace Pscf {
       * if isAllocatedAM() is false, and clears state and residual 
       * histories. If isContinuation is false, it also clears state and
       * residual basis vector lists. 
+      * If the state dimension changes, all vector storage is resized and
+      * incompatible histories and bases are discarded even for continuation.
       *
       * \param isContinuation  true iff continuation within a sweep
       */

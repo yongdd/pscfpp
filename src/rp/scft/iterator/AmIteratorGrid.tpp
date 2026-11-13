@@ -252,8 +252,14 @@ namespace Rp {
       const int nx = system().domain().mesh().size();
       const bool hasH = system().h().hasData();
       const RealT shift = 1.0 / interaction_.sumChiInverse();
+      if (referenceWork_.isAllocated()
+          && referenceWork_.capacity() != state.capacity()) {
+         referenceWork_.deallocate();
+      }
       if (!referenceWork_.isAllocated()) {
          referenceWork_.allocate(state.capacity());
+      }
+      if (!effectiveFieldWork_.isAllocated()) {
          effectiveFieldWork_.allocate(nx);
          anchorWork_.allocate(nx);
       }
