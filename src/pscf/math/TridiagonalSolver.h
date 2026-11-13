@@ -22,6 +22,9 @@ namespace Pscf
    /**
    * Solver for Ax=b with tridiagonal matrix A.
    *
+   * Uses partial pivoting between adjacent rows, with O(n) storage
+   * and work. computeLU throws for a singular or nonfinite factorization.
+   *
    * \ingroup Pscf_Math_Module
    */  
    class TridiagonalSolver
@@ -41,7 +44,7 @@ namespace Pscf
       /**
       * Allocate memory.
       *
-      * \param n dimension of n x n square array.
+      * \param n positive dimension of n x n square array.
       */
       void allocate(int n);
 
@@ -82,21 +85,27 @@ namespace Pscf
 
    private:
 
-      // Diagonal elements
+      // Diagonal and first two upper diagonals of U.
       DArray<double> d_;
-
-      // Upper off-diagonal elements (unmodified by computeLU)
       DArray<double> u_;
+      DArray<double> u2_;
 
-      // Lower off-diagonal elements (replaced by multipliers)
+      // Elimination multipliers and adjacent row permutations.
       DArray<double> l_;
+      DArray<int> pivot_;
+
+      // Original coefficients for multiplication, independent of the LU.
+      DArray<double> originalD_;
+      DArray<double> originalU_;
+      DArray<double> originalL_;
 
       // Work space.
       DArray<double> y_;
 
       int n_;
+      bool isDecomposed_;
 
-      // Apply Gauss elimination to private arrays d_, u_, l_.
+      // Apply Gaussian elimination with adjacent partial pivoting.
       void gaussElimination();
 
    };
