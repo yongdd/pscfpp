@@ -49,6 +49,7 @@ namespace Rp {
       kMeshDimensions_(),
       nWave_(0),
       nBunch_(0),
+      hasSamples_(false),
       writeWaveData_(false),
       isInitialized_(false)
    {
@@ -80,6 +81,7 @@ namespace Rp {
    {
       allocate();
       setupWaveBunches();
+      hasSamples_ = false;
    }
 
    /*
@@ -89,8 +91,24 @@ namespace Rp {
    void BinaryStructureFactor<D,T>::sample(long iStep)
    {
       if (Analyzer<D,T>::isAtInterval(iStep)) {
+         FSArray<double, 6> const & parameters
+                               = system().domain().unitCell().parameters();
+         bool cellChanged = (parameters.size() != cellParameters_.size());
+         for (int i = 0; !cellChanged && i < parameters.size(); ++i) {
+            cellChanged = (parameters[i] != cellParameters_[i]);
+         }
+         if (cellChanged) {
+            // ANALYZE may set up on an unsampled frame. Use the cell of
+            // the first sample, but never mix different physical q grids.
+            if (hasSamples_) {
+               UTIL_THROW("BinaryStructureFactor requires the same unit cell "
+                          "for all sampled frames; analyze fixed-cell ranges separately");
+            }
+            setupWaveBunches();
+         }
          computeW();
          computeS();
+         hasSamples_ = true;
       }
    }
 
@@ -257,6 +275,8 @@ namespace Rp {
 
       }
       UTIL_CHECK(nw == nWave_);
+
+      cellParameters_ = system().domain().unitCell().parameters();
 
    }
 

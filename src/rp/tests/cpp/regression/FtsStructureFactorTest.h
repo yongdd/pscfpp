@@ -7,6 +7,7 @@
 #include <rp/system/System.h>
 #include <rp/fts/simulator/Simulator.h>
 #include <rp/fts/brownian/BdSimulator.h>
+#include <rp/fts/analyzer/BinaryStructureFactor.h>
 #include <rp/field/WFields.h>
 
 #include <util/misc/FileMaster.h>
@@ -98,10 +99,58 @@ public:
       }
    }
 
+   void testSampleCell()
+   {
+      printMethod(TEST_FUNC);
+      openLogFile("out/FtsSampleCell.log");
+      Rp::System<3,CPT> system;
+      initSystem(system, "in/Fts/param_system_small");
+      Rp::BdSimulator<3,CPT> simulator(system);
+      initSimulator(simulator, "in/Fts/param_BdSimulator_structureFactor");
+      system.w().readRGrid("in/Fts/w_small.rf");
+      simulator.analyzeChi();
+      Rp::BinaryStructureFactor<3,CPT> analyzer(simulator, system);
+      std::istringstream param("BinaryStructureFactor{ interval 2 "
+                              "outputFileName out/FtsSampleCell }");
+      analyzer.readParam(param);
+      analyzer.setup();
+      FSArray<double, 6> cell = system.domain().unitCell().parameters();
+      cell[0] = 4.0;
+      system.setUnitCell(cell);
+      analyzer.sample(1); // Not sampled: changing the cell is still permitted.
+      analyzer.sample(2);
+      analyzer.output();
+      std::ifstream file;
+      openInputFile("out/FtsSampleCell", file);
+      double q, value;
+      file >> q >> value;
+      TEST_ASSERT(std::abs(q) < 1.0E-10);
+      file >> q >> value;
+      TEST_ASSERT(std::abs(q - 0.5*std::acos(-1.0)) < 1.0E-7);
+      file.close();
+      analyzer.sample(4); // Same cell: accumulate normally.
+      cell[0] = 2.0;
+      system.setUnitCell(cell);
+      bool rejected = false;
+      try { analyzer.sample(6); }
+      catch (Exception& e) {
+         rejected = e.message().find("same unit cell") != std::string::npos;
+      }
+      TEST_ASSERT(rejected);
+      // A separate accumulation can use a different cell.
+      analyzer.setup();
+      analyzer.sample(8);
+      analyzer.output();
+      openInputFile("out/FtsSampleCell", file);
+      file >> q >> value >> q >> value;
+      TEST_ASSERT(std::abs(q - std::acos(-1.0)) < 1.0E-7);
+   }
+
 };
 
 TEST_BEGIN(FtsStructureFactorTest)
 TEST_ADD(FtsStructureFactorTest, testWaveBunchesRectangular)
+TEST_ADD(FtsStructureFactorTest, testSampleCell)
 TEST_END(FtsStructureFactorTest)
 
 #endif

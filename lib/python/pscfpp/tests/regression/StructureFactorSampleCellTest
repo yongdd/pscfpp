@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Check changing-cell analysis with an exact cosine spectrum.
+
+Only frame2 is sampled in the delayed/direct/constant comparisons. Its
+physical q grid and all spherical averages must agree. Two different sampled
+cells must instead raise the documented fixed-cell accumulation diagnostic.
+"""
+import argparse
+import json
+import math
+from pathlib import Path
+import subprocess
+import tempfile
+
+SOURCE = Path(__file__).resolve().parents[5]
+
+
+def run(out, programs):
+    target = SOURCE
+    out.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for backend in programs:
+        for simulator in ['BdSimulator', 'McSimulator']:
+            for lattice in ['cubic', 'orthorhombic']:
+                for mode in ['delayed', 'direct', 'constant']:
+                    name = f'{backend}_{simulator}_{lattice}_{mode}'
+                    work = out / name
+                    work.mkdir(exist_ok=True)
+                    text = (target / 'src/rp/tests/cpp/regression/in/Fts/param_system_small').read_text()
+                    text = text.replace('lattice     cubic', 'lattice     ' + lattice)
+                    text = text[:text.rfind('}')]
+                    text += f'''  {simulator}{{
+        AnalyzerManager{{
+          baseInterval 1
+          BinaryStructureFactor{{
+            interval 2
+            outputFileName sf
+            writeWaveData 1
+          }}
+        }}
+      }}
+    }}
+    '''
+                    (work / 'param').write_text(text)
+                    initial = [2.] if lattice == 'cubic' else [2., 2., 2.]
+                    final = [4.] if lattice == 'cubic' else [4., 2., 2.]
+                    if mode == 'constant':
+                        initial = final
+                    tr = f'format 1 0\ndim\n3\ncrystal_system\n{lattice}\nN_cell_param\n{len(initial)}\ncell_param\n'
+                    tr += ' '.join(map(str, initial)) + '\nN_monomer\n2\n\n'
+                    for frame in range(3):
+                        cell = initial if frame < 2 else final
+                        tr += f'i = {frame}\ncell_param ' + ' '.join(map(str, cell)) + '\nmesh\n8 8 8\n'
+                        # RGridTrajectoryReader's file ordering advances x fastest.
+                        for z in range(8):
+                            for y in range(8):
+                                for x in range(8):
+                                    value = math.cos(2*math.pi*z/8)
+                                    tr += f'{5+value:.16e} {5-value:.16e}\n'
+                    (work / 'trajectory').write_text(tr)
+                    minimum = 2 if mode == 'direct' else 1
+                    (work / 'commands').write_text(f'ANALYZE {minimum} 2 RGridTrajectoryReader trajectory\nFINISH\n')
+                    with (work / 'run.log').open('w') as log:
+                        proc = subprocess.run([str(target / 'bin' / ('pscf_' + backend)), '-d', '3', '-p', 'param', '-c', 'commands'], cwd=work, stdout=log, stderr=subprocess.STDOUT, timeout=45)
+                    row = dict(name=name, backend=backend, simulator=simulator, lattice=lattice, mode=mode, rc=proc.returncode)
+                    if (work / 'sf_ave').exists():
+                        values = [[float(v) for v in line.split()] for line in (work / 'sf_ave').read_text().splitlines() if line.strip()]
+                        row['n_bunch'] = len(values)
+                        row['first_nonzero'] = values[1]
+                        row['q_expected'] = math.pi/2
+                        row['sf_expected'] = (64/.01*.25/3-5) if lattice == 'cubic' else -5.
+                    rows.append(row)
+                    print(json.dumps(row), flush=True)
+    (out / 'results.json').write_text(json.dumps(rows, indent=2) + '\n')
+    assert all(r['rc'] == 0 and 'first_nonzero' in r for r in rows)
+    summary = []
+    for row in rows:
+        work = out / row['name']
+        wave = [[float(v) for v in line.split()] for line in (work/'sf_wave').read_text().splitlines()]
+        ave = [[float(v) for v in line.split()] for line in (work/'sf_ave').read_text().splitlines()]
+        lengths = [4,4,4] if row['lattice']=='cubic' else [4,2,2]
+        volume = math.prod(lengths)
+        coefficient = volume / (10**2 * .01**2)
+        groups = {}
+        for kx,ky,kz,value in wave:
+            expected = coefficient*.25-5 if [kx,ky,kz]==[0,0,1] else -5
+            assert abs(value-expected)<1e-6, (row['name'],kx,ky,kz,value,expected)
+            kx = min(kx,8-kx)
+            ky = min(ky,8-ky)
+            scaled_ksq = sum((k/L)**2 for k,L in zip([kx,ky,kz], lengths))
+            weight = 1 if kz in [0,4] else 2
+            total, count = groups.get(scaled_ksq,(0.,0))
+            groups[scaled_ksq] = (total+weight*expected,count+weight)
+        exact = [[2*math.pi*math.sqrt(k),total/count] for k,(total,count) in sorted(groups.items())]
+        assert len(ave)==len(exact)
+        assert all(abs(a[0]-e[0])<1e-7 and abs(a[1]-e[1])<1e-5
+                   for a,e in zip(ave,exact)), row['name']
+    # Two different sampled cells must fail instead of mixing physical q grids.
+    for backend in programs:
+        for simulator in ['BdSimulator', 'McSimulator']:
+            source = out / f'{backend}_{simulator}_cubic_delayed'
+            work = out / f'{backend}_{simulator}_changed_after_sample'
+            work.mkdir()
+            for name in ['param', 'trajectory']:
+                (work/name).write_bytes((source/name).read_bytes())
+            (work/'commands').write_text('ANALYZE 0 2 RGridTrajectoryReader trajectory\nFINISH\n')
+            run = subprocess.run([str(target/'bin'/('pscf_'+backend)), '-d', '3',
+                                  '-p', 'param', '-c', 'commands'], cwd=work,
+                                 capture_output=True, text=True, timeout=45)
+            (work/'run.log').write_text(run.stdout+run.stderr)
+            assert run.returncode != 0 and 'same unit cell' in run.stdout+run.stderr
+    print('All structure-factor spectra and changed-cell rejection controls passed.')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--program', action='append', choices=['rpc', 'rpg'])
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    if args.output:
+        run(args.output.resolve(), args.program or ['rpc'])
+    else:
+        with tempfile.TemporaryDirectory(prefix='pscf-structure-factor-') as directory:
+            run(Path(directory), args.program or ['rpc'])
