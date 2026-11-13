@@ -539,9 +539,19 @@ namespace Rp {
                               DArray< RFieldDft<D,T> >& fields,
                               UnitCell<D>& unitCell) const
    {
+      bool isSymmetric;
+      readFieldsKGrid(in, fields, unitCell, isSymmetric);
+   }
+
+   template <int D, class T>
+   void FieldIo<D,T>::readFieldsKGrid(
+                              std::istream &in,
+                              DArray< RFieldDft<D,T> >& fields,
+                              UnitCell<D>& unitCell,
+                              bool& isSymmetric) const
+   {
       // Read header and validate field mesh dimensions
       int nMonomer;
-      bool isSymmetric;
       readFieldHeader(in, nMonomer, unitCell, isSymmetric);
       readMeshDimensions(in, mesh().dimensions());
       checkAllocateFields(fields, nMonomer, mesh().dimensions());
@@ -572,6 +582,19 @@ namespace Rp {
       std::ifstream file;
       fileMaster().openInputFile(filename, file);
       readFieldsKGrid(file, fields, unitCell);
+      file.close();
+   }
+
+   template <int D, class T>
+   void FieldIo<D,T>::readFieldsKGrid(
+                              std::string filename,
+                              DArray< RFieldDft<D,T> >& fields,
+                              UnitCell<D>& unitCell,
+                              bool& isSymmetric) const
+   {
+      std::ifstream file;
+      fileMaster().openInputFile(filename, file);
+      readFieldsKGrid(file, fields, unitCell, isSymmetric);
       file.close();
    }
 
@@ -931,15 +954,15 @@ namespace Rp {
       checkAllocateKGrid();
       checkAllocateRGrid();
       UnitCell<D> tmpUnitCell;
-      readFieldsKGrid(inFileName, tmpFieldsKGrid_, tmpUnitCell);
+      bool isSymmetric;
+      readFieldsKGrid(inFileName, tmpFieldsKGrid_, tmpUnitCell, isSymmetric);
       for (int i = 0; i < nMonomer_; ++i) {
          fft().inverseTransformUnsafe(tmpFieldsKGrid_[i],
                                       tmpFieldsRGrid_[i]);
       }
-      // A pure transform needs no space group: write the group name only
-      // if the system has one (the header writer requires it otherwise)
+      // A pure transform preserves the input's symmetry declaration.
       writeFieldsRGrid(outFileName, tmpFieldsRGrid_, tmpUnitCell,
-                       hasGroup());
+                       isSymmetric && hasGroup());
    }
 
    /*

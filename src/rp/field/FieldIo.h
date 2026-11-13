@@ -503,6 +503,19 @@ namespace Rp {
                      UnitCell<D> & unitCell) const;
 
       /**
+      * Read k-grid fields and preserve the header's symmetry declaration.
+      *
+      * The arguments have the same meaning as in the three-argument
+      * overload. On return, isSymmetric is true iff the header declares
+      * the configured space group; this does not test the field values.
+      */
+      void readFieldsKGrid(
+                     std::istream& in,
+                     DArray< RFieldDft<D,T> >& fields,
+                     UnitCell<D> & unitCell,
+                     bool& isSymmetric) const;
+
+      /**
       * Read an array of k-grid fields from a named file.
       *
       * This function opens a file with name filename, reads discrete
@@ -518,6 +531,17 @@ namespace Rp {
                      std::string filename,
                      DArray< RFieldDft<D,T> >& fields,
                      UnitCell<D> & unitCell) const;
+
+      /**
+      * Read named k-grid fields and return their symmetry declaration.
+      *
+      * See the stream overload with the isSymmetric output argument.
+      */
+      void readFieldsKGrid(
+                     std::string filename,
+                     DArray< RFieldDft<D,T> >& fields,
+                     UnitCell<D> & unitCell,
+                     bool& isSymmetric) const;
 
       /**
       * Write an array of k-grid fields to a output stream.

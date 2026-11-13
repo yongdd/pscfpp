@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+import argparse
+
+
+import json
+
+
+import math
+
+
+from pathlib import Path
+
+
+import subprocess
+
+
+import tempfile
+
+
+from pscfpp.field import Field
+
+
+HEADER = """format 1 0
+dim
+1
+crystal_system
+lamellar
+N_cell_param
+1
+cell_param
+1.0
+N_monomer
+2
+mesh
+8
+"""
+
+
+PARAM = """System{
+ Mixture{
+  nMonomer 2
+  monomers 1.0 1.0
+  nPolymer 1
+  nSolvent 0
+  Polymer{
+   type linear
+   nBlock 2
+   blocks 0 0.5 1 0.5
+   phi 1.0
+  }
+  ds 0.01
+ }
+ Interaction{
+  chi( 0 1 10.0 )
+ }
+ Domain{
+  mesh 8
+  lattice lamellar
+  groupName P_-1
+ }
+}
+"""
+
+
+def run(binary, folder, name, commands, identity=False, success=True):
+    param = PARAM.replace("P_-1", "I") if identity else PARAM
+    (folder / "param").write_text(param)
+    (folder / "command").write_text(commands + "\nFINISH\n")
+    result = subprocess.run([str(binary), "-d", "1", "-p", "param",
+                             "-c", "command"], cwd=folder,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, timeout=40)
+    (folder / (name + ".log")).write_text(result.stdout)
+    assert (result.returncode == 0) == success, (
+        name, result.returncode, result.stdout[-1500:])
+
+
+def same_values(a, b, tolerance=1e-12):
+    assert len(a.data) == len(b.data)
+    for left, right in zip(a.data, b.data):
+        assert len(left) == len(right)
+        for x, y in zip(left, right):
+            assert abs(x-y) <= tolerance, (x, y)
+
+
+def check_native(binary, folder):
+    folder.mkdir(parents=True, exist_ok=True)
+    sine = HEADER + "".join(
+        f"{math.sin(2*math.pi*i/8):.16e} 0.0\n" for i in range(8))
+    # The normalized cosine basis function has amplitude sqrt(2). Using
+    # that amplitude gives an exactly representable basis coefficient 1,
+    # avoiding the native basis writer's 10-digit rounding of 1/sqrt(2).
+    cosine = HEADER + "".join(
+        f"{math.sqrt(2)*math.cos(2*math.pi*i/8):.16e} 0.0\n"
+        for i in range(8))
+    (folder / "sine").write_text(sine)
+    (folder / "cosine").write_text(cosine)
+    run(binary, folder, "asymmetric_roundtrip",
+        "RGRID_TO_KGRID sine sine.k\nKGRID_TO_RGRID sine.k sine.back")
+    original = Field(str(folder / "sine"))
+    result = Field(str(folder / "sine.back"))
+    assert "group_name" not in result.header
+    assert "group_name" not in Field(str(folder / "sine.k")).header
+    same_values(original, result)
+    run(binary, folder, "identity_reuse",
+        "READ_W_RGRID sine.back\nCOMPUTE\nWRITE_C_RGRID identity.c",
+        identity=True)
+
+    # Known symmetry survives the same inverse conversion.
+    run(binary, folder, "symmetric_roundtrip",
+        "RGRID_TO_BASIS cosine cosine.b\n"
+        "BASIS_TO_KGRID cosine.b cosine.k\n"
+        "KGRID_TO_RGRID cosine.k cosine.back")
+    assert Field(str(folder / "cosine.back")).header["group_name"] == "P_-1"
+    same_values(Field(str(folder / "cosine")),
+                Field(str(folder / "cosine.back")))
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--backend", choices=("rpc", "rpg", "both"), default="rpc")
+    parser.add_argument("--bin-dir", type=Path,
+                        default=Path(__file__).resolve().parents[5] / "bin")
+    parser.add_argument("--work-dir", type=Path)
+    args = parser.parse_args()
+    with tempfile.TemporaryDirectory() as temporary:
+        folder = (args.work_dir or Path(temporary)).resolve()
+        folder.mkdir(parents=True, exist_ok=True)
+        backends = ("rpc", "rpg") if args.backend == "both" else (args.backend,)
+        for backend in backends:
+            check_native((args.bin_dir / ("pscf_" + backend)).resolve(),
+                         folder / backend)
+            print(backend + " FieldConversionSymmetryTest: passed")
+        (folder / "results.json").write_text(json.dumps({
+            "python": "passed", "native": list(backends)}, indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    main()
