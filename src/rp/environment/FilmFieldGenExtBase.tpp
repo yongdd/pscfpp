@@ -169,7 +169,7 @@ namespace Rp {
       UTIL_CHECK(chiTop_.capacity() == nm);
 
       for (int i = 0; i < nm; i++) {
-         if (fabs(chiBottom_[i]-chiTop_[i]) > 1e-7) {
+         if (chiBottom_[i] != chiTop_[i]) {
             return false;
          }
       }
@@ -190,7 +190,7 @@ namespace Rp {
       UTIL_CHECK(chiTop_.capacity() == nm);
 
       for (int i = 0; i < nm; i++) {
-         if ((fabs(chiBottom_[i]) >= 1e-7) || (fabs(chiTop_[i]) >= 1e-7)) {
+         if (chiBottom_[i] != 0.0 || chiTop_[i] != 0.0) {
             return false;
          }
       }

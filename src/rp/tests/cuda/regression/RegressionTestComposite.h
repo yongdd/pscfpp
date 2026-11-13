@@ -59,6 +59,8 @@
 
 #include "FtsSpectrumScaleTest.h"
 
+#include "WallFieldScaleTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
 TEST_COMPOSITE_ADD_UNIT(FieldIoRegressionTest);
@@ -109,6 +111,7 @@ TEST_COMPOSITE_ADD_UNIT(RampParameterRoundTripTest);
 TEST_COMPOSITE_ADD_UNIT(InteractionEnergyScaleTest);
 TEST_COMPOSITE_ADD_UNIT(HomogeneousClumpScaleTest);
 TEST_COMPOSITE_ADD_UNIT(FtsSpectrumScaleTest);
+TEST_COMPOSITE_ADD_UNIT(WallFieldScaleTest);
 TEST_COMPOSITE_END
 
 #endif
