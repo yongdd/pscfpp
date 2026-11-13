@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+import argparse
+
+
+import json
+
+
+import math
+
+
+from pathlib import Path
+
+
+import subprocess
+
+
+import tempfile
+
+
+from pscfpp.field import Field
+
+
+HEADER = """format 1 0
+dim
+1
+crystal_system
+lamellar
+N_cell_param
+1
+cell_param
+1.0
+N_monomer
+2
+mesh
+8
+"""
+
+
+PARAM = """System{
+ Mixture{
+  nMonomer 2
+  monomers 1.0 1.0
+  nPolymer 1
+  nSolvent 0
+  Polymer{
+   type linear
+   nBlock 2
+   blocks 0 0.5 1 0.5
+   phi 1.0
+  }
+  ds 0.01
+ }
+ Interaction{
+  chi( 0 1 10.0 )
+ }
+ Domain{
+  mesh 8
+  lattice lamellar
+  groupName P_-1
+ }
+}
+"""
+
+
+def run(binary, folder, name, commands, identity=False, success=True):
+    param = PARAM.replace("P_-1", "I") if identity else PARAM
+    (folder / "param").write_text(param)
+    (folder / "command").write_text(commands + "\nFINISH\n")
+    result = subprocess.run([str(binary), "-d", "1", "-p", "param",
+                             "-c", "command"], cwd=folder,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, timeout=40)
+    (folder / (name + ".log")).write_text(result.stdout)
+    assert (result.returncode == 0) == success, (
+        name, result.returncode, result.stdout[-1500:])
+
+
+def same_values(a, b, tolerance=1e-12):
+    assert len(a.data) == len(b.data)
+    for left, right in zip(a.data, b.data):
+        assert len(left) == len(right)
+        for x, y in zip(left, right):
+            assert abs(x-y) <= tolerance, (x, y)
+
+
+def check_python_formats(folder):
+    folder.mkdir(parents=True, exist_ok=True)
+    # Integer coefficients remain r-grid fields; explicit signs are valid.
+    for token in ("0", "+0", "-0", "0.0"):
+        (folder / "rgrid").write_text(HEADER + (token + " 0\n")*8)
+        value = Field(str(folder / "rgrid"))
+        assert value.type == "rgrid", (token, value.type)
+        value.write(str(folder / "copy"))
+        same_values(value, Field(str(folder / "copy")), 0.0)
+
+    # Fourier indices retain their integer type with an explicit plus sign.
+    rows = "+0 0.5 0 0.5 0\n" + "".join(
+        str(i) + " 0 0 0 0\n" for i in range(1, 5))
+    (folder / "signed").write_text(HEADER + rows)
+    value = Field(str(folder / "signed"))
+    assert value.type == "kgrid"
+    assert all(type(row[0]) is int for row in value.data)
+    value.write(str(folder / "signed_copy"))
+    same_values(value, Field(str(folder / "signed_copy")), 0.0)
+
+    # Formatting widths are minima, including three-digit exponents.
+    value.data[1][1:3] = [1e-100, -5e-101]
+    value.write(str(folder / "tiny_copy"))
+    loaded = Field(str(folder / "tiny_copy"))
+    assert loaded.data == value.data
+    assert all(len(row) == 5 for row in loaded.data)
+
+    (folder / "tiny_rgrid").write_text(HEADER + ("-5e-101 -5e-101\n")*8)
+    value = Field(str(folder / "tiny_rgrid"))
+    value.write(str(folder / "tiny_rgrid_copy"))
+    assert Field(str(folder / "tiny_rgrid_copy")).data == value.data
+
+
+def check_native(binary, folder):
+    folder.mkdir(parents=True, exist_ok=True)
+    # Native formatting cannot join real/imaginary coefficients.
+    for exponent in (10, 100):
+        values = [0.0, 2.0*10.0**(-exponent)] + [0.0]*6
+        (folder / "tiny.r").write_text(HEADER + "".join(
+            f"{v:.16e} 0.0\n" for v in values))
+        run(binary, folder, "tiny_native_" + str(exponent),
+            "RGRID_TO_KGRID tiny.r tiny.k")
+        value = Field(str(folder / "tiny.k"))
+        assert value.type == "kgrid"
+        assert all(len(row) == 5 for row in value.data)
+        assert all(isinstance(x, (float, int)) for row in value.data for x in row)
+        value.write(str(folder / "tiny_copy.k"))
+        reloaded = Field(str(folder / "tiny_copy.k"))
+        for old, new in zip(value.data, reloaded.data):
+            for x, y in zip(old, new):
+                assert abs(x-y) <= 1e-11*max(abs(x), abs(y)), (x, y)
+        run(binary, folder, "tiny_reread_" + str(exponent),
+            "KGRID_TO_RGRID tiny_copy.k tiny_copy.r")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--backend", choices=("rpc", "rpg", "both"), default="rpc")
+    parser.add_argument("--bin-dir", type=Path,
+                        default=Path(__file__).resolve().parents[5] / "bin")
+    parser.add_argument("--work-dir", type=Path)
+    args = parser.parse_args()
+    with tempfile.TemporaryDirectory() as temporary:
+        folder = (args.work_dir or Path(temporary)).resolve()
+        folder.mkdir(parents=True, exist_ok=True)
+        check_python_formats(folder / "python")
+        print("Python field spelling and numeric separators: passed")
+        backends = ("rpc", "rpg") if args.backend == "both" else (args.backend,)
+        for backend in backends:
+            check_native((args.bin_dir / ("pscf_" + backend)).resolve(),
+                         folder / backend)
+            print(backend + " FieldNumericColumnSpacingTest: passed")
+        (folder / "results.json").write_text(json.dumps({
+            "python": "passed", "native": list(backends)}, indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    main()

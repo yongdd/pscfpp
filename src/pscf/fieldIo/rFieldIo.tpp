@@ -196,7 +196,7 @@ namespace Pscf {
             y = imag(fields[j][rank]);
             out << "  "
                 << Dbl(x, 21, 13)
-                << Dbl(y, 21, 13);
+                << " " << Dbl(y, 21, 13);
          }
          out << std::endl;
          ++i;
@@ -224,7 +224,7 @@ namespace Pscf {
          out << Int(rank, 5);
          out << "  "
              << Dbl(x, 21, 13)
-             << Dbl(y, 21, 13);
+             << " " << Dbl(y, 21, 13);
          out << std::endl;
          ++i;
       }

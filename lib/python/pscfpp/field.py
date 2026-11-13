@@ -316,7 +316,7 @@ class Field:
 
             if self.type == 'rgrid':
                val = f'{self.data[i][j]:.15e}'
-               row += f'{val:>23}'
+               row += ' ' + f'{val:>22}'
 
             if self.type == 'waves':
                # Columns: i, waveId, D wave indices, starId, Re(c), Im(c)
@@ -348,9 +348,9 @@ class Field:
                else:
                   val = f'{self.data[i][j]:.12e}'
                   if j%2 != 0:
-                     row += f'{val:>22}'
+                     row += ' ' + f'{val:>21}'
                   else:
-                     row += f'{val:>20}'
+                     row += ' ' + f'{val:>19}'
 
          out += row + '\n'
 
