@@ -40,6 +40,8 @@
 #include <util/global.h>
 
 #include <gsl/gsl_eigen.h>
+#include <cmath>
+#include <limits>
 
 namespace Pscf {
 namespace Rp {
@@ -423,20 +425,42 @@ namespace Rp {
       // - A has exactly one zero eigenvalue, with eigenvector (1,...,1)
       // - All other eigenvalues must be negative.
 
-      // Copy eigenpairs with non-null eigenvalues
-      int iNull = -1;  // index for null eigenvalue
-      int nNull =  0;  // number of null eigenvalue
-      k = 0;           // re-ordered index for non-null eigenvalue
+      // Identify the known pressure direction, rather than treating every
+      // small absolute eigenvalue as zero. Rescaling the monomer reference
+      // volume rescales the entire chi spectrum without changing its rank.
+      int iNull = -1;
+      double maxOverlap = -1.0;
+      double spectralScale = 0.0;
+      for (i = 0; i < nMonomer; ++i) {
+         UTIL_CHECK(std::isfinite(evals[i]));
+         if (std::abs(evals[i]) > spectralScale) {
+            spectralScale = std::abs(evals[i]);
+         }
+         double sum = 0.0;
+         for (j = 0; j < nMonomer; ++j) {
+            sum += evecs(j,i);
+         }
+         double overlap = sum*sum/double(nMonomer);
+         if (overlap > maxOverlap) {
+            maxOverlap = overlap;
+            iNull = i;
+         }
+      }
+      UTIL_CHECK(iNull >= 0);
+      UTIL_CHECK(maxOverlap > 1.0 - 1.0E-8);
+      const double nullTolerance = 64.0 * nMonomer
+                     * std::numeric_limits<double>::epsilon() * spectralScale;
+      UTIL_CHECK(std::abs(evals[iNull]) <= nullTolerance);
+
+      // A second numerically null mode or a positive composition mode is
+      // still invalid. The roundoff bound is relative to the full spectrum.
+      k = 0;
       double val;
       for (i = 0; i < nMonomer; ++i) {
          val = evals[i];
-         if (std::abs(val) < 1.0E-8) {
-            ++nNull;
-            iNull = i;
-            UTIL_CHECK(nNull <= 1);
-         } else {
+         if (i != iNull) {
+            UTIL_CHECK(val < -nullTolerance);
             chiEvals_[k] = val;
-            UTIL_CHECK(val < 0.0);
             for (j = 0; j < nMonomer; ++j) {
                chiEvecs_(k, j) = evecs(j, i);
             }
@@ -448,8 +472,7 @@ namespace Rp {
             ++k;
          }
       }
-      UTIL_CHECK(nNull == 1);
-      UTIL_CHECK(iNull >= 0);
+      UTIL_CHECK(k == nMonomer - 1);
 
       // Set eigenpair with zero eigenvalue
       i = nMonomer - 1;
