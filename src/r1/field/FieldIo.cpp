@@ -21,6 +21,7 @@
 #include <util/format/Dbl.h>
 
 #include <string>
+#include <limits>
 
 namespace Pscf {
 namespace R1
@@ -270,6 +271,7 @@ namespace R1
    void FieldIo::remesh(DArray<Field> const & fields, int nx, 
                         std::string const & filename)
    {
+      UTIL_CHECK(nx >= 2);
       std::ofstream out;
       fileMaster().openOutputFile(filename, out);
       remesh(fields, nx, out);
@@ -282,6 +284,7 @@ namespace R1
    void 
    FieldIo::remesh(DArray<Field> const & fields, int nx, std::ostream& out)
    {
+      UTIL_CHECK(nx >= 2);
       // Query and check dimensions of fields array
       int nm = fields.capacity();
       UTIL_CHECK(nm > 0);
@@ -343,6 +346,8 @@ namespace R1
    FieldIo::extend(DArray<Field> const & fields, int m, 
                    std::string const & filename)
    {
+      UTIL_CHECK(m >= 0);
+      UTIL_CHECK(m <= std::numeric_limits<int>::max() - domain().nx());
       std::ofstream out;
       fileMaster().openOutputFile(filename, out);
       extend(fields, m, out);
@@ -355,6 +360,8 @@ namespace R1
    void 
    FieldIo::extend(DArray<Field> const & fields, int m, std::ostream& out)
    {
+      UTIL_CHECK(m >= 0);
+      UTIL_CHECK(m <= std::numeric_limits<int>::max() - domain().nx());
       // Query and check dimensions of fields array
       int nm = fields.capacity();
       UTIL_CHECK(nm > 0);
