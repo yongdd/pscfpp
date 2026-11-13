@@ -176,7 +176,7 @@ namespace Rp {
          for (int i = 0; i < nm; ++i) {
             for (int j = i; j < nm; ++j) {
                const double chi = interaction().chi(i,j);
-               if (std::abs(chi) > 1.0E-9) {
+               if (chi != 0.0) {
                   temp = 0.0;
                   for (int k = 0; k < nBasis; ++k) {
                      temp += c().basis(i)[k] * c().basis(j)[k];
@@ -196,7 +196,7 @@ namespace Rp {
          for (int i = 0; i < nm; ++i) {
             for (int j = i; j < nm; ++j) {
                const double chi = interaction().chi(i,j);
-               if (std::abs(chi) > 1.0E-9) {
+               if (chi != 0.0) {
                   temp = Reduce::innerProduct(c().rgrid(i), c().rgrid(j));
                   if (i == j) {
                      fInter_ += 0.5*chi*temp;
