@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""Keep adjacent parameter values separate through Python and native I/O."""
+import json
+import math
+import subprocess
+import argparse
+import shutil
+import tempfile
+from pathlib import Path
+
+from pscfpp.field import Field
+from pscfpp.param import Composite, Parameter
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--output', type=Path)
+args = parser.parse_args()
+OUT = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix='parameter-spacing-'))
+OUT.mkdir(parents=True, exist_ok=True)
+PARAM = '''System{
+  Mixture{
+    nMonomer 2
+    MONOMERS
+    nPolymer 2
+    Polymer{
+      type linear
+      nBlock 1
+      blocks[
+        0 1
+      ]
+      phi .5
+    }
+    Polymer{
+      type linear
+      nBlock 1
+      blocks[
+        1 1
+      ]
+      phi .5
+    }
+    ds .05
+  }
+  Interaction{
+    chi(
+      0 1 10
+    )
+  }
+  Domain{
+    mesh 8
+    lattice lamellar
+  }
+}
+'''
+HEADER = 'format 1 0\ndim\n1\ncrystal_system\nlamellar\nN_cell_param\n1\ncell_param\n1\nN_monomer\n2\nmesh\n8\n'
+W = HEADER + ''.join('%.17g %.17g\n' % (math.cos(2*math.pi*i/8), -math.cos(2*math.pi*i/8)) for i in range(8))
+
+
+def make_param(monomers):
+    return PARAM.replace('MONOMERS', monomers)
+
+
+def rewrite(text, name):
+    src = OUT / (name + '.in')
+    dst = OUT / (name + '.out')
+    src.write_text(text)
+    parsed = Composite(str(src))
+    before = parsed.Mixture.monomers
+    parsed.write(str(dst))
+    reparsed = Composite(str(dst)).Mixture.monomers
+    return dst.read_text(), {'before': before, 'after': reparsed}
+
+
+def run(name, text):
+    d = OUT / name
+    d.mkdir()
+    (d / 'param').write_text(text)
+    (d / 'w').write_text(W)
+    (d / 'command').write_text('READ_W_RGRID w\nCOMPUTE\nWRITE_PARAM native_param\nWRITE_C_RGRID c\nWRITE_THERMO thermo\nFINISH\n')
+    with (d / 'log').open('w') as log:
+        p = subprocess.run([shutil.which('pscf_rpc'), '-d', '1', '-p', 'param', '-c', 'command'], cwd=d, stdout=log, stderr=subprocess.STDOUT, timeout=30)
+    result = {'returncode': p.returncode}
+    if p.returncode == 0:
+        result['native_monomers'] = Composite(str(d / 'native_param')).Mixture.monomers
+        result['concentrations'] = Field(str(d / 'c')).data
+    return result
+
+
+def max_error(a, b):
+    assert len(a) == len(b)
+    return max(abs(x-y) for ra, rb in zip(a, b) for x, y in zip(ra, rb))
+
+
+def exchange_error(c):
+    # Equal canonical homopolymers and opposite cosine fields imply
+    # c_A(x) = c_B(x+L/2) by species relabeling and spatial translation.
+    return max(abs(c[i][0] - c[(i+4) % 8][1]) for i in range(8))
+
+
+long = make_param('monomers 1.23456789 1.23456789')
+long_written, long_python = rewrite(long, 'long_python')
+bracket = make_param('monomers[\n      1.23456789\n      1.23456789\n    ]')
+bracket_written, bracket_python = rewrite(bracket, 'bracket_python')
+short = make_param('monomers 1.25 1.25')
+short_written, short_python = rewrite(short, 'short_python')
+explicit_changed = make_param('monomers 1.234567891 .23456789')
+
+cases = {name: run(name, text) for name, text in [
+    ('long_original', long), ('long_rewritten', long_written),
+    ('bracket_rewritten', bracket_written), ('short_original', short),
+    ('short_rewritten', short_written), ('explicit_changed_control', explicit_changed),
+]}
+results = {'python': {'long': long_python, 'bracket': bracket_python, 'short': short_python}, 'native': cases}
+if all(c['returncode'] == 0 for c in cases.values()):
+    results['comparison'] = {
+        'long_rewrite_concentration_error': max_error(cases['long_original']['concentrations'], cases['long_rewritten']['concentrations']),
+        'bracket_control_concentration_error': max_error(cases['long_original']['concentrations'], cases['bracket_rewritten']['concentrations']),
+        'short_control_concentration_error': max_error(cases['short_original']['concentrations'], cases['short_rewritten']['concentrations']),
+        'explicit_changed_control_concentration_error': max_error(cases['long_rewritten']['concentrations'], cases['explicit_changed_control']['concentrations']),
+        'original_species_exchange_error': exchange_error(cases['long_original']['concentrations']),
+        'rewritten_species_exchange_error': exchange_error(cases['long_rewritten']['concentrations']),
+    }
+(OUT / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
+print(json.dumps(results, indent=2))
+
+for result in cases.values():
+    assert result['returncode'] == 0, result
+for kind in ['long', 'short', 'bracket']:
+    assert results['python'][kind]['before'] == results['python'][kind]['after']
+comparison = results['comparison']
+for key in ['long_rewrite_concentration_error', 'bracket_control_concentration_error',
+            'short_control_concentration_error', 'original_species_exchange_error',
+            'rewritten_species_exchange_error']:
+    assert comparison[key] < 1e-10, (key, comparison)
+assert comparison['explicit_changed_control_concentration_error'] > 0.1
+for label in ['values', 'long_label_'*5]:
+    for values in [[1.23456789, 1.23456789], [-123456789, 987654321],
+                   [1e100, -1e-100, 123456789.12345]]:
+        written = Parameter(label, values).getString().split()
+        assert written[0] == label
+        assert [float(value) for value in written[1:]] == values, written
+print('Passed native round trips and numeric token boundaries')
