@@ -1137,8 +1137,11 @@ namespace {
          int nThreads = blockDim.x * gridDim.x;
          int startID = blockIdx.x * blockDim.x + threadIdx.x;
          for (int i = startID; i < n; i += nThreads) {
-            a[i].x = exp(b[i].x) * cos(b[i].y);
-            a[i].y = exp(b[i].x) * sin(b[i].y);
+            // Preserve the input before writing if a and b are identical.
+            cudaReal magnitude = exp(b[i].x);
+            cudaReal phase = b[i].y;
+            a[i].x = magnitude * cos(phase);
+            a[i].y = magnitude * sin(phase);
          }
       }
 
