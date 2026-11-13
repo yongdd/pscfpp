@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+import argparse
+
+
+import math
+
+
+from pathlib import Path
+
+
+import re
+
+
+import shutil
+
+
+import subprocess
+
+
+import tempfile
+
+
+SOURCE = Path(__file__).resolve().parents[5]
+
+
+def execute(root, name, program, param, files, command):
+    work = root / name
+    work.mkdir()
+    (work / 'param').write_text(param)
+    (work / 'command').write_text(command)
+    for filename, contents in files.items():
+        (work / filename).write_text(contents)
+    exe = shutil.which('pscf_' + program)
+    if exe is None:
+        exe = str(SOURCE / 'bin' / ('pscf_' + program))
+    args = [exe] + ([] if program == '1d' else ['-d', '1'])
+    args += ['-p', 'param', '-c', 'command']
+    result = subprocess.run(args, cwd=work, capture_output=True, text=True,
+                            timeout=60)
+    log = result.stdout + result.stderr
+    (work / 'log').write_text(log)
+    return work, result.returncode, log
+
+
+def short_clumps(root):
+    for scale in [1., 1e-7, 1e-8, 5e-9, 1e-12]:
+        n = 3*scale
+        chi = 10/n
+        param = '''System{
+Mixture{ nMonomer 2 monomers[ %.17g %.17g ] nPolymer 1
+ Polymer{ type linear nBlock 2 blocks[ 0 %.17g 1 %.17g ] phi 1 }
+ vMonomer %.17g ds %.17g }
+Interaction{ chi( 0 1 %.17g ) }
+Domain{ mode planar xMin 0 xMax 1 nx 5 }
+AmIterator{ epsilon 1e-10 maxItr 10 maxHist 5 }
+}
+''' % (1/math.sqrt(n), 1/math.sqrt(n), scale, 2*scale, 1/n, scale/10, chi)
+        field = 'nx 5\nnm 2\n' + ''.join('%d %.17g %.17g\n' %
+                (i, chi*2/3, chi/3) for i in range(5))
+        name = '1d_clumps_%g' % scale
+        work, rc, log = execute(
+            root, name, '1d', param, {'w': field},
+            'READ_W w\nCOMPUTE\nWRITE_THERMO thermo\n'
+            'COMPARE_HOMOGENEOUS 0 homogeneous\nFINISH\n')
+        assert rc == 0, (name, rc, log[-1000:])
+        f = float(re.search(r'fHelmholtz\s+(\S+)', (work/'thermo').read_text())[1])
+        reference = float(re.search(r'f \(homo\)\s*=\s*(\S+)',
+                                   (work/'homogeneous').read_text())[1])
+        assert abs(n*f-11/9) < 1e-10, (name, n*f)
+        assert abs(n*reference-11/9) < 1e-10, (name, n*reference)
+        assert abs(n*(f-reference)) < 1e-10, (name, f, reference)
+    print('1d: short positive clumps retain exact homogeneous composition and energy')
+
+
+def run(root, programs):
+    root.mkdir(parents=True, exist_ok=True)
+    short_clumps(root)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--program', action='append', choices=['1d'])
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    programs = args.program or [['1d'][0]]
+    if args.output:
+        run(args.output.resolve(), programs)
+    else:
+        with tempfile.TemporaryDirectory(prefix='homogeneousclumpscalingtest-') as directory:
+            run(Path(directory), programs)
