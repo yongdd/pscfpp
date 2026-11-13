@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Film stress at an exact saddle, including dilute open solvent species."""
+from pathlib import Path
+import json, math, re, subprocess
+import argparse, shutil, tempfile
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--program', action='append', choices=['rpc', 'rpg'])
+parser.add_argument('--output', type=Path)
+args = parser.parse_args()
+OUT = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix='film-semigrand-'))
+OUT.mkdir(parents=True, exist_ok=True)
+NX, CHI, THICKNESS, INTERFACE = 128, 2.0, 0.4, 0.2
+
+
+def state(length, mu_b, size_b):
+    mask, deriv, a, b, wa, wb, xi = [], [], [], [], [], [], []
+    for i in range(NX):
+        r = i / NX
+        m = .5 * (1 - math.tanh(4 * (.5 * (THICKNESS-length)
+                                       + length*abs(r-.5))/INTERFACE))
+        # Solve incompressibility and both solvent Boltzmann laws.  The
+        # SCFT equations are wA=chi*cB+xi, wB=chi*cA+xi, with muA=0.
+        lo, hi = 0., m
+        for unused in range(80):
+            cb = (lo+hi)/2
+            ca = m-cb
+            expected_b = math.exp(mu_b + size_b*math.log(ca)
+                                 - size_b*CHI*(ca-cb))
+            if cb > expected_b:
+                hi = cb
+            else:
+                lo = cb
+        cb = (lo+hi)/2
+        ca = m-cb
+        w_a = -math.log(ca)
+        pressure_field = w_a-CHI*cb
+        w_b = CHI*ca+pressure_field
+        mask.append(m)
+        deriv.append(8*m*(m-1)*(abs(r-.5)-.5)/INTERFACE)
+        a.append(ca); b.append(cb); wa.append(w_a); wb.append(w_b)
+        xi.append(pressure_field)
+    avg = lambda values: math.fsum(values)/NX
+    phi_tot = avg(mask)
+    phi_a, phi_b = avg(a)/phi_tot, avg(b)/phi_tot
+    f = (phi_a*(-1) + phi_b*(mu_b-1)/size_b
+         - avg(x*y+z*t for x,y,z,t in zip(wa,a,wb,b))/phi_tot
+         + CHI*avg(x*y for x,y in zip(a,b))/phi_tot)
+    g = f-phi_b*mu_b/size_b
+    p = -g
+    raw_stress = (p*avg(deriv)-avg(x*y for x,y in zip(xi,deriv)))/phi_tot
+    expected_stress = (length-THICKNESS)*raw_stress+g
+    return dict(mask=mask, a=a,b=b, wa=wa,wb=wb,xi=xi,phi_tot=phi_tot,
+                phi_a=phi_a,phi_b=phi_b,f=f,g=g,p=p,
+                expected_stress=expected_stress,
+                omitted_term=mu_b*phi_b/size_b)
+
+
+def scalar(text, label):
+    return float(re.search(r'\b'+label+r'\s+(\S+)', text)[1])
+
+
+def read_rgrid(path):
+    lines=path.read_text().splitlines()
+    start=next(i for i,s in enumerate(lines) if s.strip()=='mesh')+2
+    return [[float(v) for v in line.split()] for line in lines[start:] if line.strip()]
+
+
+rows=[]
+for backend in args.program or ['rpc']:
+    for mu_b,size_b in [(-16.,1e-8),(-20.,1e-8),(-20.,1e-6)]:
+        oracle=state(1.,mu_b,size_b)
+        name=f'{backend}_mu{mu_b:g}_size{size_b:g}'
+        folder=OUT/name
+        folder.mkdir(exist_ok=True)
+        (folder/'oracle.json').write_text(json.dumps(oracle,indent=2)+'\n')
+        param=f'''System{{
+Mixture{{ nMonomer 2 monomers[ 1 1 ] nPolymer 1 nSolvent 2
+Polymer{{ type linear nBlock 1 blocks[ 0 1 ] phi 0 }}
+Solvent{{ monomerId 0 size 1 mu 0 }}
+Solvent{{ monomerId 1 size {size_b:.17g} mu {mu_b:.17g} }}
+ds .01 }}
+Interaction{{ chi( 0 1 {CHI:.17g} ) }}
+Domain{{ mesh {NX} lattice lamellar }}
+FilmEnvironment{{ normalVecId 0 interfaceThickness {INTERFACE}
+excludedThickness {THICKNESS} fBulk 0 chiBottom[ 0 0 ] chiTop[ 0 0 ] }}
+AmIteratorGrid{{ epsilon 1e-10 maxItr 100 maxHist 10 isFlexible 1 }}
+}}
+'''
+        header=f'format 1 0\ndim\n1\ncrystal_system\nlamellar\nN_cell_param\n1\ncell_param\n1\nN_monomer\n2\nmesh\n{NX}\n'
+        (folder/'param').write_text(param)
+        (folder/'w').write_text(header+''.join(f'{a:.17g} {b:.17g}\n' for a,b in zip(oracle['wa'],oracle['wb'])))
+        (folder/'command').write_text('READ_W_RGRID w\nCOMPUTE\nWRITE_THERMO thermo\nWRITE_C_RGRID c\nWRITE_MASK_RGRID mask\nWRITE_STRESS stress\nFINISH\n')
+        with (folder/'log').open('w') as log:
+            proc=subprocess.run([shutil.which(f'pscf_{backend}'),'-d','1','-p','param','-c','command'],cwd=folder,stdout=log,stderr=subprocess.STDOUT,timeout=45)
+        row=dict(backend=backend,mu_b=mu_b,size_b=size_b,returncode=proc.returncode,
+                 phi_b=oracle['phi_b'],expected_stress=oracle['expected_stress'],
+                 omitted_term=oracle['omitted_term'])
+        if proc.returncode==0:
+            thermo=(folder/'thermo').read_text()
+            stress=(folder/'stress').read_text()
+            observed=float(re.search(r'environment-modified stress:\s*0\s+(\S+)',stress)[1])
+            concentrations=read_rgrid(folder/'c')
+            masks=read_rgrid(folder/'mask')
+            row.update(observed_stress=observed,stress_error=observed-oracle['expected_stress'],
+                       observed_f=scalar(thermo,'fHelmholtz'),observed_pressure=scalar(thermo,'pressure'),
+                       expected_f=oracle['f'],expected_pressure=oracle['p'],
+                       max_concentration_error=max(abs(c[0]-a)+abs(c[1]-b) for c,a,b in zip(concentrations,oracle['a'],oracle['b'])),
+                       max_incompressibility=max(abs(c[0]+c[1]-m[0]) for c,m in zip(concentrations,masks)),
+                       max_scft_residual=max(abs(wa-CHI*c[1]-(wb-CHI*c[0])) for wa,wb,c in zip(oracle['wa'],oracle['wb'],concentrations)),
+                       max_mask_error=max(abs(m[0]-v) for m,v in zip(masks,oracle['mask'])))
+            fd=[]
+            for step in [1e-3,1e-4,1e-5]:
+                plus=state(1.+step,mu_b,size_b)
+                minus=state(1.-step,mu_b,size_b)
+                value=((1.+step-THICKNESS)*plus['g']-(1.-step-THICKNESS)*minus['g'])/(2*step)
+                fd.append(dict(step=step,stress=value,error_vs_analytic=value-oracle['expected_stress']))
+            row['exact_saddle_finite_differences']=fd
+        rows.append(row)
+        print(json.dumps(row),flush=True)
+(OUT/'results.json').write_text(json.dumps(rows,indent=2)+'\n')
+
+for row in rows:
+    assert row['returncode'] == 0, row
+    assert abs(row['stress_error']) < 1e-8, row
+    assert abs(row['observed_f'] - row['expected_f']) < 1e-8, row
+    assert abs(row['observed_pressure'] - row['expected_pressure']) < 1e-8, row
+    for key in ['max_concentration_error', 'max_incompressibility',
+                'max_scft_residual', 'max_mask_error']:
+        assert row[key] < 1e-11, (key, row)
+    differences = row['exact_saddle_finite_differences']
+    assert abs(differences[-1]['error_vs_analytic']) < 1e-7, row
+    assert abs(differences[-1]['stress'] - row['observed_stress']) < 1e-7, row
+print(f'Passed {len(rows)} analytic film stress and finite-difference cases')

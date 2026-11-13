@@ -149,7 +149,7 @@ namespace Rp {
       *
       * Returns fHelmholtz minus phi*mu/N of each open species (N is the
       * polymer length or number of beads, or the solvent size; species
-      * with phi <= 1e-8 are skipped, as in ScftThermo). The SCFT stress
+      * with phi == 0 are skipped to avoid 0 times infinite mu). The SCFT stress
       * at fixed mu of the open species and fixed phi of the closed ones
       * is the derivative of this potential. It equals fHelmholtz for a
       * closed mixture and -pressure for a fully open one.
@@ -174,7 +174,7 @@ namespace Rp {
             } else {
                length = (double) mixture.polymerSpecies(i).nBead();
             }
-            if (phi > 1.0E-08) {
+            if (phi > 0.0) {
                g -= mu * phi / length;
             }
          }
@@ -185,7 +185,7 @@ namespace Rp {
             double phi = mixture.solventSpecies(i).phi();
             double mu = mixture.solventSpecies(i).mu();
             double size = mixture.solventSpecies(i).size();
-            if (phi > 1.0E-08) {
+            if (phi > 0.0) {
                g -= mu * phi / size;
             }
          }
