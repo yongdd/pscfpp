@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""File representations honor the per-instance metadata scanning flag."""
+from pathlib import Path
+import tempfile
+import unittest
+import xml.etree.ElementTree as ET
+from pscfpp.file import File
+
+
+class FileMetadataFormatTest(unittest.TestCase):
+    def test_scanned_and_unscanned_representations(self):
+        with tempfile.TemporaryDirectory(prefix='file-metadata-') as directory:
+            path = Path(directory) / 'input'
+            path.write_text('sample\n')
+            for scan in (False, True):
+                with self.subTest(scan=scan):
+                    f = File(str(path), scan=scan)
+                    self.assertEqual(str(f), str(path))
+                    with f.open('r') as source:
+                        self.assertEqual(source.read(), 'sample\n')
+                    node = ET.fromstring(f.xml('  '))
+                    self.assertEqual(node.tag, 'File')
+                    self.assertEqual(node.get('path'), str(path))
+                    if scan:
+                        self.assertEqual(node.get('size'), '7')
+                        self.assertEqual(float(node.get('mtime')), path.stat().st_mtime)
+                        self.assertIn('size=', repr(f))
+                        self.assertIn('mtime=', repr(f))
+                    else:
+                        self.assertEqual(repr(f), str(path))
+                        self.assertEqual(node.attrib, {'path': str(path)})
+                    dest = Path(directory) / 'metadata.xml'
+                    f.write(str(dest))
+                    self.assertEqual(dest.read_text(), f.xml())
+
+    def test_unscanned_missing_file(self):
+        with tempfile.TemporaryDirectory(prefix='file-metadata-') as directory:
+            path = str(Path(directory) / 'absent')
+            f = File(path, scan=False)
+            self.assertEqual(repr(f), path)
+            self.assertEqual(ET.fromstring(f.xml()).attrib, {'path': path})
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
