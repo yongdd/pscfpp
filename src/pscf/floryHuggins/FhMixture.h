@@ -85,6 +85,10 @@ namespace Pscf {
       /**
       * Set system composition.
       *
+      * All fractions must be supplied, nonnegative, and sum to unity
+      * within 1e-12. Roundoff in the total is removed by normalization;
+      * positive dilute fractions and absent species are preserved.
+      *
       * \param phi array of molecular volume fractions.
       */
       void setComposition(DArray<double> const & phi);

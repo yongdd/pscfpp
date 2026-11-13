@@ -101,18 +101,19 @@ namespace Pscf {
       validate();
       UTIL_ASSERT(phi.capacity() == nMolecule_);
 
-      // Set molecular volume fractions
-      double sum = 0;
-      for (int i = 0; i < nMolecule_ - 1; ++i) {
+      // Normalize all supplied fractions. Reconstructing the last one
+      // as 1 - sum(others) erases positive dilute species and depends
+      // on species order. Exact zeros must remain zero.
+      double sum = 0.0;
+      for (int i = 0; i < nMolecule_; ++i) {
          UTIL_CHECK(phi[i] >= 0.0);
          UTIL_CHECK(phi[i] <= 1.0);
-         phi_[i] = phi[i];
          sum += phi[i];
       }
-      // A sum that exceeds 1 by rounding only (e.g. 0.56 + 0.33 + 0.11)
-      // leaves the last species at 0, not at a tiny negative fraction
-      UTIL_CHECK(sum <= 1.0 + 1.0E-12);
-      phi_[nMolecule_ -1] = (sum < 1.0) ? 1.0 - sum : 0.0;
+      UTIL_CHECK(std::abs(sum - 1.0) <= 1.0E-12);
+      for (int i = 0; i < nMolecule_; ++i) {
+         phi_[i] = phi[i]/sum;
+      }
 
       computeC();
       hasComposition_ = true;
@@ -142,13 +143,13 @@ namespace Pscf {
       double sum = 0.0;
       for (k = 0; k < nMonomer_; ++k) {
          UTIL_CHECK(c_[k] >= 0.0);
-         UTIL_CHECK(c_[k] <= 1.0);
          sum += c_[k];
       }
       UTIL_CHECK(sum > 0.9999);
       UTIL_CHECK(sum < 1.0001);
       for (k = 0; k < nMonomer_; ++k) {
          c_[k] /= sum;
+         UTIL_CHECK(c_[k] <= 1.0);
       }
 
    }
@@ -245,9 +246,9 @@ namespace Pscf {
       }
 
       // Initial composition: the given fractions, with mDep set so that
-      // they add up to 1. (setComposition() would make the last species
-      // the dependent one; if it is absent, rounding of the others can
-      // give it a small negative fraction or fail its check sum <= 1.)
+      // they add up to 1. Unlike setComposition(), this accepts a guess
+      // whose total is not already unity; the largest present species
+      // absorbs the correction without losing dilute species.
       // The Newton variables are ln(phi), kept in lnPhi_: they are
       // finite for every present species, while phi itself underflows
       // to zero for ln(phi) below about -745 (an open species with a

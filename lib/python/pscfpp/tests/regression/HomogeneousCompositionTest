@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""Preserve boundary compositions in homogeneous reference thermodynamics."""
+from pathlib import Path
+import json
+import math
+import re
+import subprocess
+import argparse
+import shutil
+import tempfile
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--output', type=Path)
+args = parser.parse_args()
+out = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix='homogeneous-composition-'))
+program = shutil.which('pscf_1d')
+out.mkdir(parents=True, exist_ok=True)
+results = []
+
+
+def species_rows(path, columns):
+    if not path.exists():
+        return []
+    result = []
+    for line in path.read_text().splitlines():
+        words = line.split()
+        if len(words) == columns + 1 and words[0].isdigit():
+            result.append([int(words[0])] + [float(w) for w in words[1:]])
+    return result
+
+
+def run(name, minor, minor_first=False, solvent=False):
+    work = out / name
+    work.mkdir(exist_ok=True)
+    major = 1.0 - minor
+    chi = 1.5
+    # A is always the majority monomer and B the dilute one. Both molecular
+    # sizes are one. Reordering polymer descriptors does not change physics.
+    species = [(0, major), (1, minor)]
+    if minor_first:
+        species.reverse()
+    if solvent:
+        chemical = (f'nPolymer 1 nSolvent 1\n'
+                    f'Polymer{{ type linear nBlock 1 blocks[ 0 1 ] phi {major:.17g} }}\n'
+                    f'Solvent{{ monomerId 1 size 1 phi {minor:.17g} }}\n')
+    else:
+        chemical = 'nPolymer 2\n' + ''.join(
+            f'Polymer{{ type linear nBlock 1 blocks[ {m} 1 ] phi {p:.17g} }}\n'
+            for m, p in species)
+    param = ('System{\nMixture{ nMonomer 2 monomers[ 1 1 ]\n'
+             + chemical + 'ds 0.1\n}\n'
+             + f'Interaction{{ chi( 0 1 {chi} ) }}\n'
+             + 'Domain{ mode planar xMin 0 xMax 1 nx 5 }\n'
+             + 'AmIterator{ epsilon 1e-10 maxItr 10 maxHist 5 }\n}\n')
+    w_a, w_b = chi * minor, chi * major
+    field = 'nx 5\nnm 2\n' + ''.join(
+        f'{i} {w_a:.17g} {w_b:.17g}\n' for i in range(5))
+    command = ('READ_W w\nCOMPUTE\nWRITE_THERMO thermo\n'
+               'COMPARE_HOMOGENEOUS 0 homogeneous0\n'
+               'COMPARE_HOMOGENEOUS 1 homogeneous1\nFINISH\n')
+    (work / 'param').write_text(param)
+    (work / 'w').write_text(field)
+    (work / 'command').write_text(command)
+    done = subprocess.run([program, '-p', 'param', '-c', 'command'],
+                          cwd=work, capture_output=True, text=True, timeout=30)
+    (work / 'log').write_text(done.stdout + done.stderr)
+    minor_id = 0 if minor_first else 1
+    exact_mu = math.log(minor) + chi * major if minor > 0 else -math.inf
+    row = dict(name=name, returncode=done.returncode, minor_phi=minor,
+               minor_species=minor_id, exact_minor_mu=exact_mu,
+               thermo=species_rows(work / 'thermo', 2),
+               homogeneous0=species_rows(work / 'homogeneous0', 2),
+               homogeneous1=species_rows(work / 'homogeneous1', 3))
+    results.append(row)
+    print(json.dumps(row), flush=True)
+
+
+run('polymer_dilute_last', 1e-20)
+run('polymer_dilute_first_control', 1e-20, minor_first=True)
+run('polymer_ordinary_last_control', 0.2)
+run('polymer_zero_last_control', 0.0)
+run('solvent_dilute_last', 1e-20, solvent=True)
+run('solvent_ordinary_control', 0.2, solvent=True)
+(out / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
+
+for row in results:
+    assert row['returncode'] == 0, row
+    actual = row['homogeneous0'][row['minor_species']]
+    # Homogeneous output columns are species, mu, phi (thermo is phi, mu).
+    assert actual[2] == row['minor_phi'] or abs(actual[2]/row['minor_phi']-1) < 1e-10, row
+    if row['minor_phi'] > 0:
+        assert math.isfinite(actual[1]), row
+        assert abs(actual[1]-row['exact_minor_mu']) < 1e-9, row
+    else:
+        assert actual[1] == -math.inf, row
+rows = []
+
+for name, species in [
+    ('rounded_absent_last_same_monomer', [(0, .56), (0, .33), (0, .11), (0, 0.)]),
+    ('exact_absent_last_control', [(0, .5), (0, .25), (0, .25), (0, 0.)]),
+    ('rounded_no_absent_control', [(0, .56), (0, .33), (0, .11)]),
+    ('rounded_mixed_monomer_control', [(0, .56), (1, .33), (0, .11), (0, 0.)]),
+]:
+    work = out / name
+    work.mkdir(exist_ok=True)
+    c_a = sum(p for m, p in species if m == 0)
+    c_b = sum(p for m, p in species if m == 1)
+    param = ('System{\nMixture{ nMonomer 2 monomers[ 1 1 ]\n'
+             + f'nPolymer {len(species)}\n'
+             + ''.join(f'Polymer{{ type linear nBlock 1 blocks[ {m} 1 ] phi {p:.17g} }}\n'
+                       for m, p in species)
+             + 'ds 0.1\n}\nInteraction{ chi( 0 1 1.5 ) }\n'
+             + 'Domain{ mode planar xMin 0 xMax 1 nx 5 }\n'
+             + 'AmIterator{ epsilon 1e-10 maxItr 10 maxHist 5 }\n}\n')
+    field = 'nx 5\nnm 2\n' + ''.join(
+        f'{i} {1.5*c_b:.17g} {1.5*c_a:.17g}\n' for i in range(5))
+    command = ('READ_W w\nCOMPUTE\nWRITE_THERMO thermo\n'
+               'COMPARE_HOMOGENEOUS 0 homogeneous\nFINISH\n')
+    for file, text in [('param', param), ('w', field), ('command', command)]:
+        (work / file).write_text(text)
+    done = subprocess.run([program, '-p', 'param', '-c', 'command'], cwd=work,
+                          capture_output=True, text=True, timeout=30)
+    (work / 'log').write_text(done.stdout + done.stderr)
+    row = dict(name=name, returncode=done.returncode, species=species,
+               sum_phi=sum(p for _, p in species),
+               exact_free_energy=sum(p * (math.log(p) - 1) for _, p in species if p > 0)
+                                 + 1.5*c_a*c_b,
+               thermo=(work / 'thermo').read_text() if (work / 'thermo').exists() else None,
+               homogeneous=(work / 'homogeneous').read_text()
+                           if (work / 'homogeneous').exists() else None)
+    rows.append(row)
+    print(json.dumps(row), flush=True)
+(out / 'rounding-results.json').write_text(json.dumps(rows, indent=2) + '\n')
+
+for row in rows:
+    assert row['returncode'] == 0, row
+    text = row['homogeneous']
+    actual = float(re.search(r'f \(homo\)\s*=\s*(\S+)', text)[1])
+    assert abs(actual-row['exact_free_energy']) < 1e-9, row
+print(f'Passed {len(results)+len(rows)} boundary composition cases')
