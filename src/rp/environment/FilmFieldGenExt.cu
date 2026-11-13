@@ -85,18 +85,18 @@ namespace Rp {
             d = (cudaReal)ix / (cudaReal)meshDims.x;
          }
 
-         // Determine if this grid point is in the "top" half. As in the
-         // CPU code, grid index >= N/2 (integer division) is the top half.
+         // The top wall starts at z/L >= 1/2. For odd mesh sizes the
+         // first top index is ceil(N/2), not the truncated midpoint.
          bool topHalf;
          if (D == 3) {
-            if (normalVecId == 2) topHalf = (ix >= meshDims.x / 2);
-            if (normalVecId == 1) topHalf = (iy >= meshDims.y / 2);
-            if (normalVecId == 0) topHalf = (iz >= meshDims.z / 2);
+            if (normalVecId == 2) topHalf = (ix >= meshDims.x / 2 + meshDims.x % 2);
+            if (normalVecId == 1) topHalf = (iy >= meshDims.y / 2 + meshDims.y % 2);
+            if (normalVecId == 0) topHalf = (iz >= meshDims.z / 2 + meshDims.z % 2);
          } else if (D == 2) {
-            if (normalVecId == 1) topHalf = (ix >= meshDims.x / 2);
-            if (normalVecId == 0) topHalf = (iy >= meshDims.y / 2);
+            if (normalVecId == 1) topHalf = (ix >= meshDims.x / 2 + meshDims.x % 2);
+            if (normalVecId == 0) topHalf = (iy >= meshDims.y / 2 + meshDims.y % 2);
          } else { // D == 1
-            topHalf = (ix >= meshDims.x / 2);
+            topHalf = (ix >= meshDims.x / 2 + meshDims.x % 2);
          }
 
          if (ix < meshDims.x && iy < meshDims.y && iz < meshDims.z) {
@@ -148,18 +148,18 @@ namespace Rp {
          if (D > 1) id += meshDims.x * iy;
          if (D > 2) id += meshDims.x * meshDims.y * iz;
 
-         // Determine if this grid point is in the "top" half. As in the
-         // CPU code, grid index >= N/2 (integer division) is the top half.
+         // The top wall starts at z/L >= 1/2. For odd mesh sizes the
+         // first top index is ceil(N/2), not the truncated midpoint.
          bool topHalf;
          if (D == 3) {
-            if (normalVecId == 2) topHalf = (ix >= meshDims.x / 2);
-            if (normalVecId == 1) topHalf = (iy >= meshDims.y / 2);
-            if (normalVecId == 0) topHalf = (iz >= meshDims.z / 2);
+            if (normalVecId == 2) topHalf = (ix >= meshDims.x / 2 + meshDims.x % 2);
+            if (normalVecId == 1) topHalf = (iy >= meshDims.y / 2 + meshDims.y % 2);
+            if (normalVecId == 0) topHalf = (iz >= meshDims.z / 2 + meshDims.z % 2);
          } else if (D == 2) {
-            if (normalVecId == 1) topHalf = (ix >= meshDims.x / 2);
-            if (normalVecId == 0) topHalf = (iy >= meshDims.y / 2);
+            if (normalVecId == 1) topHalf = (ix >= meshDims.x / 2 + meshDims.x % 2);
+            if (normalVecId == 0) topHalf = (iy >= meshDims.y / 2 + meshDims.y % 2);
          } else { // D == 1
-            topHalf = (ix >= meshDims.x / 2);
+            topHalf = (ix >= meshDims.x / 2 + meshDims.x % 2);
          }
 
          if (ix < meshDims.x && iy < meshDims.y && iz < meshDims.z) {

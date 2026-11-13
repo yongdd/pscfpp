@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+import argparse
+
+
+import math
+
+
+from pathlib import Path
+
+
+import re
+
+
+import shutil
+
+
+import subprocess
+
+
+import tempfile
+
+
+SOURCE = Path(__file__).resolve().parents[5]
+
+
+def execute(root, name, program, param, field, command):
+    work = root / name
+    work.mkdir()
+    (work / 'param').write_text(param)
+    if field is not None:
+        (work / 'w').write_text(field)
+    (work / 'command').write_text(command)
+    exe = shutil.which('pscf_' + program)
+    if exe is None:
+        exe = str(SOURCE / 'bin' / ('pscf_' + program))
+    args = [exe] + ([] if program == '1d' else ['-d', '1'])
+    args += ['-p', 'param', '-c', 'command']
+    run = subprocess.run(args, cwd=work, capture_output=True, text=True,
+                         timeout=60)
+    log = run.stdout + run.stderr
+    (work / 'log').write_text(log)
+    return work, run.returncode, log
+
+
+def film_midpoint(root, program):
+    for n in [63, 64]:
+        param = '''System{
+ Mixture{
+  nMonomer 2 monomers[ 1 1 ] nPolymer 1
+  Polymer{ type linear nBlock 2 blocks[ 0 .5 1 .5 ] phi 1 }
+  ds .01
+ }
+ Interaction{ chi( 0 1 20 ) }
+ Domain{ mesh %d lattice lamellar }
+ FilmEnvironment{
+  normalVecId 0 interfaceThickness .2 excludedThickness .8
+  chiBottom[ 1 2 ] chiTop[ 5 3 ]
+ }
+}
+''' % n
+        name = '%s_film_%d' % (program, n)
+        work, rc, log = execute(
+            root, name, program, param, None,
+            'SET_UNIT_CELL lamellar 1\nWRITE_MASK_RGRID mask.rf\n'
+            'WRITE_H_RGRID h.rf\nFINISH\n')
+        assert rc == 0, (name, rc, log[-1000:])
+        mask = [float(row.split()[-1]) for row in
+                (work / 'mask.rf').read_text().splitlines()[-n:]]
+        fields = [[float(x) for x in row.split()] for row in
+                  (work / 'h.rf').read_text().splitlines()[-n:]]
+        errors = []
+        for i, (m, values) in enumerate(zip(mask, fields)):
+            chi = [1., 2.] if i/n < .5 else [5., 3.]
+            errors += [abs(values[j]-(1-m)*chi[j]) for j in range(2)]
+        assert max(errors) < 1e-10, (name, max(errors))
+    print(program + ': odd/even physical wall split passed')
+
+
+def run(root, programs):
+    root.mkdir(parents=True, exist_ok=True)
+    for program in programs:
+        film_midpoint(root, program)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--program', action='append', choices=['rpc', 'rpg'])
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    programs = args.program or [['rpc', 'rpg'][0]]
+    if args.output:
+        run(args.output.resolve(), programs)
+    else:
+        with tempfile.TemporaryDirectory(prefix='filmoddgridmidpointtest-') as directory:
+            run(Path(directory), programs)
