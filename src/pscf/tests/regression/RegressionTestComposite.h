@@ -78,6 +78,9 @@
 
 #include "EdgeArchiveStateTest.h"
 
+#include "UnitCellArchiveStateTest.h"
+
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -133,6 +136,7 @@ TEST_COMPOSITE_ADD_UNIT(GpuComplexExpAliasTest);
 TEST_COMPOSITE_ADD_UNIT(GpuThreadMeshDimensionTest);
 #endif
 TEST_COMPOSITE_ADD_UNIT(EdgeArchiveStateTest);
+TEST_COMPOSITE_ADD_UNIT(UnitCellArchiveStateTest);
 TEST_COMPOSITE_END
 
 #endif

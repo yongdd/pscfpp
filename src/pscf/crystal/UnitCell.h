@@ -518,10 +518,31 @@ namespace Pscf {
    void serialize(Archive& ar, UnitCell<D>& cell, 
                   const unsigned int version)
    {
-      serializeEnum(ar, cell.lattice_, version);
-      ar & cell.nParameter_;
-      for (int i = 0; i < cell.nParameter_; ++i) {
-         ar & cell.parameters_[i];
+      typename UnitCell<D>::LatticeSystem lattice = cell.lattice_;
+      int nParameter = cell.nParameter_;
+      serializeEnum(ar, lattice, version);
+      ar & nParameter;
+      UTIL_CHECK(nParameter >= 0 && nParameter <= 6);
+      if (nParameter == 0) {
+         // Preserve the existing archive representation of an empty cell.
+         UTIL_CHECK(lattice == UnitCell<D>::Null);
+         if (Archive::is_loading()) {
+            UTIL_CHECK(cell.lattice_ == UnitCell<D>::Null);
+         }
+         return;
+      }
+      FSArray<double,6> parameters;
+      for (int i = 0; i < nParameter; ++i) {
+         double value = Archive::is_saving() ? cell.parameters_[i] : 0.0;
+         ar & value;
+         parameters.append(value);
+      }
+      if (Archive::is_loading()) {
+         // Validate the entire record before changing the target. Assignment
+         // rebuilds all derived geometry and notifies the target's signal.
+         UnitCell<D> restored;
+         restored.set(lattice, parameters);
+         cell = restored;
       }
    }
 
