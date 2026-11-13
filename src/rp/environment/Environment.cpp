@@ -24,6 +24,12 @@ namespace Rp {
    void Environment::reset()
    {
       EnvironmentBase::reset();
+      clearStress();
+   }
+
+   // Invalidate stress without requesting field regeneration.
+   void Environment::clearStress()
+   {
       hasStress_ = false;
       stress_.clear();
       stressIds_.clear();

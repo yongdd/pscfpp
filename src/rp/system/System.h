@@ -302,14 +302,15 @@ namespace Rp {
       void simulate(int nStep);
 
       /**
-      * Mark c-fields, propagators and free energies as outdated.
+      * Mark concentrations, free energies and modified stress as outdated.
       *
       * This function must be called whenever any of the inputs to the
       * solution of the modified diffusion equation are modified, including
       * the w fields, unit cell parameters, external fields, or mask. Upon
-      * return, c().hasData(), scft().hasData(), and mixture().hasStress()
-      * will all return false. If the system has an %Environment, then
-      * environment().needsUpdate() will also return true.
+      * return, c().hasData() and scft().hasData() are false. If the system
+      * has an %Environment, environment().hasStress() is also false.
+      * Generated environment fields are retained; geometry changes use
+      * clearUnitCellData() to request their regeneration separately.
       */
       void clearCFields();
 

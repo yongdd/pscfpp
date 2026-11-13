@@ -87,6 +87,14 @@ namespace Rp {
       void reset();
 
       /**
+      * Invalidate the modified stress, retaining the generated fields.
+      *
+      * Changes to w fields or concentrations affect the stress even when
+      * the geometry and the generated mask/external fields are unchanged.
+      */
+      void clearStress();
+
+      /**
       * Compute and store the environment-modified SCFT stress.
       * 
       * First, the conventional SCFT stress is accessed from the Mixture

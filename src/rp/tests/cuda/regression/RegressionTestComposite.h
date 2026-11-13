@@ -63,6 +63,8 @@
 
 #include "MaskStressScaleTest.h"
 
+#include "EnvironmentStressInvalidationTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
 TEST_COMPOSITE_ADD_UNIT(FieldIoRegressionTest);
@@ -115,6 +117,7 @@ TEST_COMPOSITE_ADD_UNIT(HomogeneousClumpScaleTest);
 TEST_COMPOSITE_ADD_UNIT(FtsSpectrumScaleTest);
 TEST_COMPOSITE_ADD_UNIT(WallFieldScaleTest);
 TEST_COMPOSITE_ADD_UNIT(MaskStressScaleTest);
+TEST_COMPOSITE_ADD_UNIT(EnvironmentStressInvalidationTest);
 TEST_COMPOSITE_END
 
 #endif

@@ -1100,13 +1100,16 @@ namespace Rp {
    }
 
    /*
-   * Mark c-fields and free energy as outdated/invalid.
+   * Mark c-fields, free energy and modified stress as outdated/invalid.
    */
    template <int D, class T>
    void System<D,T>::clearCFields()
    {
       c_().setHasData(false);
       scft().clear();
+      if (hasEnvironment()) {
+         environment().clearStress();
+      }
    }
 
    // Unit Cell Modifiers
