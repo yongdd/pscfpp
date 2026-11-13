@@ -66,11 +66,10 @@ namespace Rp {
       const int nx = meshPtr_->size();
       const double size = SolventSpeciesT::size();
 
-      // Evaluate the Boltzmann weight exp(-size*(w - wShift)) of the
-      // field shifted by its spatial average wShift, which keeps the
-      // weight representable for large solvent molecules, and its
-      // spatial average Q
-      const double wShift = Reduce::sum(wField) / double(nx);
+      // Shift by the minimum field: all Boltzmann weights are at most
+      // one and at least one is exactly one. An average shift can
+      // overflow for finite nonuniform fields and large solvent sizes.
+      const double wShift = Reduce::min(wField);
       VecOp::subVS(cField_, wField, wShift);
       VecOp::expVc(cField_, cField_, -1.0*size);
       double Q = Reduce::sum(cField_);

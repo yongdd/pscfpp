@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Check finite solvent concentrations and energies across strong field contrasts."""
+import argparse
+import tempfile
+import json
+import math
+from pathlib import Path
+import re
+import shutil
+import subprocess
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--program', action='append', choices=['1d', 'rpc', 'rpg'])
+parser.add_argument('--output', type=Path)
+args = parser.parse_args()
+OUT = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix='solvent-normalization-'))
+OUT.mkdir(parents=True,exist_ok=True)
+
+def real(value):
+    return value if math.isfinite(value) else str(value)
+
+def run(backend,size,uniform=False,gauge=0.):
+    name=f'{backend}_size{size:g}_uniform{int(uniform)}_gauge{gauge:g}'
+    folder=OUT/name
+    folder.mkdir(exist_ok=True)
+    nx=9 if backend=='1d' else 8
+    wa=[gauge+(1. if uniform else (2. if i%2 else 0.)) for i in range(nx)]
+    wb=[gauge+2.-(a-gauge) for a in wa]
+    mixture=f'''Mixture{{ nMonomer 2 monomers[ 1 1 ] nPolymer 1 nSolvent 2
+Polymer{{ type linear nBlock 1 blocks[ 0 1 ] phi 0 }}
+Solvent{{ monomerId 0 size {size:.17g} phi .5 }}
+Solvent{{ monomerId 1 size {size:.17g} phi .5 }} ds .01 }}'''
+    if backend=='1d':
+        domain=f'Domain{{ mode planar xMin 0 xMax 1 nx {nx} }}'
+        iterator='AmIterator{ epsilon 1e-10 maxItr 10 maxHist 5 }'
+        header=f'nx {nx}\nnm 2\n'
+        rows=''.join(f'{i} {a:.17g} {b:.17g}\n' for i,(a,b) in enumerate(zip(wa,wb)))
+        command='READ_W w\nCOMPUTE\nWRITE_C c\nWRITE_THERMO thermo\nFINISH\n'
+        cli=[]
+    else:
+        domain=f'Domain{{ mesh {nx} lattice lamellar }}'
+        iterator='AmIteratorGrid{ epsilon 1e-10 maxItr 10 maxHist 5 isFlexible 0 }'
+        header=f'format 1 0\ndim\n1\ncrystal_system\nlamellar\nN_cell_param\n1\ncell_param\n1\nN_monomer\n2\nmesh\n{nx}\n'
+        rows=''.join(f'{a:.17g} {b:.17g}\n' for a,b in zip(wa,wb))
+        command='READ_W_RGRID w\nCOMPUTE\nWRITE_C_RGRID c\nWRITE_THERMO thermo\nFINISH\n'
+        cli=['-d','1']
+    (folder/'param').write_text(f'System{{ {mixture} Interaction{{ chi( 0 1 2 ) }} {domain} {iterator} }}\n')
+    (folder/'w').write_text(header+rows)
+    (folder/'command').write_text(command)
+    p=subprocess.run([shutil.which('pscf_'+backend),*cli,'-p','param','-c','command'],cwd=folder,capture_output=True,text=True,timeout=60)
+    (folder/'log').write_text(p.stdout+p.stderr)
+    row=dict(name=name,backend=backend,size=size,uniform=uniform,gauge=gauge,returncode=p.returncode)
+    if uniform:
+        expected=[[.5,.5] for _ in range(nx)]
+        expected_mu=math.log(.5)+size*(1.+gauge)
+        expected_f=(math.log(.5)-1.)/size+.5
+    else:
+        # Scale raw Boltzmann weights by their maximum. This computes only
+        # exp(nonpositive values), so each operation is finite for all cases.
+        e=math.exp(-2.*size)
+        low=1./(1.+e);high=e/(1.+e)
+        expected=[[low,high] if i%2==0 else [high,low] for i in range(nx)]
+        expected_mu=-math.log1p(e)+size*gauge
+        expected_f=(-math.log1p(e)-1.)/size-2.*high*high
+    row.update(expected_mu=expected_mu,expected_f=expected_f,expected_c=expected)
+    if (folder/'c').exists():
+        lines=(folder/'c').read_text().splitlines()
+        if backend=='1d':
+            values=[[float(v) for v in s.split()[1:]] for s in lines[2:] if s.strip()]
+        else:
+            start=next(i for i,s in enumerate(lines) if s.strip()=='mesh')+2
+            values=[[float(v) for v in s.split()] for s in lines[start:] if s.strip()]
+        row['observed_c']=[[real(v) for v in s] for s in values]
+        finite=all(math.isfinite(v) for s in values for v in s)
+        row['all_concentrations_finite']=finite
+        if finite:
+            row['max_concentration_error']=max(abs(a-b) for s,t in zip(values,expected) for a,b in zip(s,t))
+            row['max_incompressibility']=max(abs(sum(s)-1.) for s in values)
+    if (folder/'thermo').exists():
+        thermo=(folder/'thermo').read_text()
+        row['observed_f']=real(float(re.search(r'fHelmholtz\s+(\S+)',thermo)[1]))
+        row['observed_pressure']=real(float(re.search(r'pressure\s+(\S+)',thermo)[1]))
+    print(json.dumps(row),flush=True)
+    return row
+
+results=[]
+for backend in args.program or ['1d']:
+    for size,uniform,gauge in [(1.,False,0.),(700.,False,0.),(1000.,False,0.),(1000.,True,0.),(1000.,False,20.),(1000.,False,-20.)]:
+        results.append(run(backend,size,uniform,gauge))
+(OUT/'results.json').write_text(json.dumps(results,indent=2)+'\n')
+for row in results:
+    assert row['returncode']==0,row
+    assert row['all_concentrations_finite'],row
+    assert row['max_concentration_error']<1e-10,row
+    assert row['max_incompressibility']<1e-10,row
+    assert math.isfinite(row['observed_f']),row
+    assert math.isfinite(row['observed_pressure']),row
+    assert abs(row['observed_f']-row['expected_f'])<1e-10,row
+print(f'Passed {len(results)} solvent concentration and thermodynamic cases.')

@@ -45,12 +45,16 @@ namespace R1 {
    {
       UTIL_CHECK(cField_.isAllocated());
 
-      // Evaluate unnormalized concentration, the Boltzmann weight of
-      // the field shifted by its spatial average wShift, which keeps
-      // the weight representable for large solvent molecules
+      // Shift by the minimum field so that every Boltzmann weight is
+      // at most one and at least one is exactly one. Subtracting the
+      // average instead can overflow for finite nonuniform fields.
       int nx = domain().nx();
+      UTIL_CHECK(wField.capacity() == nx);
       double s = size();
-      double wShift = domain().spatialAverage(wField);
+      double wShift = wField[0];
+      for (int i = 1; i < nx; ++i) {
+         if (wField[i] < wShift) wShift = wField[i];
+      }
       for (int i = 0; i < nx; ++i) {
           cField_[i] = exp(-s*(wField[i] - wShift));
       }

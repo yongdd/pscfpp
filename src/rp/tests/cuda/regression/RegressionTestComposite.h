@@ -69,6 +69,8 @@
 
 #include "FilmDilutePolymerTest.h"
 
+#include "SolventNormalizationTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
 TEST_COMPOSITE_ADD_UNIT(FieldIoRegressionTest);
@@ -124,6 +126,7 @@ TEST_COMPOSITE_ADD_UNIT(MaskStressScaleTest);
 TEST_COMPOSITE_ADD_UNIT(EnvironmentStressInvalidationTest);
 TEST_COMPOSITE_ADD_UNIT(BeadHeadPartitionTest);
 TEST_COMPOSITE_ADD_UNIT(FilmDilutePolymerTest);
+TEST_COMPOSITE_ADD_UNIT(SolventNormalizationTest);
 TEST_COMPOSITE_END
 
 #endif
