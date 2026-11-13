@@ -353,6 +353,8 @@ namespace Rp {
       } else
       if (PolymerModel::isBead()) {
 
+         UTIL_CHECK(Edge::nBead() > 0);
+         UTIL_CHECK(Edge::nBead() <= INT_MAX - 2);
          ds_ = 1.0;
          ns_ = Edge::nBead() + 2;
 
@@ -418,6 +420,37 @@ namespace Rp {
       }
 
       hasExpKsq_ = false;
+   }
+
+   /*
+   * Set or reset the bead count and its contour discretization.
+   */
+   template <int D>
+   void Block<D,CUT>::setNBead(int newNBead)
+   {
+      UTIL_CHECK(PolymerModel::isBead());
+      UTIL_CHECK(newNBead > 0);
+      UTIL_CHECK(newNBead <= INT_MAX - 2);
+      const int newNs = newNBead + 2;
+      if (isAllocated_) {
+         checkPropagatorSize(newNs, mesh().size());
+      }
+
+      Edge::setNBead(newNBead);
+      if (isAllocated_ && newNs != ns_) {
+         propagator(0).reallocate(newNs);
+         propagator(1).reallocate(newNs);
+         if (useBatchedFFT_) {
+            UTIL_CHECK(fftBatchedAll_.isSetup());
+            q0kBatched_.deallocate();
+            q1kBatched_.deallocate();
+            q0kBatched_.allocate(newNs * kSize_);
+            q1kBatched_.allocate(newNs * kSize_);
+            fftBatchedAll_.resetBatchSize(newNs);
+         }
+         ns_ = newNs;
+         stress_.clear();
+      }
    }
 
    /*

@@ -143,6 +143,17 @@ namespace Rp {
       void setLength(double newLength);
 
       /**
+      * Set or reset the bead count, resizing propagators and FFT batches.
+      *
+      * Precondition: PolymerModel::isBead(), newNBead > 0.
+      * The count plus two end slices must fit the backend array capacity.
+      * Call setupSolver and solve again after changing the count.
+      *
+      * \param newNBead  new number of beads in this block
+      */
+      void setNBead(int newNBead) override;
+
+      /**
       * Set or reset monomer statistical segment length.
       *
       * \param kuhn  new monomer statistical segment length.

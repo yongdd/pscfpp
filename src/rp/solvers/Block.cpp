@@ -159,6 +159,8 @@ namespace Rp {
          ds_ = length/double(ns_-1);
       } else 
       if (PolymerModel::isBead()) {
+         UTIL_CHECK(Edge::nBead() > 0);
+         UTIL_CHECK(Edge::nBead() <= INT_MAX - 2);
          ds_ = 1.0;
          ns_ = Edge::nBead() + 2;
       }
@@ -201,7 +203,27 @@ namespace Rp {
    }
 
    /*
-   * Set or reset the the block length.
+   * Set or reset the bead count and its contour discretization.
+   */
+   template <int D>
+   void Block<D,CPT>::setNBead(int newNBead)
+   {
+      UTIL_CHECK(PolymerModel::isBead());
+      UTIL_CHECK(newNBead > 0);
+      UTIL_CHECK(newNBead <= INT_MAX - 2);
+      const int newNs = newNBead + 2;
+
+      Edge::setNBead(newNBead);
+      if (isAllocated_ && newNs != ns_) {
+         propagator(0).reallocate(newNs);
+         propagator(1).reallocate(newNs);
+         ns_ = newNs;
+         stress_.clear();
+      }
+   }
+
+   /*
+   * Set or reset monomer statistical segment length.
    */
    template <int D>
    void Block<D,CPT>::setKuhn(double kuhn)
