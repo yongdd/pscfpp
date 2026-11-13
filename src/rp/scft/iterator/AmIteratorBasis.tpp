@@ -200,6 +200,19 @@ namespace Rp {
          for (int k = 0; k < nBasis; k++) {
             state[begin + k] = field[k];
          }
+         // Store canonical fields in the same homogeneous gauge as update().
+         // In particular, the first convergence check must not be scaled by
+         // arbitrary constant offsets in the input fields.
+         if (system().mixture().isCanonical()) {
+            double average = 0.0;
+            for (int j = 0; j < nMonomer; ++j) {
+               average += interaction_.chi(i,j) * system().c().basis(j)[0];
+            }
+            if (system().h().hasData()) {
+               average += system().h().basis(i)[0];
+            }
+            state[begin] = average;
+         }
       }
 
       // Add elements associated with unit cell parameters (if any)

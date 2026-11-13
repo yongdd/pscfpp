@@ -197,6 +197,21 @@ namespace Rp {
       for (int i = 0; i < nMonomer; i++) {
          slice.associate(state, i*nMesh, nMesh);
          VecOp::eqV(slice, system().w().rgrid(i));
+         // Use the same canonical gauge as update() before storing history
+         // or checking convergence, including for the initial input fields.
+         if (system().mixture().isCanonical()) {
+            const RealT average = Reduce::sum(slice) / RealT(nMesh);
+            VecOp::subEqS(slice, average);
+            RealT target = 0.0;
+            for (int j = 0; j < nMonomer; ++j) {
+               target += interaction_.chi(i,j)
+                       * Reduce::sum(system().c().rgrid(j)) / RealT(nMesh);
+            }
+            if (system().h().hasData()) {
+               target += Reduce::sum(system().h().rgrid(i)) / RealT(nMesh);
+            }
+            VecOp::addEqS(slice, target);
+         }
          slice.dissociate();
       }
 
