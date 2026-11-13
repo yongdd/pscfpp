@@ -50,11 +50,13 @@ namespace Pscf {
          rank = iter.rank();
          for (int k = 0; k < nMonomer; ++k) {
             in >> value;
+            // eofbit alone is valid after the last complete number.
+            UTIL_CHECK(!in.fail());
             assign(fields[k][rank], value);
          }
-         UTIL_ASSERT(in.good());
+         UTIL_ASSERT(!in.fail());
       }
-      UTIL_CHECK(in.good());
+      UTIL_CHECK(!in.fail());
    }
 
    template <int D, class AT>
@@ -68,10 +70,10 @@ namespace Pscf {
       for (iter.begin(); !iter.atEnd(); ++iter) {
          rank = iter.rank();
          in >> value;
-         UTIL_ASSERT(in.good());
+         UTIL_CHECK(!in.fail());
          assign(field[rank], value);
       }
-      UTIL_CHECK(in.good());
+      UTIL_CHECK(!in.fail());
    }
 
    template <int D, class AT>
@@ -127,17 +129,19 @@ namespace Pscf {
       for (iter.begin(); !iter.atEnd(); ++iter) {
          rank = iter.rank();
          in >> idum;
+         UTIL_CHECK(!in.fail());
          UTIL_CHECK(i == idum);
          UTIL_CHECK(i == rank);
          for (j = 0; j < nMonomer; ++j) {
             in >> x;
             in >> y;
+            UTIL_CHECK(!in.fail());
             assign(fields[j][rank], x, y);
          }
-         UTIL_ASSERT(in.good());
+         UTIL_ASSERT(!in.fail());
          ++i;
       }
-      UTIL_CHECK(in.good());
+      UTIL_CHECK(!in.fail());
    }
 
    template <int D, class ACT>
@@ -155,15 +159,16 @@ namespace Pscf {
       for (iter.begin(); !iter.atEnd(); ++iter) {
          rank = iter.rank();
          in >> idum;
+         UTIL_CHECK(!in.fail());
          UTIL_CHECK(i == idum);
          UTIL_CHECK(i == rank);
          in >> x;
          in >> y;
-         UTIL_ASSERT(in.good());
+         UTIL_CHECK(!in.fail());
          assign(field[rank], x, y);
          ++i;
       }
-      UTIL_CHECK(in.good());
+      UTIL_CHECK(!in.fail());
    }
 
    template <int D, class ACT>
@@ -309,7 +314,7 @@ namespace Pscf {
             }
             in >> waveIn;            // wave of star
             in >> sizeIn;            // # of waves in star
-            UTIL_CHECK(in.good());
+            UTIL_CHECK(!in.fail());
             ++i;
          }
 
@@ -396,7 +401,7 @@ namespace Pscf {
                }
                in >> waveIn2;              // wave of star
                in >> sizeIn2;              // # of wavevectors in star
-               UTIL_CHECK(in.good());
+               UTIL_CHECK(!in.fail());
                ++i;
 
                bool isPartner = false;

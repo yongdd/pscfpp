@@ -52,6 +52,8 @@
 
 #include "FftSliceAlignmentTest.h"
 
+#include "FieldReadEndOfFileTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -91,6 +93,7 @@ TEST_COMPOSITE_ADD_UNIT(MinimumImageScaleGpuTest);
 #endif
 TEST_COMPOSITE_ADD_UNIT(BeadCountValidationTest);
 TEST_COMPOSITE_ADD_UNIT(FftSliceAlignmentTest);
+TEST_COMPOSITE_ADD_UNIT(FieldReadEndOfFileTest);
 TEST_COMPOSITE_END
 
 #endif
