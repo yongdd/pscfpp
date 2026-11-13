@@ -63,14 +63,16 @@ namespace R1
       std::string label;
       in >> label;
       UTIL_CHECK(label == "nx");
-      int nx;
+      int nx = 0;
       in >> nx;
+      UTIL_CHECK(!in.fail());
       UTIL_CHECK(nx > 0);
       UTIL_CHECK(nx == domain().nx());
       in >> label;
       UTIL_CHECK (label == "nm");
-      int nm;
+      int nm = 0;
       in >> nm;
+      UTIL_CHECK(!in.fail());
       UTIL_CHECK(nm > 0);
 
       // Check dimensions of fields array
@@ -79,13 +81,25 @@ namespace R1
          UTIL_CHECK(nx == fields[i].capacity());
       }
 
-      // Read fields
-      int i, j, idum;
+      // Validate the complete input before replacing the existing fields.
+      DArray<Field> temp;
+      temp.allocate(nm);
+      for (int j = 0; j < nm; ++j) {
+         temp[j].allocate(nx);
+      }
+      int i, j, idum = 0;
       for (i = 0; i < nx; ++i) {
          in >> idum;
+         UTIL_CHECK(!in.fail());
          UTIL_CHECK(idum == i);
          for (j = 0; j < nm; ++j) {
-            in >> fields[j][i];
+            in >> temp[j][i];
+            UTIL_CHECK(!in.fail());
+         }
+      }
+      for (j = 0; j < nm; ++j) {
+         for (i = 0; i < nx; ++i) {
+            fields[j][i] = temp[j][i];
          }
       }
    }
