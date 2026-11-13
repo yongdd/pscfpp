@@ -75,6 +75,12 @@ namespace Pscf
       /**
       * Serialize to/from archive.
       *
+      * The complete record includes a format tag, both model-specific
+      * sizes, and the polymer type. Legacy untagged records omitted the
+      * bead count and polymer type and cannot be restored reliably;
+      * they are rejected and must be regenerated from the original input.
+      * Archives written in this format require a matching reader.
+      *
       * \param ar  input or output Archive
       * \param versionId  archive format version index
       */
@@ -329,10 +335,20 @@ namespace Pscf
    template <class Archive>
    void Edge::serialize(Archive& ar, unsigned int)
    {
+      // Negative "EDGE" tag distinguishes the complete record from the
+      // old record, whose first entry was a nonnegative block identifier.
+      int formatTag = -0x45444745;
+      ar & formatTag;
+      if (formatTag != -0x45444745) {
+         UTIL_THROW("Unsupported Edge archive format: legacy records "
+                    "omit bead count and polymer type");
+      }
       ar & id_;
       ar & monomerId_;
       ar & vertexIds_;
       ar & length_;
+      ar & nBead_;
+      ar & polymerType_;
    }
 
 }

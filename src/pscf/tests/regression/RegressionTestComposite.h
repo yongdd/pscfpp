@@ -76,6 +76,8 @@
 #include "GpuThreadMeshDimensionTest.h"
 #endif
 
+#include "EdgeArchiveStateTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -130,6 +132,7 @@ TEST_COMPOSITE_ADD_UNIT(GpuComplexExpAliasTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuThreadMeshDimensionTest);
 #endif
+TEST_COMPOSITE_ADD_UNIT(EdgeArchiveStateTest);
 TEST_COMPOSITE_END
 
 #endif
