@@ -211,8 +211,9 @@ namespace Rp {
       * Setup before the main loop of a simulate or analyze command.
       *
       * \param nStep  number of MC steps to attempt
+      * \param isSimulation enable compression, ramp and move/step setup
       */
-      void setup(int nStep);
+      void setup(int nStep, bool isSimulation);
 
       /**
       * Recompute the state after the ramp has changed parameters.

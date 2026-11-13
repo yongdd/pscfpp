@@ -187,8 +187,9 @@ namespace Rp {
       * Setup before the main loop.
       *
       * \param nStep  number of steps planned for the simulation
+      * \param isSimulation enable compression, ramp and move/step setup
       */
-      void setup(int nStep);
+      void setup(int nStep, bool isSimulation);
 
       /**
       * Recompute the state after the ramp has changed parameters.

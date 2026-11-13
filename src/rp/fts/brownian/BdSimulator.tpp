@@ -151,7 +151,7 @@ namespace Rp {
    * Setup before main loop of a simulate or analyze command.
    */
    template <int D, class T>
-   void BdSimulator<D,T>::setup(int nStep)
+   void BdSimulator<D,T>::setup(int nStep, bool isSimulation)
    {
       UTIL_CHECK((Simulator<D,T>::system().w().hasData()));
 
@@ -162,7 +162,7 @@ namespace Rp {
          Simulator<D,T>::perturbation().setup();
       }
 
-      if (Simulator<D,T>::hasRamp()) {
+      if (isSimulation && Simulator<D,T>::hasRamp()) {
          Simulator<D,T>::ramp().setup(nStep);
       }
 
@@ -172,7 +172,7 @@ namespace Rp {
       // Compress the initial state (adjust pressure-like field). Model
       // parameters may have changed since the last run: discard data
       // that the compressor derived from them.
-      if (Simulator<D,T>::hasCompressor()) {
+      if (isSimulation && Simulator<D,T>::hasCompressor()) {
          Simulator<D,T>::compressor().clearCache();
          Simulator<D,T>::compressor().compress();
          Simulator<D,T>::compressor().clearTimers();
@@ -184,7 +184,7 @@ namespace Rp {
       Simulator<D,T>::computeDc();
       Simulator<D,T>::computeHamiltonian();
 
-      if (hasBdStep()) {
+      if (isSimulation && hasBdStep()) {
          bdStep().setup();
       }
 
@@ -230,7 +230,7 @@ namespace Rp {
       UTIL_CHECK((Simulator<D,T>::system().w().hasData()));
 
       // Initial setup
-      setup(nStep);
+      setup(nStep, true);
       iStep_ = 0;
       if (Simulator<D,T>::hasRamp()) {
          Simulator<D,T>::ramp().setParameters(iStep_);
@@ -376,7 +376,8 @@ namespace Rp {
 
          // Initialize analyzers
          if (iStep_ == min) {
-            setup(iStep_);
+            // Postprocessing must preserve every saved frame.
+            setup(0, false);
          }
 
          // Sample property values only for iStep >= min, at multiples
