@@ -239,6 +239,51 @@ namespace Rp {
    }
 
    /*
+   * The reference P(w-h) + mask/sum(chi^-1) excludes arbitrary external
+   * and common pressure offsets without changing physical fields/history.
+   */
+   template <int D, class T>
+   double AmIteratorGrid<D,T>::relNormReference(VectorT const & state)
+   {
+      if (system().mixture().isCanonical()) {
+         return AmIterTmplT::relNormReference(state);
+      }
+      const int nm = system().mixture().nMonomer();
+      const int nx = system().domain().mesh().size();
+      const bool hasH = system().h().hasData();
+      const RealT shift = 1.0 / interaction_.sumChiInverse();
+      if (!referenceWork_.isAllocated()) {
+         referenceWork_.allocate(state.capacity());
+         effectiveFieldWork_.allocate(nx);
+         anchorWork_.allocate(nx);
+      }
+      UTIL_CHECK(referenceWork_.capacity() == state.capacity());
+      UTIL_CHECK(effectiveFieldWork_.capacity() == nx);
+      // Retain any scaled lattice-parameter entries at the end.
+      VecOp::eqV(referenceWork_, state);
+      VecOp::eqV(anchorWork_, state, 0, (nm-1)*nx, nx);
+      if (hasH) VecOp::subEqV(anchorWork_, system().h().rgrid(nm-1));
+      VectorT slice;
+      for (int i = 0; i < nm; ++i) {
+         slice.associate(referenceWork_, i*nx, nx);
+         VecOp::eqS(slice, 0.0);
+         if (system().mask().hasData()) {
+            VecOp::addEqVc(slice, system().mask().rgrid(), shift);
+         } else {
+            VecOp::addEqS(slice, shift);
+         }
+         for (int j = 0; j < nm; ++j) {
+            VecOp::eqV(effectiveFieldWork_, state, 0, j*nx, nx);
+            if (hasH) VecOp::subEqV(effectiveFieldWork_, system().h().rgrid(j));
+            VecOp::subEqV(effectiveFieldWork_, anchorWork_);
+            VecOp::addEqVc(slice, effectiveFieldWork_, interaction_.p(i,j));
+         }
+         slice.dissociate();
+      }
+      return AmIterTmplT::relNormReference(referenceWork_);
+   }
+
+   /*
    * Perform the main system computation (solve the MDE).
    */
    template <int D, class T>

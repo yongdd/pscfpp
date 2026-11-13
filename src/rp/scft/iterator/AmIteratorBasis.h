@@ -119,6 +119,10 @@ namespace Rp {
       */
       void getCurrent(VectorT& curr) override;
 
+      /// Norm of the physical field term in the SCFT residual, without
+      /// arbitrary external and common pressure reference offsets.
+      double relNormReference(VectorT const & state) override;
+
       /**
       * Have the system perform a computation using new field.
       *

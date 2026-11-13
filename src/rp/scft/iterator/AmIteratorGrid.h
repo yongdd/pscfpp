@@ -101,6 +101,11 @@ namespace Rp {
       /// Scale factor for stress residual elements
       double scaleStress_;
 
+      // Reused buffers for the open-ensemble convergence reference.
+      VectorT referenceWork_;
+      VectorT effectiveFieldWork_;
+      VectorT anchorWork_;
+
       // Private overridden virtual functions
 
       /**
@@ -121,6 +126,10 @@ namespace Rp {
       * \param curr  current state vector (output)
       */
       void getCurrent(VectorT& curr) override;
+
+      /// Norm of the physical field term in the SCFT residual, without
+      /// arbitrary external and common pressure reference offsets.
+      double relNormReference(VectorT const & state) override;
 
       /**
       * Have the system perform a computation using new state.

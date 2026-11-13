@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""Reject unconverged open/mixed states independently of field reference offsets."""
+import json
+import argparse
+import math
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
+
+SOURCE = Path(__file__).resolve().parents[5]
+
+
+def execute(root, name, program, param, files, command):
+    work = root / name
+    work.mkdir()
+    (work / 'param').write_text(param)
+    (work / 'command').write_text(command)
+    for filename, contents in files.items():
+        (work / filename).write_text(contents)
+    exe = shutil.which('pscf_' + program)
+    if exe is None:
+        exe = str(SOURCE / 'bin' / ('pscf_' + program))
+    args = [exe] + ([] if program == '1d' else ['-d', '1'])
+    args += ['-p', 'param', '-c', 'command']
+    result = subprocess.run(args, cwd=work, capture_output=True, text=True,
+                            timeout=60)
+    log = result.stdout + result.stderr
+    (work / 'log').write_text(log)
+    return work, result.returncode, log
+
+
+def basis(shift, amplitude, second_shift=None):
+    if second_shift is None:
+        second_shift = shift
+    return '''format 1 0
+dim
+1
+crystal_system
+lamellar
+N_cell_param
+1
+cell_param
+1
+group_name
+P_-1
+N_monomer
+2
+N_basis
+5
+%.17g %.17g 0 1
+%.17g %.17g 1 2
+0 0 2 2
+0 0 3 2
+0 0 4 1
+''' % (shift, second_shift, amplitude, -amplitude)
+
+
+def grid_values(path):
+    lines = path.read_text().splitlines()
+    begin = next(i for i, line in enumerate(lines) if line.strip() == 'mesh') + 2
+    return [[float(v) for v in line.split()] for line in lines[begin:]
+            if line.strip()]
+
+
+def blend(iterator, h, ensemble='closed', max_itr=1, second_h=None):
+    if second_h is None:
+        second_h = h
+    species = []
+    for i in range(2):
+        opened = ensemble == 'open' or (ensemble == 'mixed' and i == 1)
+        constraint = 'mu %.17g' % (math.log(.5) + (h if i == 0 else second_h) + .5) if opened else 'phi .5'
+        species.append('Polymer{ type linear nBlock 1 blocks[ %d 1 ] %s }' %
+                       (i, constraint))
+    return ('''System{
+Mixture{ nMonomer 2 monomers[ 1 1 ] nPolymer 2
+''' + '\n'.join(species) + ''' ds .05 }
+Interaction{ chi( 0 1 1 ) }
+Domain{ mesh 8 lattice lamellar groupName P_-1 }
+%s{ epsilon 1e-8 maxItr %d maxHist 5 verbose 3 isFlexible 0 }
+}
+''' % (iterator, max_itr))
+
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--program', action='append', choices=['rpc', 'rpg'])
+parser.add_argument('--output', type=Path)
+args = parser.parse_args()
+root = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix='open-convergence-'))
+root.mkdir(parents=True, exist_ok=True)
+rows = []
+for program in args.program or ['rpc']:
+    for iterator in ['AmIteratorBasis', 'AmIteratorGrid']:
+        for ensemble in ['open', 'mixed']:
+            reference = None
+            cases = [(0., .4, 'rel', True), (1e4, .4, 'rel', True),
+                     (1e8, .4, 'rel', True), (1e8, .4, 'max', True),
+                     (1e8, 0., 'rel', True), (1e8, .4, 'rel', False)]
+            for h, amplitude, error, external in cases:
+                name = f'{program}_{iterator}_{ensemble}_{h:g}_{amplitude}_{error}_{external}'
+                param = blend(iterator, h, ensemble)
+                if error == 'max':
+                    param = param.replace('verbose 3', 'verbose 3 errorType maxResid')
+                work, rc, log = execute(
+                    root, name, program, param,
+                    {'w': basis(h+.5, amplitude), 'h': basis(h, 0.)},
+                    'READ_W_BASIS w\n' + ('READ_H_BASIS h\n' if external else '')
+                    + 'COMPUTE\nWRITE_C_RGRID initial_c\nITERATE\nFINISH\n')
+                residual = float(re.search(r'Max Residual\s*=\s*(\S+)', log)[1])
+                relative = float(re.search(r'Relative Norm\s*=\s*(\S+)', log)[1])
+                c = grid_values(work/'initial_c')
+                density_error = max(abs(sum(v)-1) for v in c)
+                row = dict(case=name, rc=rc, residual=residual,
+                           relative=relative, incompressibility=density_error)
+                rows.append(row)
+                if amplitude == 0:
+                    assert rc == 0 and 'Converged' in log, row
+                    assert density_error < 1e-8, row
+                else:
+                    assert rc == 1 and 'Converged' not in log, row
+                    assert residual > .3 and relative > .1, row
+                    assert density_error > .01, row
+                    if h == 0:
+                        reference = c
+                    assert max(abs(a-b) for x,y in zip(c,reference)
+                               for a,b in zip(x,y)) < 1e-8, row
+            # Preserve physical means and reach a true solution, including
+            # species-selective external references and mixed ensembles.
+            for second_h in [2., -1.]:
+                name = f'{program}_{iterator}_{ensemble}_solve_{second_h}'
+                work, rc, log = execute(
+                    root, name, program,
+                    blend(iterator, 2., ensemble, 100, second_h),
+                    {'w': basis(2.5, .4, second_h+.5),
+                     'h': basis(2., 0., second_h)},
+                    'READ_W_BASIS w\nREAD_H_BASIS h\nITERATE\n'
+                    'WRITE_C_RGRID c\nWRITE_W_RGRID w_final\nFINISH\n')
+                assert rc == 0 and 'Converged' in log, (name, log[-1200:])
+                c = grid_values(work/'c')
+                w = grid_values(work/'w_final')
+                assert max(abs(v-.5) for row in c for v in row) < 1e-8, name
+                expected = [2.5, second_h+.5]
+                means = [sum(row[i] for row in w)/len(w) for i in range(2)]
+                assert max(abs(means[i]-expected[i]) for i in range(2)) < 1e-7, (name, means)
+                assert max(abs((a[0]-a[1])-(2.-second_h)-(b[1]-b[0]))
+                           for a,b in zip(w,c)) < 1e-7, name
+(root/'results.json').write_text(json.dumps(rows, indent=2)+'\n')
+print(f'Passed {len(rows)} convergence-reference cases and full solves')
