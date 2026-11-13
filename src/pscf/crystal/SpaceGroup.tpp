@@ -188,8 +188,8 @@ namespace Pscf {
    void readGroup(std::string groupName, SpaceGroup<D>& group)
    {
       if (groupName == "I") {
-         // Create identity group by default
-         group.makeCompleteGroup();
+         // Replace any previous group with the identity group.
+         group.clear();
       } else {
          bool foundFile = false;
          // Search first in this directory, for a regular file with 
