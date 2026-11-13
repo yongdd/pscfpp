@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+import argparse
+
+
+import math
+
+
+from pathlib import Path
+
+
+import re
+
+
+import shutil
+
+
+import subprocess
+
+
+import tempfile
+
+
+SOURCE = Path(__file__).resolve().parents[5]
+
+
+def execute(root, name, program, param, files, command):
+    work = root / name
+    work.mkdir()
+    (work / 'param').write_text(param)
+    (work / 'command').write_text(command)
+    for filename, contents in files.items():
+        (work / filename).write_text(contents)
+    exe = shutil.which('pscf_' + program)
+    if exe is None:
+        exe = str(SOURCE / 'bin' / ('pscf_' + program))
+    args = [exe] + ([] if program == '1d' else ['-d', '1'])
+    args += ['-p', 'param', '-c', 'command']
+    result = subprocess.run(args, cwd=work, capture_output=True, text=True,
+                            timeout=60)
+    log = result.stdout + result.stderr
+    (work / 'log').write_text(log)
+    return work, result.returncode, log
+
+
+def basis(shift, amplitude, second_shift=None):
+    if second_shift is None:
+        second_shift = shift
+    return '''format 1 0
+dim
+1
+crystal_system
+lamellar
+N_cell_param
+1
+cell_param
+1
+group_name
+P_-1
+N_monomer
+2
+N_basis
+5
+%.17g %.17g 0 1
+%.17g %.17g 1 2
+0 0 2 2
+0 0 3 2
+0 0 4 1
+''' % (shift, second_shift, amplitude, -amplitude)
+
+
+def grid_values(path):
+    lines = path.read_text().splitlines()
+    begin = next(i for i, line in enumerate(lines) if line.strip() == 'mesh') + 2
+    return [[float(v) for v in line.split()] for line in lines[begin:]
+            if line.strip()]
+
+
+def blend(iterator, h, ensemble='closed', max_itr=1):
+    species = []
+    for i in range(2):
+        opened = ensemble == 'open' or (ensemble == 'mixed' and i == 1)
+        constraint = 'mu %.17g' % (math.log(.5) + h + .5) if opened else 'phi .5'
+        species.append('Polymer{ type linear nBlock 1 blocks[ %d 1 ] %s }' %
+                       (i, constraint))
+    return ('''System{
+Mixture{ nMonomer 2 monomers[ 1 1 ] nPolymer 2
+''' + '\n'.join(species) + ''' ds .05 }
+Interaction{ chi( 0 1 1 ) }
+Domain{ mesh 8 lattice lamellar groupName P_-1 }
+%s{ epsilon 1e-8 maxItr %d maxHist 5 verbose 3 isFlexible 0 }
+}
+''' % (iterator, max_itr))
+
+
+def canonical_external_gauge(root, program):
+    for iterator in ['AmIteratorBasis', 'AmIteratorGrid']:
+        unshifted = None
+        for h, w in [(0., 0.), (1e9, 0.), (1e9, 1e9), (0., 1e9)]:
+            name = '%s_%s_external_%g_w_%g' % (program, iterator, h, w)
+            work, rc, log = execute(
+                root, name, program, blend(iterator, h),
+                {'w': basis(w, .4), 'h': basis(h, 0.)},
+                'READ_W_BASIS w\nREAD_H_BASIS h\nCOMPUTE\n'
+                'WRITE_C_RGRID initial_c\nITERATE\nFINISH\n')
+            assert rc == 1 and 'Converged' not in log, (name, rc, log[-1000:])
+            residual = float(re.search(r'Max Residual\s*=\s*(\S+)', log)[1])
+            relative = float(re.search(r'Relative Norm\s*=\s*(\S+)', log)[1])
+            assert residual > .3 and relative > .1, (name, residual, relative)
+            c = grid_values(work / 'initial_c')
+            assert max(abs(sum(row)-1) for row in c) > .004, name
+            if h == 0 and w == 0:
+                unshifted = c
+            if h == 1e9 and w == 0:
+                assert c == unshifted, (name, 'identical MDE input must give identical c')
+
+        # The new reference gauge must not prevent an actual solution, nor
+        # remove the external mean from the physical fields produced by update.
+        for second_h in [2., -1.]:
+            name = '%s_%s_external_full_solve_%g' % (program, iterator, second_h)
+            work, rc, log = execute(
+                root, name, program, blend(iterator, 2., max_itr=100),
+                {'w': basis(0., .4), 'h': basis(2., 0., second_h)},
+                'READ_W_BASIS w\nREAD_H_BASIS h\nITERATE\n'
+                'WRITE_W_RGRID final_w\nWRITE_C_RGRID final_c\nFINISH\n')
+            assert rc == 0 and 'Converged' in log, (name, rc, log[-1000:])
+            concentration = grid_values(work/'final_c')
+            fields = grid_values(work/'final_w')
+            assert max(abs(v-.5) for row in concentration for v in row) < 1e-8
+            expected = [2.5, second_h+.5]
+            # update() fixes the field means. A small SCFT residual need not
+            # bound a common high-frequency pressure field by the same number.
+            # Independently eliminate that pressure from the two SCFT equations.
+            means = [sum(row[i] for row in fields)/len(fields) for i in range(2)]
+            assert max(abs(means[i]-expected[i]) for i in range(2)) < 1e-12
+            assert max(abs((w[0]-w[1])-(2.-second_h)-(c[1]-c[0]))
+                       for w, c in zip(fields, concentration)) < 1e-7
+
+        for ensemble in ['closed', 'mixed', 'open']:
+            # Moderate h in open ensembles avoids changing chemical potentials
+            # by an amount whose floating-point spacing exceeds the tolerance.
+            h = 1e9 if ensemble == 'closed' else 2.
+            name = '%s_%s_external_homogeneous_%s' % (program, iterator, ensemble)
+            _, rc, log = execute(
+                root, name, program, blend(iterator, h, ensemble),
+                {'w': basis(h+.5, 0.), 'h': basis(h, 0.)},
+                'READ_W_BASIS w\nREAD_H_BASIS h\nITERATE\nFINISH\n')
+            assert rc == 0 and 'Converged' in log, (name, rc, log[-1000:])
+    print(program + ': external-offset rejection, full solves and ensemble controls passed')
+
+
+def run(root, programs):
+    root.mkdir(parents=True, exist_ok=True)
+    for program in programs:
+        canonical_external_gauge(root, program)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--program', action='append', choices=['rpc', 'rpg'])
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    programs = args.program or [['rpc', 'rpg'][0]]
+    if args.output:
+        run(args.output.resolve(), programs)
+    else:
+        with tempfile.TemporaryDirectory(prefix='canonicalexternalgaugetest-') as directory:
+            run(Path(directory), programs)
