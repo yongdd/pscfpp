@@ -409,27 +409,26 @@ class FileEditor:
          print('FileEditor is not ready')
          return
  
-      oldfile = open(filename, 'r')
-      lines   = oldfile.readlines()
-      n       = len(lines)
-      oldfile.close()
-   
-      if (not self.isTest): 
-         newfile = open (filename, 'w')
+      # Finish every substitution before opening the source for writing.
+      # Invalid patterns or replacement groups must leave the input intact.
+      pattern = re.compile(self.old)
+      with open(filename, 'r') as oldfile:
+         lines = oldfile.readlines()
+      edited = []
       found = False
       for line in lines:
-         if (self.filter.search(line)):
-            if (not found):
+         if self.filter.search(line):
+            if not found:
                print(filename)
                found = True
             print(line)
-            line = re.sub(self.old, self.new, line);
+            line = pattern.sub(self.new, line)
             print(line)
-         if (not self.isTest):
-            newfile.write(line)
-      if (not self.isTest): 
-         newfile.close()
-  
+         edited.append(line)
+      if not self.isTest:
+         with open(filename, 'w') as newfile:
+            newfile.writelines(edited)
+
    ##
    # Edit a single file - edits may span several lines.
    # 
@@ -441,35 +440,35 @@ class FileEditor:
          print('FileEditor is not ready')
          return
 
-      oldfile = open(filename, 'r')
-      lines   = oldfile.readlines()
-      n       = len(lines)
-      oldfile.close()
-   
-      if (not self.isTest): 
-         newfile = open (filename, 'w')
+      if not isinstance(self.blockSize, int) or self.blockSize <= 0:
+         raise ValueError('blockSize must be a positive integer')
+      pattern = re.compile(self.old)
+      with open(filename, 'r') as oldfile:
+         lines = oldfile.readlines()
 
       found = False
-      for i in range(n + 1 - self.blockSize):
+      i = 0
+      while i + self.blockSize <= len(lines):
          block = ''.join(lines[i:i + self.blockSize])
-         if (self.filter.search(block)):
-            if (not found):
+         if self.filter.search(block):
+            if not found:
                print(filename)
                found = True
             print(block)
-            block = re.sub(self.old, self.new, block)
+            block = pattern.sub(self.new, block)
             print(block)
-            if (block[-1] == '\n'):
-               block = block[0:-1]
-            list  = block.split('\n')
-            for j in range(len(list)):
-               list[j] = list[j] + '\n'
-            lines[i:i+self.blockSize] = list
-      if (not self.isTest):
-         for line in lines:
-            newfile.write(line)
-         newfile.close()
-  
+            replacement = block.splitlines(keepends=True)
+            lines[i:i + self.blockSize] = replacement
+            # Keep sliding across equal-size blocks. After a deletion, do
+            # not skip the next original line; do not re-edit inserted lines.
+            i += max(0, len(replacement) - self.blockSize + 1)
+         else:
+            i += 1
+      # Empty replacements and all later substitutions are now validated.
+      if not self.isTest:
+         with open(filename, 'w') as newfile:
+            newfile.writelines(lines)
+
    ##
    # Edit all files in specified directory that matches a pattern.
    #

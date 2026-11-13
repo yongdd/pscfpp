@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Regex edits preserve complete files, including empty block replacements."""
+import contextlib
+import io
+from pathlib import Path
+import re
+import tempfile
+import unittest
+from pscfpp.command import Script
+from pscfpp.text import FileEditor
+
+
+class FileEditorTransactionTest(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='file-editor-')
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name) / 'commands'
+
+    def edit(self, text, old, new, blocks=True, size=1, dry=False):
+        self.path.write_text(text)
+        editor = FileEditor()
+        editor.setFilter('WRITE_W_RGRID')
+        editor.setOld(old)
+        editor.setNew(new)
+        editor.setBlockSize(size)
+        editor.setIsTest(dry)
+        with contextlib.redirect_stdout(io.StringIO()):
+            if blocks:
+                editor.editFileBlocks(str(self.path))
+            else:
+                editor.editFile(str(self.path))
+        return self.path.read_text()
+
+    def test_delete_whole_command(self):
+        text = 'READ_W_RGRID w\nWRITE_W_RGRID remove_me\nFINISH\n'
+        for blocks in (False, True):
+            with self.subTest(blocks=blocks):
+                self.assertEqual(self.edit(text, r'^WRITE_W_RGRID[^\n]*\n$', '', blocks),
+                                 'READ_W_RGRID w\nFINISH\n')
+                commands = Script(str(self.path))
+                self.assertEqual(len(commands), 2)
+                self.assertEqual(commands[1].label, 'FINISH')
+
+    def test_adjacent_deletions_and_insertions(self):
+        text = 'WRITE_W_RGRID a\nWRITE_W_RGRID b\nFINISH\n'
+        self.assertEqual(self.edit(text, r'^WRITE_W_RGRID[^\n]*\n$', ''), 'FINISH\n')
+        self.assertEqual(self.edit(text, r'^WRITE_W_RGRID[^\n]*\n$',
+                                   'WRITE_W_RGRID new\nWRITE_W_RGRID copy\n'),
+                         ('WRITE_W_RGRID new\nWRITE_W_RGRID copy\n' * 2) + 'FINISH\n')
+
+    def test_multiline_deletion_and_short_tail(self):
+        text = 'READ_W_RGRID w\nWRITE_W_RGRID old\n# delete this too\nFINISH\n'
+        self.assertEqual(self.edit(text, r'WRITE_W_RGRID old\n# delete this too\n',
+                                   '', size=2), 'READ_W_RGRID w\nFINISH\n')
+        self.assertEqual(self.edit('FINISH\n', 'old', 'new', size=2), 'FINISH\n')
+
+    def test_failed_substitution_preserves_source(self):
+        text = 'READ_W_RGRID w\nWRITE_W_RGRID old\nFINISH\n'
+        for blocks in (False, True):
+            for old, new in [('[', 'new'), ('old', r'\g<missing>')]:
+                with self.subTest(blocks=blocks, old=old):
+                    with self.assertRaises((re.error, IndexError)):
+                        self.edit(text, old, new, blocks)
+                    self.assertEqual(self.path.read_text(), text)
+
+    def test_dry_run_and_ordinary_replacement(self):
+        text = 'READ_W_RGRID w\nWRITE_W_RGRID old\nFINISH\n'
+        for blocks in (False, True):
+            self.assertEqual(self.edit(text, 'old', 'new', blocks), text.replace('old', 'new'))
+            self.assertEqual(self.edit(text, r'^WRITE_W_RGRID[^\n]*\n$', '', blocks,
+                                       dry=True), text)
+
+    def test_empty_file_and_unterminated_line(self):
+        for blocks in (False, True):
+            self.assertEqual(self.edit('', 'old', 'new', blocks), '')
+            self.assertEqual(self.edit('WRITE_W_RGRID old', 'old', 'new', blocks),
+                             'WRITE_W_RGRID new')
+
+    def test_invalid_block_size_preserves_source(self):
+        for size in (0, -1, 1.5):
+            with self.assertRaises(ValueError):
+                self.edit('WRITE_W_RGRID old\n', 'old', 'new', size=size)
+            self.assertEqual(self.path.read_text(), 'WRITE_W_RGRID old\n')
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
