@@ -168,6 +168,12 @@ namespace Pscf {
       double dk[6];
       IntVec<D> image;
 
+      // Wavevectors with tied minimum images (see tiedRanks_)
+      bool const variableAngle = hasVariableAngle<D>(unitCell().lattice());
+      tiedRanks_.clear();
+      tiedImages_.clear();
+      FSArray<IntVec<D>, 16> tied;
+
       MeshIterator<D> kItr(kMeshDimensions_);
       int rank;
       for (kItr.begin(); !kItr.atEnd(); ++kItr) {
@@ -186,6 +192,16 @@ namespace Pscf {
          }
          minImages_[rank] = shiftToMinimum(v, d, unitCell());
          kSq_[rank] = unitCell().ksq(minImages_[rank]);
+
+         // Record tied minimum images (variable angles only: for other
+         // lattice systems, tied images have equal dKSq)
+         if (variableAngle) {
+            tiedMinimumImages(minImages_[rank], d, unitCell(), tied);
+            if (tied.size() > 1) {
+               tiedRanks_.push_back(rank);
+               tiedImages_.push_back(tied);
+            }
+         }
       }
 
       hasMinImages_ = true;
@@ -259,6 +275,22 @@ namespace Pscf {
                   dksq[rank] *= 2.0;
                }
             }
+         }
+      }
+
+      // Wavevectors with tied minimum images: average over these images
+      int nTiedWaves = tiedRanks_.size();
+      for (int t = 0; t < nTiedWaves; ++t) {
+         rank = tiedRanks_[t];
+         FSArray<IntVec<D>, 16> const & tied = tiedImages_[t];
+         for (i = 0; i < nParam; ++i) {
+            double value = tiedImageDKSq(tied, unitCell(), i);
+            if (isRealField_) {
+               if (implicitInverse_[rank]) {
+                  value *= 2.0;
+               }
+            }
+            dKSq_[i][rank] = value;
          }
       }
 

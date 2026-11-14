@@ -572,10 +572,40 @@ namespace Pscf {
       }
 
       /*
+      * Derivative of |k|^2 of the image img with respect to parameter
+      * param (dkkBasis as in _computedKSq), in floating point, because
+      * the product of two wave indices can overflow int.
+      */
+      template <int D>
+      __device__ cudaReal _dKSqImage(int const * img,
+                                     cudaReal const * dkkBasis,
+                                     int const param)
+      {
+         cudaReal value = 0.0;
+         for (int j = 0; j < D; ++j) {
+            for (int k = 0; k < D; ++k) {
+               value += cudaReal(img[j]) * cudaReal(img[k])
+                        * dkkBasis[k + (j * D) + (param * D * D)];
+            }
+         }
+         return value;
+      }
+
+      /*
       * Compute the dKSq array on the GPU.
       *
       * The implicitInverse array is only used if isRealField is true.
       * If isRealField is false, implicitInverse may be a null pointer.
+      * If averageTies is true, dKSq of a wavevector whose minimum image
+      * is tied with other images, within the relative tolerance 
+      * tieTolerance, is the average over these images, unless their 
+      * derivatives agree within this tolerance (see tiedMinimumImages
+      * and tiedImageDKSq in shiftToMinimum.h): they are found from the
+      * stored image by steps of the Voronoi-relevant vectors in shifts,
+      * using kBasis.
+      *
+      * When launched, this kernel requires dynamic memory allocation of
+      * sizeof(cudaReal) * (nParams + 1) * D * D.
       */
       template <int D> __global__ 
       void _computedKSq(cudaReal* dKSq, 
@@ -584,57 +614,100 @@ namespace Pscf {
                         bool const * implicitInverse,
                         int const nParams, 
                         int const kSize,
-                        bool isRealField)
+                        bool isRealField,
+                        cudaReal const * kBasis,
+                        ImageShifts const shifts,
+                        bool const averageTies,
+                        cudaReal const tieTolerance)
       {
-         // Size of dKSq is kSize * nParams
-         // Each thread does nParams calculations
          int nThreads = blockDim.x * gridDim.x;
          int startID = blockIdx.x * blockDim.x + threadIdx.x;
 
-         // Load dkkBasis into shared memory for fast access
+         // Load dkkBasis and kBasis into shared memory for fast access
          // (max size of dkkBasis is 54 elements for triclinic unit cell)
          extern __shared__ cudaReal dkkBasis_[];
+         cudaReal* kBasis_ = &dkkBasis_[nParams * D * D];
          if (threadIdx.x < nParams * D * D) {
             dkkBasis_[threadIdx.x] = dkkBasis[threadIdx.x];
          }
+         if (threadIdx.x < D * D) {
+            kBasis_[threadIdx.x] = kBasis[threadIdx.x];
+         }
          __syncthreads(); // wait for all threads to finish
 
-         // Variables to be used in the loop
-         int param, i, j, k, waveBz_[D];
-         cudaReal dKSqVal;
+         // Tied images (image t has components tied[D*t], ...)
+         const int maxTied = 16;
+         int tied[maxTied * D];
+         int u[D];
 
          // Loop through array
-         for (param = 0; param < nParams; ++param) {
-            for (i = startID; i < kSize; i += nThreads) {
+         for (int i = startID; i < kSize; i += nThreads) {
 
-               // initialize to 0
-               dKSqVal = 0.0;
+            // Load waveBz to local memory
+            for (int j = 0; j < D; ++j) {
+               tied[j] = waveBz[i + (j * kSize)];
+            }
 
-               // Load waveBz to local memory
-               for (j = 0; j < D; ++j) {
-                  waveBz_[j] = waveBz[i + (j * kSize)];
+            // Find tied images, as tiedMinimumImages
+            int nTied = 1;
+            if (averageTies) {
+               cudaReal g0 = _kSqImage<D>(tied, kBasis_);
+               for (int t = 0; t < nTied; ++t) {
+                  for (int s = 0; s < shifts.n; ++s) {
+                     for (int j = 0; j < D; ++j) {
+                        u[j] = tied[D*t + j] + shifts.v[D*s + j];
+                     }
+                     cudaReal g = _kSqImage<D>(u, kBasis_);
+                     cudaReal tol = tieTolerance * (g > g0 ? g : g0);
+                     if (fabs(g - g0) > tol) continue;
+                     bool found = false;
+                     for (int m = 0; m < nTied; ++m) {
+                        bool same = true;
+                        for (int j = 0; j < D; ++j) {
+                           if (tied[D*m + j] != u[j]) same = false;
+                        }
+                        if (same) found = true;
+                     }
+                     if (!found && nTied < maxTied) {
+                        for (int j = 0; j < D; ++j) {
+                           tied[D*nTied + j] = u[j];
+                        }
+                        ++nTied;
+                     }
+                  }
                }
+            }
 
-               // Compute dKSq (in floating point, because the product
-               // of two wave indices can overflow int)
-               for (j = 0; j < D; ++j) {
-                  for (k = 0; k < D; ++k) {
-                     dKSqVal += cudaReal(waveBz_[j]) * cudaReal(waveBz_[k])
-                                * dkkBasis_[k + (j * D) + (param * D * D)];
-                  } // D
-               } // D
-
+            for (int param = 0; param < nParams; ++param) {
+               cudaReal dKSqVal = _dKSqImage<D>(tied, dkkBasis_, param);
+               if (nTied > 1) {
+                  // Average, unless all derivatives agree (as in 
+                  // tiedImageDKSq in shiftToMinimum.cpp)
+                  cudaReal sum = dKSqVal;
+                  cudaReal maxDiff = 0.0;
+                  cudaReal scale = fabs(dKSqVal);
+                  for (int t = 1; t < nTied; ++t) {
+                     cudaReal value 
+                             = _dKSqImage<D>(&tied[D*t], dkkBasis_, param);
+                     sum += value;
+                     cudaReal diff = fabs(value - dKSqVal);
+                     if (diff > maxDiff) maxDiff = diff;
+                     if (fabs(value) > scale) scale = fabs(value);
+                  }
+                  if (maxDiff > tieTolerance*scale) {
+                     dKSqVal = sum/cudaReal(nTied);
+                  }
+               }
                if (isRealField) {
                   if (implicitInverse[i]) {
                      // if element i's inverse is implicit
                      dKSqVal *= 2;
                   }
                }
-
                dKSq[(param * kSize) + i] = dKSqVal;
+            } // nParams
 
-            } // kSize
-         } // nParams
+         } // kSize
       }
 
    } // anonymous namespace Pscf::Prdc::(unnamed)
@@ -1080,12 +1153,42 @@ namespace Pscf {
          implicitInversePtr = implicitInverse_d_.cArray();
       }
 
+      // Data to average dKSq over tied minimum images (variable angles
+      // only: for other lattice systems, tied images have equal dKSq)
+      bool averageTies = hasVariableAngle<D>(unitCell().lattice());
+      HostSendArray<cudaReal,CUT> kBasis_h(D*D);
+      BackendArray<cudaReal,CUT> kBasis(D*D);
+      for (int j = 0; j < D; ++j) {
+         for (int k = 0; k < D; ++k) {
+            kBasis_h[D*j + k] = unitCell().kBasis(j)[k];
+         }
+      }
+      kBasis = kBasis_h;
+      ImageShifts shifts;
+      shifts.n = 0;
+      if (averageTies) {
+         FSArray<IntVec<D>, 14> neighbors;
+         imageShiftNeighbors<D>(mesh().dimensions(), unitCell(), neighbors);
+         shifts.n = neighbors.size();
+         for (int j = 0; j < neighbors.size(); ++j) {
+            for (int i = 0; i < D; ++i) {
+               shifts.v[D*j + i] = neighbors[j][i];
+            }
+         }
+      }
+      #ifdef SINGLE_PRECISION
+      cudaReal tieTolerance = 1.0E-4;
+      #else
+      cudaReal tieTolerance = TiedImageTolerance;
+      #endif
+
       // Launch kernel to calculate dKSq on device
-      size_t sz = sizeof(cudaReal)*dkkBasis.capacity();
+      size_t sz = sizeof(cudaReal)*(dkkBasis.capacity() + D*D);
       _computedKSq<D><<<nBlocks, nThreads, sz>>>
          (dKSq_.cArray(), minImages_.cArray(), dkkBasis.cArray(),
           implicitInversePtr, unitCell().nParameter(), kSize_,
-          isRealField_);
+          isRealField_, kBasis.cArray(), shifts, averageTies, 
+          tieTolerance);
       cudaErrorCheck( cudaGetLastError() );
 
       // Wavevectors with a Nyquist index whose kSq is given by 

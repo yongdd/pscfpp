@@ -78,6 +78,12 @@ namespace Pscf {
    * with 3- or 6-fold rotations in a hexagonal setting (see 
    * allowNyquistAverage).
    *
+   * Tied images: for a lattice system with a variable angle, dKSq of a
+   * wavevector whose minimum image is tied with other images is the
+   * average of the derivatives of |k|^2 of these images, as in the CPU
+   * class (see tiedMinimumImages); the GPU kernel finds them by steps
+   * of the Voronoi-relevant vectors of the lattice of image shifts.
+   *
    * \ingroup Pscf_Field_Cuda_Module
    */
    template <int D>

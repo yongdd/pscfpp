@@ -52,6 +52,7 @@ namespace Pscf {
          IntVec<D> d;
          double kBasis[D][D];
          FSArray<IntVec<D>, 14> neighbors;
+         double minNormSq; // smallest |k|^2 of the neighbors
          bool isValid;
 
          NeighborCache()
@@ -60,8 +61,8 @@ namespace Pscf {
       };
 
       template <int D>
-      FSArray<IntVec<D>, 14> const &
-      cachedNeighbors(IntVec<D> const & d, UnitCell<D> const & cell)
+      NeighborCache<D> const &
+      neighborCache(IntVec<D> const & d, UnitCell<D> const & cell)
       {
          thread_local NeighborCache<D> cache;
          bool same = cache.isValid && (cache.d == d);
@@ -72,6 +73,11 @@ namespace Pscf {
          }
          if (!same) {
             imageShiftNeighbors<D>(d, cell, cache.neighbors);
+            cache.minNormSq = cell.ksq(cache.neighbors[0]);
+            for (int j = 1; j < cache.neighbors.size(); ++j) {
+               double g = cell.ksq(cache.neighbors[j]);
+               if (g < cache.minNormSq) cache.minNormSq = g;
+            }
             cache.d = d;
             for (int i = 0; i < D; ++i) {
                for (int j = 0; j < D; ++j) {
@@ -80,8 +86,13 @@ namespace Pscf {
             }
             cache.isValid = true;
          }
-         return cache.neighbors;
+         return cache;
       }
+
+      template <int D>
+      FSArray<IntVec<D>, 14> const &
+      cachedNeighbors(IntVec<D> const & d, UnitCell<D> const & cell)
+      {  return neighborCache<D>(d, cell).neighbors; }
 
       /*
       * Move image r to a minimum image.
@@ -403,6 +414,53 @@ namespace Pscf {
    namespace {
 
       /*
+      * Images tied with r (r first), reached from r by steps of the
+      * vectors nb through images with |k|^2 equal to that of r within
+      * the relative tolerance TiedImageTolerance (see tiedMinimumImages).
+      */
+      template <int D>
+      void collectTies(IntVec<D> const & r,
+                       FSArray<IntVec<D>, 14> const & nb,
+                       UnitCell<D> const & cell,
+                       FSArray<IntVec<D>, 16>& tied)
+      {
+         tied.clear();
+         tied.append(r);
+         double g0 = cell.ksq(r);
+         IntVec<D> u;
+         for (int t = 0; t < tied.size(); ++t) {
+            for (int j = 0; j < nb.size(); ++j) {
+               u.add(tied[t], nb[j]);
+               double g = cell.ksq(u);
+               if (std::abs(g - g0) > TiedImageTolerance*std::max(g, g0)) {
+                  continue;
+               }
+               bool found = false;
+               for (int m = 0; m < tied.size(); ++m) {
+                  if (tied[m] == u) found = true;
+               }
+               if (!found) {
+                  UTIL_CHECK(tied.size() < tied.capacity());
+                  tied.append(u);
+               }
+            }
+         }
+      }
+
+      /*
+      * Derivatives of |k|^2 with respect to all unit cell parameters,
+      * averaged over the tied images (see tiedImageDKSq).
+      */
+      template <int D>
+      void averageDKSq(FSArray<IntVec<D>, 16> const & tied,
+                       UnitCell<D> const & cell, double* dksq)
+      {
+         for (int n = 0; n < cell.nParameter(); ++n) {
+            dksq[n] = tiedImageDKSq<D>(tied, cell, n);
+         }
+      }
+
+      /*
       * Smooth step of the weight of the Nyquist sign average, as a
       * function of an absolute cosine t (see nyquistDecouplingWeight):
       * 1 for t <= NyquistAverageCosineMin, 0 for t >= 
@@ -492,7 +550,8 @@ namespace Pscf {
       * directions of the block (bit i of block set for direction i),
       * over the shifts of these directions; the other components of r
       * are zero. Returns this minimum, and sets dksq[n] to its 
-      * derivatives if dksq is not null.
+      * derivatives if dksq is not null, averaged over tied images (see
+      * tiedImageDKSq).
       */
       template <int D>
       double blockMinimum(IntVec<D> const & u, IntVec<D> const & d,
@@ -500,6 +559,7 @@ namespace Pscf {
                           IntVec<D>& r, double* dksq)
       {
          int nB = 0;
+         FSArray<IntVec<D>, 16> tied;
          r = u;
          for (int i = 0; i < D; ++i) {
             if (block & (1 << i)) {
@@ -513,6 +573,9 @@ namespace Pscf {
             // the lattice of image shifts from the reduced components,
             // which reaches the (largest) minimum image (see descendWith)
             descendToMinimum<D>(r, d, cell, 1.0E-12);
+            if (dksq) {
+               collectTies<D>(r, cachedNeighbors<D>(d, cell), cell, tied);
+            }
          } else if (nB == 2) {
             // D = 3: minimum in the plane of the two directions j, k
             int i = -1;
@@ -529,12 +592,17 @@ namespace Pscf {
             }
             UTIL_CHECK(i >= 0 && j >= 0 && k >= 0);
             planeMinimum<D>(r, d, i, j, k, cell, 1.0E-12);
-         } 
-         // (With one direction, the reduced component is the minimum.)
-         if (dksq) {
-            for (int n = 0; n < cell.nParameter(); ++n) {
-               dksq[n] = cell.dksq(r, n);
+            if (dksq) {
+               collectTies<D>(r, cachedPlaneNeighbors<D>(d, i, j, k, cell),
+                              cell, tied);
             }
+         } else if (dksq) {
+            // One direction: the reduced component is the minimum
+            tied.clear();
+            tied.append(r);
+         }
+         if (dksq) {
+            averageDKSq<D>(tied, cell, dksq);
          }
          return cell.ksq(r);
       }
@@ -768,9 +836,9 @@ namespace Pscf {
       UTIL_CHECK(dksq);
       if (!hasNyquistIndex(v, d)) {
          IntVec<D> r = shiftToMinimum(v, d, cell);
-         for (int n = 0; n < cell.nParameter(); ++n) {
-            dksq[n] = cell.dksq(r, n);
-         }
+         FSArray<IntVec<D>, 16> tied;
+         collectTies<D>(r, cachedNeighbors<D>(d, cell), cell, tied);
+         averageDKSq<D>(tied, cell, dksq);
          return cell.ksq(r);
       }
       return ksqNyquistImpl<D>(v, d, cell, dksq, nullptr);
@@ -814,6 +882,69 @@ namespace Pscf {
       ksqNyquistImpl<D>(v, d, cell, nullptr, &image);
       return image;
    }
+
+   /*
+   * Minimum images tied with the minimum image r.
+   */
+   template <int D>
+   void tiedMinimumImages(IntVec<D> const & r, IntVec<D> const & d,
+                          UnitCell<D> const & cell,
+                          FSArray<IntVec<D>, 16>& tied)
+   {
+      NeighborCache<D> const & cache = neighborCache<D>(d, cell);
+
+      // An image tied with r + w (w a nonzero lattice vector) has |k|^2
+      // of at least |w|^2/4: no search for images inside the sphere 
+      // inscribed in the Voronoi cell (most images)
+      double limit = (1.0 - 4.0*TiedImageTolerance)*cache.minNormSq;
+      if (4.0*cell.ksq(r) < limit) {
+         tied.clear();
+         tied.append(r);
+         return;
+      }
+      collectTies<D>(r, cache.neighbors, cell, tied);
+   }
+
+   /*
+   * Derivative of |k|^2 averaged over tied images.
+   */
+   template <int D>
+   double tiedImageDKSq(FSArray<IntVec<D>, 16> const & tied,
+                        UnitCell<D> const & cell, int n)
+   {
+      int nTied = tied.size();
+      UTIL_CHECK(nTied > 0);
+      double value0 = cell.dksq(tied[0], n);
+      if (nTied == 1) return value0;
+      double sum = value0;
+      double maxDiff = 0.0;
+      double scale = std::abs(value0);
+      for (int t = 1; t < nTied; ++t) {
+         double value = cell.dksq(tied[t], n);
+         sum += value;
+         maxDiff = std::max(maxDiff, std::abs(value - value0));
+         scale = std::max(scale, std::abs(value));
+      }
+      if (maxDiff <= TiedImageTolerance*scale) return value0;
+      return sum/double(nTied);
+   }
+
+   template void tiedMinimumImages<1>(IntVec<1> const &, IntVec<1> const &,
+                                      UnitCell<1> const &,
+                                      FSArray<IntVec<1>, 16>&);
+   template void tiedMinimumImages<2>(IntVec<2> const &, IntVec<2> const &,
+                                      UnitCell<2> const &,
+                                      FSArray<IntVec<2>, 16>&);
+   template void tiedMinimumImages<3>(IntVec<3> const &, IntVec<3> const &,
+                                      UnitCell<3> const &,
+                                      FSArray<IntVec<3>, 16>&);
+
+   template double tiedImageDKSq<1>(FSArray<IntVec<1>, 16> const &,
+                                    UnitCell<1> const &, int);
+   template double tiedImageDKSq<2>(FSArray<IntVec<2>, 16> const &,
+                                    UnitCell<2> const &, int);
+   template double tiedImageDKSq<3>(FSArray<IntVec<3>, 16> const &,
+                                    UnitCell<3> const &, int);
 
    template double nyquistDecouplingWeight<1>(int, int, 
                                               UnitCell<1> const &);

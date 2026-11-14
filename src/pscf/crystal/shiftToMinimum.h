@@ -203,7 +203,10 @@ namespace Pscf {
    * Square magnitude of a wavevector with Nyquist indices, derivatives.
    *
    * Returns ksqNyquist(v, d, cell), and sets dksq[n] to its derivative
-   * with respect to unit cell parameter n, for all parameters.
+   * with respect to unit cell parameter n, for all parameters. Where
+   * images in a minimization are tied (see tiedMinimumImages), the
+   * derivative of that minimum is averaged over the tied images (see
+   * tiedImageDKSq).
    *
    * \ingroup Pscf_Crystal_Module
    *
@@ -275,6 +278,66 @@ namespace Pscf {
    IntVec<D> shiftToMinimumNyquist(IntVec<D> const & v,
                                    IntVec<D> const & d,
                                    UnitCell<D> const & cell);
+
+   /**
+   * Relative tolerance for tied minimum images (see tiedMinimumImages).
+   *
+   * \ingroup Pscf_Crystal_Module
+   */
+   const double TiedImageTolerance = 1.0E-9;
+
+   /**
+   * Minimum images of a DFT wavevector that are tied with a given one.
+   *
+   * Where a minimum image lies on the boundary of the Voronoi cell of
+   * the lattice of image shifts, other images have the same |k|^2. In
+   * a cell with a variable angle this happens at particular values of
+   * the cell parameters (for instance on the edges of a hexagonal
+   * Voronoi cell at 120 degrees, for meshes of any size), and the
+   * minimum |k|^2 is not differentiable there: the tied images have
+   * different derivatives. The derivative used for such a wavevector
+   * is the average over the tied images, which treats them alike, so
+   * that a state with the symmetry of the cell has the symmetric stress.
+   *
+   * This function returns in tied the image r (first) and all images
+   * with |k|^2 equal to that of r within the relative tolerance
+   * TiedImageTolerance that are reached from r by steps of the
+   * Voronoi-relevant vectors of the lattice of image shifts (see
+   * imageShiftNeighbors) through such images.
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param r  a minimum image (e.g., from shiftToMinimum)
+   * \param d  dimensions of the discrete Fourier transform grid
+   * \param cell  UnitCell
+   * \param tied  output, the tied images (r first)
+   */
+   template <int D>
+   void tiedMinimumImages(IntVec<D> const & r, IntVec<D> const & d,
+                          UnitCell<D> const & cell,
+                          FSArray<IntVec<D>, 16>& tied);
+
+   /**
+   * Derivative of |k|^2 for a set of tied minimum images.
+   *
+   * Returns the derivative of |k|^2 with respect to unit cell parameter
+   * n averaged over the images in tied (see tiedMinimumImages), or the
+   * derivative of tied[0] if the derivatives of all images agree within
+   * the relative tolerance TiedImageTolerance (e.g., for the images k
+   * and -k of a wavevector equivalent to its inverse, or for images
+   * related by a symmetry that the cell keeps for all parameters), so 
+   * that the result differs from that of the image tied[0] only where 
+   * |k|^2 has a kink.
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param tied  tied images, from tiedMinimumImages
+   * \param cell  UnitCell
+   * \param n  index of the unit cell parameter
+   */
+   template <int D>
+   double tiedImageDKSq(FSArray<IntVec<D>, 16> const & tied,
+                        UnitCell<D> const & cell, int n);
 
    /**
    * Voronoi-relevant vectors of the lattice of image shifts.

@@ -12,6 +12,7 @@
 #include <pscf/field/cpp/RField.h>    // member
 #include <pscf/math/IntVec.h>         // member
 #include <util/containers/DArray.h>   // member
+#include <util/containers/FSArray.h>  // member
 #include <util/containers/GArray.h>   // member
 #include <util/containers/Pair.h>     // member
 
@@ -81,6 +82,14 @@ namespace Pscf {
    * image. The average is not used at all if it has been forbidden by
    * allowNyquistAverage(false), as is done for space groups with 3- or
    * 6-fold rotations in a hexagonal setting (see allowNyquistAverage).
+   *
+   * Tied images: for a lattice system with a variable angle, dKSq of a 
+   * wavevector whose minimum image is tied with other images (which 
+   * happens at particular cell parameters, e.g. at 120 degrees in a 
+   * rhombic cell, see tiedMinimumImages) is the average of the 
+   * derivatives of |k|^2 of these images (see tiedImageDKSq), so that
+   * a state with the symmetry of the cell has the symmetric stress 
+   * there. The minimum |k|^2 has a kink at such cell parameters.
    *
    * \ingroup Pscf_Field_Cpp_Module
    */
@@ -422,6 +431,23 @@ namespace Pscf {
       * number of cell parameters), computed with the minimum images.
       */
       std::vector<double> nyquistDKSq_;
+
+      /**
+      * Ranks of wavevectors with tied minimum images.
+      *
+      * Wavevectors whose kSq is the minimum-image |k|^2 and whose
+      * minimum image is tied with other images (see tiedMinimumImages),
+      * found by computeMinimumImages for lattice systems with a variable
+      * angle. Their dKSq is averaged over the tied images (see 
+      * tiedImageDKSq), listed in the corresponding element of 
+      * tiedImages_.
+      */
+      std::vector<int> tiedRanks_;
+
+      /**
+      * Tied minimum images of the wavevectors listed in tiedRanks_.
+      */
+      std::vector< FSArray<IntVec<D>, 16> > tiedImages_;
 
       /**
       * Array of square-magnitude values for wavevectors.
