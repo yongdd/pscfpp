@@ -84,6 +84,10 @@
 
 #include "FieldArchiveRoundTripTest.h"
 
+#ifdef PSCF_CPP
+#include "FftwComplexArrayCopyTest.h"
+#endif
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -143,6 +147,9 @@ TEST_COMPOSITE_ADD_UNIT(EdgeArchiveStateTest);
 TEST_COMPOSITE_ADD_UNIT(MonomerArchiveTest);
 TEST_COMPOSITE_ADD_UNIT(UnitCellArchiveStateTest);
 TEST_COMPOSITE_ADD_UNIT(FieldArchiveRoundTripTest);
+#ifdef PSCF_CPP
+TEST_COMPOSITE_ADD_UNIT(FftwComplexArrayCopyTest);
+#endif
 TEST_COMPOSITE_END
 
 #endif

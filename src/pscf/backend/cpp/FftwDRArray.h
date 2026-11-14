@@ -258,6 +258,9 @@ namespace Pscf {
 
    private:
 
+      /// Copy one value, including array-valued FFTW complex elements.
+      static void copyElement(Data& destination, Data const& source);
+
       /// Reference to a container that owns memory referenced by this.
       CountedReference ref_;
 

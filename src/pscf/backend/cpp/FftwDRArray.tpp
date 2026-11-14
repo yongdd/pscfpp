@@ -14,6 +14,21 @@
 
 namespace Pscf {
 
+   // Preserve ordinary value assignment for scalar and class types.
+   template <typename Data>
+   inline void FftwDRArray<Data>::copyElement(Data& destination,
+                                             Data const& source)
+   {  destination = source; }
+
+   // fftw_complex is double[2], which has no C++ array assignment operator.
+   template <>
+   inline void FftwDRArray<fftw_complex>::copyElement(
+      fftw_complex& destination, fftw_complex const& source)
+   {
+      destination[0] = source[0];
+      destination[1] = source[1];
+   }
+
    // Non-inline member function definitions
 
    /*
@@ -41,7 +56,7 @@ namespace Pscf {
       }
       allocate(other.capacity_);
       for (int i = 0; i < capacity_; ++i) {
-         data_[i] = other.data_[i];
+         copyElement(data_[i], other.data_[i]);
       }
    }
 
@@ -92,7 +107,7 @@ namespace Pscf {
       // Copy elements
       UTIL_CHECK(capacity_ == other.capacity_);
       for (int i = 0; i < capacity_; ++i) {
-         data_[i] = other[i];
+         copyElement(data_[i], other[i]);
       }
 
       return *this;
@@ -119,7 +134,7 @@ namespace Pscf {
       // Copy all elements
       UTIL_CHECK(capacity_ == other.capacity());
       for (int i = 0; i < capacity_; ++i) {
-         data_[i] = other[i];
+         copyElement(data_[i], other[i]);
       }
 
       return *this;
