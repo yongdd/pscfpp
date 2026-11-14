@@ -46,25 +46,69 @@ public:
       TEST_ASSERT(error != 0);
    }
 
-   void testNrNonfiniteFieldsAndRecovery()
+   /*
+   * Solve, and return the error code of the iterator, or -1 if the
+   * solve threw an Exception.
+   */
+   int trySolve(System& sys)
    {
-      printMethod(TEST_FUNC);
-      openLogFile("out/R1IteratorTestNonfinite.log");
+      try {
+         return sys.iterator().solve();
+      } catch (Exception const &) {
+         // The exception has written its message to the log file
+         return -1;
+      }
+   }
+
+   /*
+   * Check that the iterator of a parameter file reports a failed solve
+   * (error code 1, not an exception) for a field that is not finite at
+   * one grid point, and converges again from valid fields afterwards.
+   */
+   void checkNonfiniteFields(char const * paramFile, char const * logFile)
+   {
+      openLogFile(logFile);
       System sys;
-      readSystem(sys, "in/R1/planar_nr2.prm");
+      readSystem(sys, paramFile);
+      const int nx = sys.domain().nx();
       const double infinity = std::numeric_limits<double>::infinity();
       const double invalid[] = {infinity, -infinity,
                                std::numeric_limits<double>::quiet_NaN()};
+      // An interior point, and the canonical gauge reference (last
+      // element), which the iterators subtract from all fields
+      const int points[] = {nx/2, nx-1};
       for (double value : invalid) {
          for (int monomer = 0; monomer < 2; ++monomer) {
-            runCommands(sys, "READ_W in/R1/planar.w\nFINISH\n");
-            // Also exercise the canonical gauge reference (last element).
-            sys.wField(monomer)[sys.domain().nx()-1] = value;
-            TEST_ASSERT(sys.iterator().solve() != 0);
+            for (int point : points) {
+               runCommands(sys, "READ_W in/R1/planar.w\nFINISH\n");
+               sys.wField(monomer)[point] = value;
+               TEST_ASSERT(trySolve(sys) == 1);
+            }
          }
       }
       runCommands(sys, "READ_W in/R1/planar.w\nFINISH\n");
-      TEST_ASSERT(sys.iterator().solve() == 0);
+      TEST_ASSERT(trySolve(sys) == 0);
+   }
+
+   void testNrNonfiniteFieldsAndRecovery()
+   {
+      printMethod(TEST_FUNC);
+      checkNonfiniteFields("in/R1/planar_nr2.prm",
+                           "out/R1IteratorTestNonfinite.log");
+   }
+
+   void testAmNonfiniteFieldsAndRecovery()
+   {
+      printMethod(TEST_FUNC);
+      checkNonfiniteFields("in/R1/planar_am.prm",
+                           "out/R1IteratorTestAmNonfinite.log");
+   }
+
+   void testBinaryRelaxNonfiniteFieldsAndRecovery()
+   {
+      printMethod(TEST_FUNC);
+      checkNonfiniteFields("in/R1/planar_br.prm",
+                           "out/R1IteratorTestBinaryRelaxNonfinite.log");
    }
 
    /*
@@ -137,6 +181,8 @@ public:
 TEST_BEGIN(R1IteratorTest)
 TEST_ADD(R1IteratorTest, testNrNan)
 TEST_ADD(R1IteratorTest, testNrNonfiniteFieldsAndRecovery)
+TEST_ADD(R1IteratorTest, testAmNonfiniteFieldsAndRecovery)
+TEST_ADD(R1IteratorTest, testBinaryRelaxNonfiniteFieldsAndRecovery)
 TEST_ADD(R1IteratorTest, testBinaryRelaxDiagonalChi)
 TEST_ADD(R1IteratorTest, testBinaryRelaxLambda)
 TEST_END(R1IteratorTest)
