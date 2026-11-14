@@ -36,6 +36,7 @@
 #include "CoreNyquistWeightTest.h"
 #include "CoreTiedImageTest.h"
 #include "CoreTridiagonalPivotTest.h"
+#include "CoreMinimumImageTest.h"
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
@@ -132,6 +133,7 @@ TEST_COMPOSITE_ADD_UNIT(CoreNyquistPlaneCacheTest);
 TEST_COMPOSITE_ADD_UNIT(CoreNyquistWeightTest);
 TEST_COMPOSITE_ADD_UNIT(CoreTiedImageTest);
 TEST_COMPOSITE_ADD_UNIT(CoreTridiagonalPivotTest);
+TEST_COMPOSITE_ADD_UNIT(CoreMinimumImageTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
 TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);

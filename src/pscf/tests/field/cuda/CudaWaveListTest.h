@@ -15,7 +15,6 @@
 #include <pscf/mesh/MeshIterator.h>
 
 #include <util/math/Constants.h>
-#include <util/containers/FSArray.h>
 
 using namespace Util;
 using namespace Pscf;
@@ -200,77 +199,6 @@ public:
          TEST_ASSERT(vec[0] == minImages_h[iter.rank()]);
          TEST_ASSERT(vec[1] == minImages_h[iter.rank() + kSize3]);
          TEST_ASSERT(vec[2] == minImages_h[iter.rank() + kSize3 + kSize3]);
-         TEST_ASSERT(abs(ksq - ksq_h[iter.rank()]) < tolerance_);
-      }
-   }
-
-   /*
-   * Skewed cells with strongly anisotropic meshes, where the fixed
-   * image search windows alone miss minimum images: the device images
-   * must equal those of shiftToMinimum.
-   */
-   void testComputeMinimumImagesSkewed()
-   {
-      printMethod(TEST_FUNC);
-
-      double gammas[2] = {2.4, 2.8};
-      int meshes2[2][2] = {{4, 64}, {8, 64}};
-      for (int ig = 0; ig < 2; ++ig) {
-         FSArray<double, 6> parameters;
-         parameters.append(2.0);
-         parameters.append(2.0);
-         parameters.append(gammas[ig]);
-         UnitCell<2> cell;
-         cell.set(UnitCell<2>::Oblique, parameters);
-         for (int im = 0; im < 2; ++im) {
-            IntVec<2> d;
-            d[0] = meshes2[im][0];
-            d[1] = meshes2[im][1];
-            checkSkewed<2>(cell, d);
-         }
-      }
-
-      FSArray<double, 6> parameters;
-      parameters.append(2.0);
-      parameters.append(2.0);
-      parameters.append(2.0);
-      parameters.append(2.4);
-      UnitCell<3> cell;
-      cell.set(UnitCell<3>::Monoclinic, parameters);
-      IntVec<3> d;
-      d[0] = 4;
-      d[1] = 2;
-      d[2] = 32;
-      checkSkewed<3>(cell, d);
-   }
-
-   template <int D>
-   void checkSkewed(UnitCell<D> const & cell, IntVec<D> const & d)
-   {
-      Mesh<D> mesh(d);
-      IntVec<D> kDims = d;
-      kDims[D-1] = d[D-1]/2 + 1;
-      int kSize = 1;
-      for (int i = 0; i < D; ++i) kSize *= kDims[i];
-
-      WaveList<D,CUT> wavelist;
-      wavelist.allocate(mesh, cell);
-      HostRecvArray<int,CUT> minImages_h;
-      HostRecvArray<cudaReal,CUT> ksq_h;
-      wavelist.computeMinimumImages();
-      minImages_h = wavelist.minImages_d();
-      ksq_h = wavelist.kSq();
-
-      IntVec<D> temp, vec;
-      MeshIterator<D> iter;
-      iter.setDimensions(kDims);
-      for (iter.begin(); !iter.atEnd(); ++iter) {
-         temp = iter.position();
-         vec = shiftToMinimumNyquist(temp, d, cell);
-         for (int i = 0; i < D; ++i) {
-            TEST_ASSERT(vec[i] == minImages_h[iter.rank() + i*kSize]);
-         }
-         double ksq = ksqNyquist(vec, d, cell);
          TEST_ASSERT(abs(ksq - ksq_h[iter.rank()]) < tolerance_);
       }
    }
@@ -620,7 +548,6 @@ TEST_ADD(CudaWaveListTest, testAllocate)
 TEST_ADD(CudaWaveListTest, testComputeMinimumImages1D)
 TEST_ADD(CudaWaveListTest, testComputeMinimumImages2D)
 TEST_ADD(CudaWaveListTest, testComputeMinimumImages3D)
-TEST_ADD(CudaWaveListTest, testComputeMinimumImagesSkewed)
 TEST_ADD(CudaWaveListTest, testComputeKSq1D)
 TEST_ADD(CudaWaveListTest, testComputeKSq2D)
 TEST_ADD(CudaWaveListTest, testComputeKSq3D)

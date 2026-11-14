@@ -131,6 +131,46 @@ public:
    }
 
    /*
+   * Skewed cells with strongly anisotropic meshes, where the fixed
+   * image search windows alone miss minimum images: the device images
+   * and kSq must equal those of the host (checkMinimumImages).
+   */
+   void testComputeMinimumImagesSkewed()
+   {
+      printMethod(TEST_FUNC);
+
+      double gammas[2] = {2.4, 2.8};
+      int meshes2[2][2] = {{4, 64}, {8, 64}};
+      for (int ig = 0; ig < 2; ++ig) {
+         FSArray<double, 6> parameters;
+         parameters.append(2.0);
+         parameters.append(2.0);
+         parameters.append(gammas[ig]);
+         UnitCell<2> cell;
+         cell.set(UnitCell<2>::Oblique, parameters);
+         for (int im = 0; im < 2; ++im) {
+            IntVec<2> d;
+            d[0] = meshes2[im][0];
+            d[1] = meshes2[im][1];
+            checkMinimumImages<2>(cell, d);
+         }
+      }
+
+      FSArray<double, 6> parameters;
+      parameters.append(2.0);
+      parameters.append(2.0);
+      parameters.append(2.0);
+      parameters.append(2.4);
+      UnitCell<3> cell;
+      cell.set(UnitCell<3>::Monoclinic, parameters);
+      IntVec<3> d;
+      d[0] = 4;
+      d[1] = 2;
+      d[2] = 32;
+      checkMinimumImages<3>(cell, d);
+   }
+
+   /*
    * A 3D mesh with more than 2^24 wavevectors, for which the number
    * of threads used for the minimum images (128 per wavevector)
    * exceeds the range of int. Every wavevector must still get its
@@ -232,6 +272,7 @@ public:
 
 TEST_BEGIN(GpuWaveListTest)
 TEST_ADD(GpuWaveListTest, testComputeMinimumImages2DLattices)
+TEST_ADD(GpuWaveListTest, testComputeMinimumImagesSkewed)
 TEST_ADD(GpuWaveListTest, testComputeMinimumImagesLarge)
 TEST_END(GpuWaveListTest)
 
