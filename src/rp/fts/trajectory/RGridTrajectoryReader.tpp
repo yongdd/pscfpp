@@ -66,12 +66,22 @@ namespace Rp {
       // The -i input prefix applies to the trajectory file, as to other
       // input files. A name that already includes the prefix (as earlier
       // versions required) is still accepted: it is opened as given when
-      // no file exists at the prefixed path.
-      try {
-         system().fileMaster().openInputFile(filename, inputfile_);
-      } catch (Exception& e) {
+      // no file exists at the prefixed path. Both paths are opened as
+      // plain streams: a failed FileMaster open would write an error
+      // message to the log even when the second path is found.
+      std::string path = system().fileMaster().inputFilePath(filename);
+      inputfile_.open(path.c_str());
+      if (inputfile_.fail() && path != filename) {
          inputfile_.clear();
-         system().fileMaster().open(filename, inputfile_);
+         inputfile_.open(filename.c_str());
+      }
+      if (inputfile_.fail()) {
+         std::string message = "Error opening trajectory file. Filename: ";
+         message += path;
+         if (path != filename) {
+            message += " (or, as given, " + filename + ")";
+         }
+         UTIL_THROW(message.c_str());
       }
       allocate();
    }
