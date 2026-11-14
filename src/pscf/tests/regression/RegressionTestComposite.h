@@ -96,6 +96,8 @@
 #include "GpuNormalSliceTest.h"
 #endif
 
+#include "DecimalOutputModeTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -163,6 +165,7 @@ TEST_COMPOSITE_ADD_UNIT(SortEqualValueTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuNormalSliceTest);
 #endif
+TEST_COMPOSITE_ADD_UNIT(PscfDecimalOutputModeTest);
 TEST_COMPOSITE_END
 
 #endif
