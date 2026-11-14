@@ -55,7 +55,6 @@ namespace R1 {
       const double n = length();
       const int nb = nBlock();
       std::vector<double> shifts(nb), maxima(nb);
-      bool finiteFields = true;
       for (int j = 0; j < nb; ++j) {
          DArray<double> const & w = wFields[block(j).monomerId()];
          const int nx = w.capacity();
@@ -75,7 +74,15 @@ namespace R1 {
          }
          shifts[j] = wMin - std::log(block(j).domain().spatialAverage(wWork_))/n;
          maxima[j] = wMax;
-         if (!std::isfinite(shifts[j])) finiteFields = false;
+
+         // A field that is not finite gives a shift that is not finite
+         // (NaN or -inf at any point) or an infinite maximum (+inf).
+         // The tridiagonal solver rejects such coefficients, so report
+         // it as a NanException, which iterators treat as a failed solve.
+         if (!std::isfinite(shifts[j]) || !std::isfinite(wMax)) {
+            throw NanException(UTIL_FUNC, "Polymer field w is not finite",
+                               __FILE__, __LINE__);
+         }
          block(j).setupSolver(w, shifts[j]);
       }
 
@@ -115,7 +122,7 @@ namespace R1 {
       // until the spatial average of the tail is one. The polymer is then
       // solved with all shifts raised by a common, usually small,
       // constant so that qShifted() is one.
-      if (qShifted() < qMin && finiteFields) {
+      if (qShifted() < qMin) {
          const std::vector<double> documented(shifts);
          for (int i = 0; i < wWork_.capacity(); ++i) {
             wWork_[i] = 1.0;
@@ -164,12 +171,9 @@ namespace R1 {
       }
 
       // Reject results that are still not representable (a NanException,
-      // which iterators treat as a failed solve). Fields that are not
-      // finite give NaN values, as before, which the iterators report as
-      // a NaN error.
-      if (finiteFields
-          && (!(qShifted() >= qMin) || !std::isfinite(qShifted())
-              || !std::isfinite(lnQ()) || !std::isfinite(phi()))) {
+      // which iterators treat as a failed solve).
+      if (!(qShifted() >= qMin) || !std::isfinite(qShifted())
+          || !std::isfinite(lnQ()) || !std::isfinite(phi())) {
          throw NanException(UTIL_FUNC,
                "Polymer normalization exceeds floating-point range",
                __FILE__, __LINE__);
@@ -182,15 +186,13 @@ namespace R1 {
       prefactor = phi() / ( qShifted() * length() );
       for (int i = 0; i < nb; ++i) {
          block(i).computeConcentration(prefactor);
-         if (finiteFields) {
-            Block const & current = block(i);
-            DArray<double> const & c = current.cField();
-            for (int k = 0; k < c.capacity(); ++k) {
-               if (!std::isfinite(c[k])) {
-                  throw NanException(UTIL_FUNC,
-                        "Polymer concentration exceeds floating-point range",
-                        __FILE__, __LINE__);
-               }
+         Block const & current = block(i);
+         DArray<double> const & c = current.cField();
+         for (int k = 0; k < c.capacity(); ++k) {
+            if (!std::isfinite(c[k])) {
+               throw NanException(UTIL_FUNC,
+                     "Polymer concentration exceeds floating-point range",
+                     __FILE__, __LINE__);
             }
          }
       }

@@ -268,17 +268,6 @@ namespace R1
       int nx = domain().nx();         // number of grid points
       int nr = nm*nx;                 // number of residual elements
 
-      // Report invalid initial fields through the iterator failure status,
-      // before propagation can reject a non-finite linear system.
-      for (int i = 0; i < nm; ++i) {
-         for (int j = 0; j < nx; ++j) {
-            if (!std::isfinite(wFields()[i][j])) {
-               Log::file() << "Non-finite initial field" << std::endl;
-               return 1;
-            }
-         }
-      }
-
       // Determine if isCanonical (iff all species ensembles are closed)
       isCanonical_ = true;
       Ensemble ensemble;

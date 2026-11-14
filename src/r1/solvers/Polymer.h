@@ -94,10 +94,9 @@ namespace R1 {
       * exceed the field by more than 2/ds where the field is low, which
       * makes the Crank-Nicolson factor negative there; this only
       * happens for fields that vary by hundreds of kT per unit length
-      * on scales a chain cannot follow. A NanException is thrown if the
-      * partition function or the concentrations are still not
-      * representable, except for fields that are not finite (a shift
-      * that is not finite), which give NaN values as before.
+      * on scales a chain cannot follow. A NanException is thrown if a
+      * field of a block is not finite (NaN or inf), or if the partition
+      * function or the concentrations are still not representable.
       *
       * \param wFields  array of chemica potential fields.
       */
