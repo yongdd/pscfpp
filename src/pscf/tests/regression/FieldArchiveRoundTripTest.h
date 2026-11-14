@@ -4,6 +4,7 @@
 #include <test/UnitTestRunner.h>
 #include <pscf/field/RField.h>
 #include <pscf/field/RFieldDft.h>
+#include <pscf/field/CField.h>
 #include <pscf/backend/HostSendArray.h>
 #include <pscf/backend/HostRecvArray.h>
 #include <pscf/backend/complex.h>
@@ -87,6 +88,67 @@ public:
          TEST_ASSERT(dftTarget.dftDimensions() == IntVec<1>(3));
       }
    }
+
+   void testGpuComplexRoundTrip()
+   {
+      printMethod(TEST_FUNC);
+      for (bool text : {false, true}) {
+         for (bool reused : {false, true}) {
+            checkComplex<1>(reused, text);
+            checkComplex<2>(reused, text);
+            checkComplex<3>(reused, text);
+         }
+      }
+   }
+
+   void testGpuComplexEmptyAndInvalid()
+   {
+      printMethod(TEST_FUNC);
+      for (bool text : {false, true}) {
+         CField<2,CUT> source, target;
+         roundTrip(source, target, text);
+         TEST_ASSERT(!target.isAllocated());
+         TEST_ASSERT(target.meshDimensions() == IntVec<2>(0));
+      }
+
+      // Negative capacity, capacity of another size, zero dimension and
+      // dimensions that do not match the capacity: the load must throw
+      // before it changes the values or dimensions of the target.
+      openLogFile("out/FieldArchiveComplexInvalid.log");
+      for (int failure = 0; failure < 4; ++failure) {
+         for (bool allocated : {false, true}) {
+            if (failure == 1 && !allocated) continue;
+            CField<1,CUT> target;
+            if (allocated) {
+               target.allocate(IntVec<1>(4));
+               fillComplex(target);
+            }
+            MemoryOArchive out; out.allocate(1024);
+            int capacity = 4;
+            if (failure == 0) capacity = -1;
+            if (failure == 1) capacity = 5;
+            out & capacity;
+            if (failure >= 2) {
+               cudaReal value = -9.0;
+               for (int i = 0; i < 2*capacity; ++i) out & value;
+               IntVec<1> invalidDimensions(failure == 2 ? 0 : 3);
+               out & invalidDimensions;
+            }
+            MemoryIArchive in; in = out;
+            bool threw = false;
+            try {
+               in & target;
+            } catch (Exception&) { threw = true; }
+            in.release();
+            TEST_ASSERT(threw);
+            TEST_ASSERT(target.isAllocated() == allocated);
+            if (allocated) {
+               checkComplexValues(target);
+               TEST_ASSERT(target.meshDimensions() == IntVec<1>(4));
+            }
+         }
+      }
+   }
 #endif
 
 private:
@@ -145,6 +207,46 @@ private:
          TEST_ASSERT(imag(host[i]) == -.5 - .25*i);
       }
    }
+
+#ifdef PSCF_CUDA
+   template<int D> void fillComplex(CField<D,CUT>& field)
+   {
+      HostSendArray<cudaComplex,CUT> host; host.associate(field);
+      for (int i = 0; i < host.capacity(); ++i) {
+         assign(host[i], cudaReal(1.5 - .25*i), cudaReal(3.0 + .125*i));
+      }
+      field = host; host.dissociate();
+   }
+
+   template<int D> void checkComplexValues(CField<D,CUT> const& field)
+   {
+      HostRecvArray<cudaComplex,CUT> host(field);
+      for (int i = 0; i < host.capacity(); ++i) {
+         TEST_ASSERT(real(host[i]) == 1.5 - .25*i);
+         TEST_ASSERT(imag(host[i]) == 3.0 + .125*i);
+      }
+   }
+
+   template<int D> void checkComplex(bool reused, bool text)
+   {
+      // Same number of values, but different dimensions for D > 1
+      IntVec<D> dimensions(3), oldDimensions(3);
+      dimensions[D-1] = 6; oldDimensions[0] = 6;
+      CField<D,CUT> source, target; source.allocate(dimensions);
+      fillComplex(source);
+      if (reused) {
+         target.allocate(oldDimensions);
+         HostSendArray<cudaComplex,CUT> host; host.associate(target);
+         for (int i = 0; i < host.capacity(); ++i) {
+            assign(host[i], cudaReal(-99.0), cudaReal(99.0));
+         }
+         target = host; host.dissociate();
+      }
+      roundTrip(source, target, text);
+      TEST_ASSERT(target.meshDimensions() == dimensions);
+      checkComplexValues(target); checkComplexValues(source);
+   }
+#endif
 
    template<class Field> void roundTrip(Field& source, Field& target, bool text)
    {
@@ -217,6 +319,8 @@ TEST_ADD(FieldArchiveRoundTripTest, testGpuRealRoundTrip)
 TEST_ADD(FieldArchiveRoundTripTest, testGpuFourierRoundTrip)
 TEST_ADD(FieldArchiveRoundTripTest, testGpuEmptyRoundTrip)
 TEST_ADD(FieldArchiveRoundTripTest, testGpuInvalidMetadataPreservesFields)
+TEST_ADD(FieldArchiveRoundTripTest, testGpuComplexRoundTrip)
+TEST_ADD(FieldArchiveRoundTripTest, testGpuComplexEmptyAndInvalid)
 #endif
 TEST_END(FieldArchiveRoundTripTest)
 
