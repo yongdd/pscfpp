@@ -86,6 +86,7 @@
 #include "ScftFieldShiftTest.h"
 #include "ScftRangeFailureTest.h"
 #include "FtsRangeFailureTest.h"
+#include "ScftCanonicalRelNormTest.h"
 
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
@@ -152,6 +153,7 @@ TEST_COMPOSITE_ADD_UNIT(BeadFieldNormalizationTest);
 TEST_COMPOSITE_ADD_UNIT(ScftFieldShiftTest);
 TEST_COMPOSITE_ADD_UNIT(ScftRangeFailureTest);
 TEST_COMPOSITE_ADD_UNIT(FtsRangeFailureTest);
+TEST_COMPOSITE_ADD_UNIT(ScftCanonicalRelNormTest);
 TEST_COMPOSITE_END
 
 #endif
