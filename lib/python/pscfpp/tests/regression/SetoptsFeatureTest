@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Feature switches honor valid whitespace in generated build configuration.
+
+Only temporary copies of the real setopts script and configuration templates
+are edited. No compiler, GPU, or persistent configured build is required.
+"""
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[5]
+FEATURES = (('d', 'UTIL_DEBUG'), ('c', 'PSCF_CPP'), ('u', 'PSCF_CUDA'))
+TEMPLATES = ('make/config/main_config.1', 'make/compiler/linux-default',
+             'make/config/main_config.2')
+
+
+class SetoptsFeatureTest(unittest.TestCase):
+    def setUp(self):
+        for tool in ('bash', 'grep', 'sed', 'make'):
+            if shutil.which(tool) is None:
+                self.skipTest(tool + ' is required')
+        temporary = tempfile.TemporaryDirectory(prefix='setopts-features-')
+        self.addCleanup(temporary.cleanup)
+        self.folder = Path(temporary.name)
+        self.script = self.folder / 'setopts'
+        shutil.copy2(ROOT / 'src/setopts', self.script)
+        text = ''.join((ROOT / name).read_text() for name in TEMPLATES)
+        text = text.replace('=PWD', '=' + str(self.folder)).replace('=OWD', '=' + str(self.folder))
+        text += '\nUSER_MARKER = keep these spaces\n# unrelated comment\n'
+        self.config = self.folder / 'config.mk'
+        self.config.write_text(text)
+        (self.folder / 'probe.mk').write_text(
+            "include config.mk\n.PHONY: flags\nflags:\n"
+            "\t@printf '%s\\n' '$(CPPFLAGS)'\n")
+        self.env = os.environ.copy()
+        for name in ('MACRO', 'FILE', 'VALUE', 'OPTARG', 'OPTIND', 'HASCUDA',
+                     'MAKEFLAGS', 'MFLAGS', 'CPPFLAGS'):
+            self.env.pop(name, None)
+
+    def command(self, *args):
+        result = subprocess.run(['bash', str(self.script), *args], cwd=self.folder,
+                                env=self.env, text=True, capture_output=True,
+                                timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn('too many arguments', result.stderr)
+        self.assertNotIn('binary operator expected', result.stderr)
+        return result.stdout + result.stderr
+
+    @staticmethod
+    def assignment_pattern(macro):
+        return r'^[ \t]*#?[ \t]*' + macro + r'[ \t]*=[^\n]*$'
+
+    def set_assignment(self, macro, text):
+        content, count = re.subn(self.assignment_pattern(macro),
+                                lambda match: text, self.config.read_text(),
+                                flags=re.MULTILINE)
+        self.assertEqual(count, 1, macro)
+        self.config.write_text(content)
+
+    def unrelated(self):
+        text = self.config.read_text()
+        for _, macro in FEATURES:
+            text = re.sub(self.assignment_pattern(macro), '', text,
+                          flags=re.MULTILINE)
+        return text
+
+    def check_state(self, enabled):
+        query = self.command('-q')
+        text = self.config.read_text()
+        result = subprocess.run(['make', '--no-print-directory', '-f',
+                                 'probe.mk', 'flags'], cwd=self.folder,
+                                env=self.env, text=True, capture_output=True,
+                                timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        defines = set(re.findall(r'-D\s*([A-Za-z_][A-Za-z_0-9]*)', result.stdout))
+        for option, macro in FEATURES:
+            self.assertEqual(macro in defines, enabled[macro], result.stdout)
+            self.assertRegex(query, r'(?m)^-' + option + r'\s+' +
+                             ('ON' if enabled[macro] else 'OFF') + r'\s')
+            active = re.search(r'^[ \t]*' + macro + r'[ \t]*=[ \t]*1[ \t]*$',
+                               text, re.MULTILINE)
+            self.assertEqual(active is not None, enabled[macro], macro)
+        self.assertEqual(self.unrelated(), self.original_unrelated)
+
+    def check_style(self, before_equals, after_equals):
+        for _, macro in FEATURES:
+            self.set_assignment(macro, macro + before_equals + '=' +
+                                after_equals + '1')
+        self.original_unrelated = self.unrelated()
+        enabled = {macro: True for _, macro in FEATURES}
+        self.check_state(enabled)
+        for option, macro in FEATURES:
+            with self.subTest(option=option):
+                # Enabling an already enabled spaced assignment must be a no-op.
+                before = self.config.read_text()
+                self.command('-' + option + '1')
+                self.assertEqual(self.config.read_text(), before)
+                self.check_state(enabled)
+                self.command('-' + option + '0')
+                enabled[macro] = False
+                self.check_state(enabled)
+                before = self.config.read_text()
+                self.command('-' + option + '0')
+                self.assertEqual(self.config.read_text(), before)
+                # Exercise uncommenting the same whitespace form as well.
+                self.set_assignment(macro, '# ' + macro + before_equals + '=' +
+                                    after_equals + '1')
+                self.command('-' + option + '1')
+                enabled[macro] = True
+                self.check_state(enabled)
+                before = self.config.read_text()
+                self.command('-' + option + '1')
+                self.assertEqual(self.config.read_text(), before)
+                self.check_state(enabled)
+
+    def test_compact_assignments(self):
+        self.check_style('', '')
+
+    def test_spaced_assignments(self):
+        self.check_style(' ', ' ')
+
+    def test_tabbed_assignments(self):
+        self.check_style('\t', '\t')
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
