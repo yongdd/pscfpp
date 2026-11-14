@@ -34,6 +34,7 @@
 #include "CoreNyquistGroupTest.h"
 #include "CoreNyquistPlaneCacheTest.h"
 #include "CoreNyquistWeightTest.h"
+#include "CoreTiedImageTest.h"
 
 #ifdef PSCF_CUDA
 #include "GpuWaveListTest.h"
@@ -43,6 +44,7 @@
 #include "GpuNyquistTest.h"
 #include "GpuNyquistGroupTest.h"
 #include "GpuNyquistWeightTest.h"
+#include "GpuTiedImageTest.h"
 #endif
 
 #include "MinimumImageScaleTest.h"
@@ -127,6 +129,7 @@ TEST_COMPOSITE_ADD_UNIT(CoreBasisDataTest);
 TEST_COMPOSITE_ADD_UNIT(CoreNyquistGroupTest);
 TEST_COMPOSITE_ADD_UNIT(CoreNyquistPlaneCacheTest);
 TEST_COMPOSITE_ADD_UNIT(CoreNyquistWeightTest);
+TEST_COMPOSITE_ADD_UNIT(CoreTiedImageTest);
 #ifdef PSCF_CUDA
 TEST_COMPOSITE_ADD_UNIT(GpuWaveListTest);
 TEST_COMPOSITE_ADD_UNIT(GpuVecRandomTest);
@@ -135,6 +138,7 @@ TEST_COMPOSITE_ADD_UNIT(GpuKSqOverflowTest);
 TEST_COMPOSITE_ADD_UNIT(GpuNyquistTest);
 TEST_COMPOSITE_ADD_UNIT(GpuNyquistGroupTest);
 TEST_COMPOSITE_ADD_UNIT(GpuNyquistWeightTest);
+TEST_COMPOSITE_ADD_UNIT(GpuTiedImageTest);
 #endif
 TEST_COMPOSITE_ADD_UNIT(MinimumImageScaleTest);
 #ifdef PSCF_CUDA
