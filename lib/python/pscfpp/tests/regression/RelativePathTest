@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Relative paths resolve correctly across roots and equivalent spellings."""
+import os
+import unittest
+
+from pscfpp.file import relative_path
+
+
+class RelativePathTest(unittest.TestCase):
+    def check_paths(self, cases):
+        for reference, target, expected in cases:
+            with self.subTest(reference=reference, target=target):
+                actual = relative_path(reference, target)
+                self.assertEqual(actual, expected)
+                # Independently check that the returned path reaches the
+                # requested target from the reference file's directory.
+                resolved = os.path.join(os.path.dirname(reference), actual)
+                self.assertEqual(os.path.abspath(resolved),
+                                 os.path.abspath(target))
+
+    def test_ordinary_paths(self):
+        join = os.path.join
+        self.check_paths([
+            (join('a', 'input'), join('a', 'output'), 'output'),
+            (join('a', 'input'), join('b', 'output'), join('..', 'b', 'output')),
+            (join('a', 'input'), join('a', 'deep', 'output'), join('deep', 'output')),
+            (join('.', 'a', 'input'), join('.', 'a', 'output'), 'output'),
+        ])
+
+    def test_absolute_root_paths(self):
+        join = os.path.join
+        root = os.path.abspath(os.sep)
+        self.check_paths([
+            (join(root, 'alpha', 'input'), join(root, 'beta', 'output'),
+             join('..', 'beta', 'output')),
+            (join(root, 'input'), join(root, 'output'), 'output'),
+            (join(root, 'input'), join(root, 'beta', 'output'),
+             join('beta', 'output')),
+            (join(root, 'alpha', 'input'), join(root, 'output'),
+             join('..', 'output')),
+            (join(root, 'project', 'a', 'input'),
+             join(root, 'project', 'b', 'output'), join('..', 'b', 'output')),
+        ])
+
+    def test_equivalent_path_components(self):
+        join = os.path.join
+        root = os.path.abspath(os.sep)
+        self.check_paths([
+            (join('.', 'a', 'input'), join('a', 'output'), 'output'),
+            (join('a', '..', 'b', 'input'), join('b', 'output'), 'output'),
+            (join(root, 'project', 'a', '..', 'b', 'input'),
+             join(root, 'project', 'b', 'output'), 'output'),
+        ])
+
+    def test_reference_in_current_directory(self):
+        join = os.path.join
+        self.check_paths([
+            ('input', 'output', 'output'),
+            ('input', join('child', 'output'), join('child', 'output')),
+            (join('.', 'input'), 'output', 'output'),
+        ])
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

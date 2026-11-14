@@ -16,17 +16,7 @@ from glob import glob
 #  \return  Path for file2 relative to directory containing path1
 #
 def relative_path(path1,path2):
-    root = commonprefix([path1, path2])
-    root = dirname(root)
-    if (root == '/'):
-        raise 'Error in relative_path - common directory cannot be / '
-    if root :
-        path2 = path2[len(root)+1:]   
-    path1 = dirname(path1)
-    while not ( root == path1 ):
-        path2 = pardir + sep + path2 
-        path1 = dirname(path1)
-    return path2
+    return os.path.relpath(path2, os.path.dirname(path1) or os.curdir)
 
 
 ##
