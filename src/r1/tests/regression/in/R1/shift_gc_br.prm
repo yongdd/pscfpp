@@ -1,0 +1,32 @@
+System{
+  Mixture{
+     nMonomer  2
+     monomers  1.0  1.0
+     nPolymer  1
+     Polymer{
+        type    linear
+        nBlock  2
+        blocks  0 0.5
+                1 0.5
+        mu      750.0
+     }
+     ds   0.01
+  }
+  Interaction{
+     chi(
+        0  1    10.0
+     )
+  }
+  Domain{
+     mode planar
+     xMin 0.0
+     xMax 4.0
+     nx   17
+  }
+  BinaryRelaxIterator{
+     epsilon   1.0E-8
+     maxIter   5
+     lambdaPlus 1.0
+     lambdaMinus 1.0
+  }
+}

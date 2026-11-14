@@ -1,0 +1,42 @@
+System{
+  Mixture{
+     nMonomer  2
+     monomers[
+          1.0  
+          1.0 
+     ]
+     nPolymer  2
+     Polymer{
+        type      linear
+        nBlock    2
+        blocks[
+              0  0.125
+              1  0.875
+        ]
+        mu        5.74775182858
+     }
+     Polymer{
+        type      linear
+        nBlock    1
+        blocks[
+             1  1.000
+        ]
+        mu        -0.0042051012549
+     }
+     vMonomer   0.045787
+     ds         0.005
+  }
+  Interaction{
+     chi(
+         0  1    88.5
+     )
+  }
+  Domain{
+     mode      Spherical
+     xMax           4.00
+     nx              401
+  }
+  AmIterator{
+     epsilon   0.0000001
+  }
+}

@@ -83,6 +83,8 @@
 
 #include "BeadFieldNormalizationTest.h"
 
+#include "ScftFieldShiftTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(ScftAmIteratorTest);
 TEST_COMPOSITE_ADD_UNIT(FieldIoRegressionTest);
@@ -145,6 +147,7 @@ TEST_COMPOSITE_ADD_UNIT(FieldReadInvalidationTest);
 TEST_COMPOSITE_ADD_UNIT(FlexibleParamsReuseTest);
 TEST_COMPOSITE_ADD_UNIT(MaskReadTransactionTest);
 TEST_COMPOSITE_ADD_UNIT(BeadFieldNormalizationTest);
+TEST_COMPOSITE_ADD_UNIT(ScftFieldShiftTest);
 TEST_COMPOSITE_END
 
 #endif
