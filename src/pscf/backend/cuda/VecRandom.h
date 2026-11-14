@@ -103,7 +103,8 @@ namespace Pscf {
       *
       * cuRAND generates normal values in pairs. For an array with an odd
       * number of elements, the last element is taken from a separately
-      * generated pair.
+      * generated pair. Slices with an odd starting index use aligned
+      * temporary storage without changing the generated sequence.
       *
       * \param data  array to populate
       * \param stddev  standard deviation (input)
@@ -117,7 +118,8 @@ namespace Pscf {
       *
       * cuRAND generates normal values in pairs. For an array with an odd
       * number of elements, the last element is taken from a separately
-      * generated pair.
+      * generated pair. Slices with an odd starting index use aligned
+      * temporary storage without changing the generated sequence.
       *
       * \param data  array to populate
       * \param stddev  standard deviation (input)
@@ -149,6 +151,12 @@ namespace Pscf {
 
       /// Pair of doubles for the last element of an odd-sized array.
       BackendArray<double,CUT> spareDouble_;
+
+      /// Aligned storage for the even prefix of a misaligned float output.
+      BackendArray<float,CUT> alignedFloat_;
+
+      /// Aligned storage for the even prefix of a misaligned double output.
+      BackendArray<double,CUT> alignedDouble_;
 
       void errorCheck(curandStatus_t const & error);
    

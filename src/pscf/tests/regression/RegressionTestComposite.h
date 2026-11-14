@@ -92,6 +92,10 @@
 
 #include "SortEqualValueTest.h"
 
+#ifdef PSCF_CUDA
+#include "GpuNormalSliceTest.h"
+#endif
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -156,6 +160,9 @@ TEST_COMPOSITE_ADD_UNIT(FftwComplexArrayCopyTest);
 #endif
 TEST_COMPOSITE_ADD_UNIT(EdgeOutputModeTest);
 TEST_COMPOSITE_ADD_UNIT(SortEqualValueTest);
+#ifdef PSCF_CUDA
+TEST_COMPOSITE_ADD_UNIT(GpuNormalSliceTest);
+#endif
 TEST_COMPOSITE_END
 
 #endif

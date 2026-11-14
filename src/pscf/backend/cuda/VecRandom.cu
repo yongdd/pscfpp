@@ -3,6 +3,7 @@
 #include "ThreadArray.h"
 #include <util/global.h>
 #include <sys/time.h>
+#include <cstdint>
 #include <string>
 
 namespace Pscf {
@@ -11,6 +12,24 @@ namespace Pscf {
 
    // Anonymous namesapce, for functions that are only used in this file
    namespace {
+
+      /*
+      * Select pair-aligned storage for an even normal-generation prefix.
+      */
+      template <typename Data>
+      Data* normalOutput(Data* output, int n, BackendArray<Data,CUT>& scratch)
+      {
+         if (reinterpret_cast<std::uintptr_t>(output) % (2*sizeof(Data)) == 0) {
+            return output;
+         }
+         if (scratch.capacity() < n) {
+            if (scratch.isAllocated()) {
+               scratch.deallocate();
+            }
+            scratch.allocate(n);
+         }
+         return scratch.cArray();
+      }
 
       /*
       * Linear array transformation a[i] => c*a[i] + s (float).
@@ -179,16 +198,22 @@ namespace Pscf {
       }
 
       // cuRAND generates normal values in pairs (even counts only).
-      // For odd n, generate n-1 values in place and take the last one
+      // For odd n, generate n-1 values first and take the last one
       // from a separately generated pair.
       int n = data.capacity();
       int nEven = n - (n % 2);
 
       curandStatus_t status;
       if (nEven > 0) {
-         status = curandGenerateNormal(gen_, data.cArray(), nEven,
+         float* output = normalOutput(data.cArray(), nEven, alignedFloat_);
+         status = curandGenerateNormal(gen_, output, nEven,
                                        mean, stddev);
          errorCheck(status);
+         if (output != data.cArray()) {
+            cudaErrorCheck( cudaMemcpy(data.cArray(), output,
+                                       nEven*sizeof(float),
+                                       cudaMemcpyDeviceToDevice) );
+         }
       }
       if (nEven < n) {
          if (!spareFloat_.isAllocated()) {
@@ -215,16 +240,22 @@ namespace Pscf {
       }
 
       // cuRAND generates normal values in pairs (even counts only).
-      // For odd n, generate n-1 values in place and take the last one
+      // For odd n, generate n-1 values first and take the last one
       // from a separately generated pair.
       int n = data.capacity();
       int nEven = n - (n % 2);
 
       curandStatus_t status;
       if (nEven > 0) {
-         status = curandGenerateNormalDouble(gen_, data.cArray(),
+         double* output = normalOutput(data.cArray(), nEven, alignedDouble_);
+         status = curandGenerateNormalDouble(gen_, output,
                                              nEven, mean, stddev);
          errorCheck(status);
+         if (output != data.cArray()) {
+            cudaErrorCheck( cudaMemcpy(data.cArray(), output,
+                                       nEven*sizeof(double),
+                                       cudaMemcpyDeviceToDevice) );
+         }
       }
       if (nEven < n) {
          if (!spareDouble_.isAllocated()) {
