@@ -113,8 +113,10 @@ public:
          for (int j = 0; j < 8; ++j) {
             IntVec<3> v;
             v[0] = 4; v[1] = j; v[2] = 3;
-            TEST_ASSERT(shiftToMinimumNyquist(v, dims, scaledTriclinic) ==
-                        shiftToMinimumNyquist(v, dims, triclinic));
+            IntVec<3> image, scaledImage;
+            ksqNyquist(v, dims, scaledTriclinic, nullptr, scaledImage);
+            ksqNyquist(v, dims, triclinic, nullptr, image);
+            TEST_ASSERT(scaledImage == image);
          }
       }
    }

@@ -68,10 +68,11 @@ namespace Pscf {
    * Nyquist planes: for a lattice system with a variable angle, kSq of a
    * wavevector with a Nyquist index (an index d/2 along a direction with
    * an even number d of grid points) is given by ksqNyquist, and the
-   * image stored in minImages() by shiftToMinimumNyquist. The minimum
-   * |k|^2 of such a wavevector switches between the images that differ
-   * in the sign of a Nyquist index where a cell angle passes through 90
-   * degrees, so that kSq and the free energy would have a kink there.
+   * image stored in minImages() is its representative image. The 
+   * minimum |k|^2 of such a wavevector switches between the images that
+   * differ in the sign of a Nyquist index where a cell angle passes 
+   * through 90 degrees, so that kSq and the free energy would have a 
+   * kink there.
    * Near such orthogonal geometries, ksqNyquist is therefore |k|^2
    * averaged over these signs, which is smooth there, and far from them
    * (where the average would break the symmetry of, e.g., a hexagonal

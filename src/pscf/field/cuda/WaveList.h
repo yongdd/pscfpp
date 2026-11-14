@@ -67,13 +67,13 @@ namespace Pscf {
    * Nyquist planes: for a lattice system with a variable angle, kSq of a
    * wavevector with a Nyquist index is given by ksqNyquist (an average
    * over the signs of the Nyquist indices near orthogonal geometries, 
-   * the minimum-image |k|^2 far from them), and its stored image by 
-   * shiftToMinimumNyquist, as in the CPU class WaveList<D,CPT> (see its
-   * documentation). For wavevectors for which ksqNyquist averages 
-   * |k|^2 (see usesNyquistAverage), these images, kSq and dKSq are
-   * computed on the host, once per cell, and copied to the device; for
-   * all others ksqNyquist is the minimum-image |k|^2, computed by the 
-   * kernels.
+   * the minimum-image |k|^2 far from them), and its stored image is the
+   * representative image of ksqNyquist, as in the CPU class 
+   * WaveList<D,CPT> (see its documentation). For wavevectors for which
+   * ksqNyquist averages |k|^2 (see usesNyquistAverage), these images,
+   * kSq and dKSq are computed on the host, once per cell, and copied to
+   * the device; for all others ksqNyquist is the minimum-image |k|^2,
+   * computed by the kernels.
    *
    * Tied images: for a lattice system with a variable angle, dKSq of a
    * wavevector whose minimum image is tied with other images is the

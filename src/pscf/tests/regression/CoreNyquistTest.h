@@ -317,8 +317,32 @@ public:
    }
 
    /*
+   * Decoupling weight of directions i and j of the Nyquist sign 
+   * average (see ksqNyquist) for a cell in which it is 0 or 1: 1 if
+   * the absolute cosine of the angle between the reciprocal basis 
+   * vectors i and j is at most 0.1, 0 if it is at least 0.25, and -1
+   * (not allowed in these tests) in between.
+   */
+   template <int D>
+   double pairWeight(int i, int j, UnitCell<D> const & cell)
+   {
+      double gij = 0.0;
+      double gii = 0.0;
+      double gjj = 0.0;
+      for (int k = 0; k < D; ++k) {
+         gij += cell.kBasis(i)[k]*cell.kBasis(j)[k];
+         gii += cell.kBasis(i)[k]*cell.kBasis(i)[k];
+         gjj += cell.kBasis(j)[k]*cell.kBasis(j)[k];
+      }
+      double t = std::abs(gij)/std::sqrt(gii*gjj);
+      if (t <= 0.1) return 1.0;
+      if (t >= 0.25) return 0.0;
+      return -1.0;
+   }
+
+   /*
    * Components averaged by ksqNyquist, for a cell whose decoupling 
-   * weights (nyquistDecouplingWeight) are all 0 or 1: the connected
+   * weights (pairWeight) are all 0 or 1: the connected
    * components of the directions of nonzero indices of v, with the 
    * pairs of weight 0 as edges, whose indices are all Nyquist indices,
    * except a component of all nonzero indices. Returns their number and
@@ -334,7 +358,7 @@ public:
          if (v[i] % d[i] == 0) continue;
          for (int j = i + 1; j < D; ++j) {
             if (v[j] % d[j] == 0) continue;
-            double w = nyquistDecouplingWeight<D>(i, j, cell);
+            double w = pairWeight<D>(i, j, cell);
             TEST_ASSERT(w == 0.0 || w == 1.0);
             if (w == 0.0) {
                int merged = comp[i] | comp[j];

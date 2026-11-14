@@ -18,12 +18,12 @@ using namespace Util;
 using namespace Pscf;
 
 /*
-* shiftToMinimumNyquist keeps the reduced neighbors of the plane
-* lattices of image shifts of the last mesh and cell (per thread), so
-* that a WaveList does not repeat the reduction for every wavevector.
-* Calls that alternate between cells and meshes must give the images
-* of calls made for one cell and mesh at a time, and these images
-* minimize ksqNyquist (checked by a search over images).
+* ksqNyquist keeps the reduced neighbors of the plane lattices of image
+* shifts of the last mesh and cell (per thread), so that a WaveList does
+* not repeat the reduction for every wavevector. Calls that alternate
+* between cells and meshes must give the representative images of calls
+* made for one cell and mesh at a time, and these must be images of the
+* wavevectors.
 */
 class CoreNyquistPlaneCacheTest : public UnitTest
 {
@@ -59,32 +59,11 @@ public:
       for (iter.begin(); !iter.atEnd(); ++iter) {
          if (hasNyquistIndex(iter.position(), d)) {
             waves.push_back(iter.position());
-            result.push_back(shiftToMinimumNyquist(iter.position(),
-                                                   d, cell));
+            IntVec<3> image;
+            ksqNyquist(iter.position(), d, cell, nullptr, image);
+            result.push_back(image);
          }
       }
-   }
-
-   /*
-   * Minimum of ksqNyquist over the images v + s*d, |s[i]| <= 3.
-   */
-   double searchMinimum(IntVec<3> const & v, IntVec<3> const & d,
-                        UnitCell<3> const & cell)
-   {
-      double best = -1.0;
-      IntVec<3> u;
-      for (int s0 = -3; s0 <= 3; ++s0) {
-         for (int s1 = -3; s1 <= 3; ++s1) {
-            for (int s2 = -3; s2 <= 3; ++s2) {
-               u[0] = v[0] + s0*d[0];
-               u[1] = v[1] + s1*d[1];
-               u[2] = v[2] + s2*d[2];
-               double g = ksqNyquist(u, d, cell);
-               if (best < 0.0 || g < best) best = g;
-            }
-         }
-      }
-      return best;
    }
 
    void testAlternatingCells()
@@ -112,15 +91,12 @@ public:
          }
       }
 
-      // Each image minimizes ksqNyquist
+      // Each image is an image of its wavevector
       for (int c = 0; c < 3; ++c) {
          for (int m = 0; m < 2; ++m) {
             IntVec<3> const & d = dims[m];
             for (size_t i = 0; i < waves[c][m].size(); ++i) {
                IntVec<3> const & image = reference[c][m][i];
-               double g = ksqNyquist(image, d, cells[c]);
-               double best = searchMinimum(waves[c][m][i], d, cells[c]);
-               TEST_ASSERT(std::abs(g - best) < 1.0E-10*(1.0 + best));
                for (int j = 0; j < 3; ++j) {
                   TEST_ASSERT((image[j] - waves[c][m][i][j]) % d[j] == 0);
                }
@@ -134,8 +110,9 @@ public:
             for (int c = 0; c < 3; ++c) {
                int mm = (c == 1) ? 1 - m : m;
                if (i < waves[c][mm].size()) {
-                  IntVec<3> image = shiftToMinimumNyquist(waves[c][mm][i],
-                                                    dims[mm], cells[c]);
+                  IntVec<3> image;
+                  ksqNyquist(waves[c][mm][i], dims[mm], cells[c], nullptr,
+                             image);
                   TEST_ASSERT(image == reference[c][mm][i]);
                }
             }

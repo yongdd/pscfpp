@@ -93,7 +93,8 @@ public:
          IntVec<D> v = iter.position();
          double ref;
          if (average && hasNyquistIndex(v, d)) {
-            ref = ksqNyquist(shiftToMinimumNyquist(v, d, cell), d, cell);
+            IntVec<D> image;
+            ref = ksqNyquist(v, d, cell, nullptr, image);
          } else {
             ref = cell.ksq(shiftToMinimum(v, d, cell));
          }

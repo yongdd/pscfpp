@@ -19,6 +19,16 @@ namespace Pscf {
    namespace {
 
       /*
+      * Relative tolerance for equal |k|^2 in the search for minimum
+      * images. Squared norms are compared relatively, so that changing
+      * length units does not change the selected integer image, and
+      * zero is never tied with nonzero. The band is kept at rounding
+      * scale: a 1e-8 relative band treats small physical angle
+      * perturbations as ties and can break inversion pairs.
+      */
+      const double MinimumImageTolerance = 1.0E-12;
+
+      /*
       * Scalar product of the reciprocal lattice vectors with integer
       * coordinates a and b.
       */
@@ -234,8 +244,9 @@ namespace Pscf {
       /*
       * Plane neighbors (see planeNeighbors) of the last mesh and cell
       * used by this thread, for the plane normal to each direction i
-      * (shiftToMinimumNyquist is called once per wavevector, and the
-      * waves of the three Nyquist planes alternate).
+      * (ksqNyquist, called once per wavevector, minimizes over such
+      * planes in blockMinimum, and the waves of the three Nyquist
+      * planes alternate).
       */
       template <int D>
       struct PlaneNeighborCache
@@ -329,11 +340,8 @@ namespace Pscf {
                             IntVec<2> const & d,
                             UnitCell<2> const & cell)
    {
-      // Compare squared norms relatively: changing length units must not
-      // change the selected integer image. Zero is never tied with nonzero.
-      // Keep the band at rounding scale; a 1e-8 relative band treats small
-      // physical angle perturbations as ties and can break inversion pairs.
-      const double epsilon = 1.0E-12;
+      // Compare squared norms relatively (see MinimumImageTolerance)
+      const double epsilon = MinimumImageTolerance;
       double GsqMin = cell.ksq(v);
 
       // Loop over neighboring images
@@ -365,11 +373,8 @@ namespace Pscf {
                             IntVec<3> const & d,
                             UnitCell<3> const & cell)
    {
-      // Compare squared norms relatively: changing length units must not
-      // change the selected integer image. Zero is never tied with nonzero.
-      // Keep the band at rounding scale; a 1e-8 relative band treats small
-      // physical angle perturbations as ties and can break inversion pairs.
-      const double epsilon = 1.0E-12;
+      // Compare squared norms relatively (see MinimumImageTolerance)
+      const double epsilon = MinimumImageTolerance;
       double GsqMin = cell.ksq(v);
 
       // Loop over neighboring images
@@ -461,11 +466,19 @@ namespace Pscf {
       }
 
       /*
-      * Smooth step of the weight of the Nyquist sign average, as a
-      * function of an absolute cosine t (see nyquistDecouplingWeight):
-      * 1 for t <= NyquistAverageCosineMin, 0 for t >= 
-      * NyquistAverageCosineMax, 1 - x^3 (10 - 15x + 6x^2) in between. 
-      * Sets ds to the derivative with respect to t.
+      * Absolute cosines below which two directions are fully decoupled,
+      * and above which they are fully coupled, in the Nyquist sign
+      * average (see ksqNyquist).
+      */
+      const double NyquistAverageCosineMin = 0.1;
+      const double NyquistAverageCosineMax = 0.25;
+
+      /*
+      * Smooth step of the decoupling weight of the Nyquist sign average,
+      * as a function of an absolute cosine t (see ksqNyquist): 1 for 
+      * t <= NyquistAverageCosineMin, 0 for t >= NyquistAverageCosineMax,
+      * 1 - x^3 (10 - 15x + 6x^2) in between. Sets ds to the derivative
+      * with respect to t.
       */
       inline double nyquistStep(double t, double& ds)
       {
@@ -482,7 +495,7 @@ namespace Pscf {
       /*
       * Smooth steps s[i][j] of the absolute cosines of the angles 
       * between the reciprocal basis vectors i and j != i (see 
-      * nyquistDecouplingWeight). If ds is not null, also sets ds[i][j][n]
+      * ksqNyquist). If ds is not null, also sets ds[i][j][n]
       * to the derivative of s[i][j] with respect to cell parameter n.
       */
       template <int D>
@@ -572,7 +585,7 @@ namespace Pscf {
             // Minimum image: descent by the Voronoi-relevant vectors of
             // the lattice of image shifts from the reduced components,
             // which reaches the (largest) minimum image (see descendWith)
-            descendToMinimum<D>(r, d, cell, 1.0E-12);
+            descendToMinimum<D>(r, d, cell, MinimumImageTolerance);
             if (dksq) {
                collectTies<D>(r, cachedNeighbors<D>(d, cell), cell, tied);
             }
@@ -591,7 +604,8 @@ namespace Pscf {
                }
             }
             UTIL_CHECK(i >= 0 && j >= 0 && k >= 0);
-            planeMinimum<D>(r, d, i, j, k, cell, 1.0E-12);
+            planeMinimum<D>(r, d, i, j, k, cell,
+                            MinimumImageTolerance);
             if (dksq) {
                collectTies<D>(r, cachedPlaneNeighbors<D>(d, i, j, k, cell),
                               cell, tied);
@@ -605,161 +619,6 @@ namespace Pscf {
             averageDKSq<D>(tied, cell, dksq);
          }
          return cell.ksq(r);
-      }
-
-      /*
-      * ksqNyquist, its derivatives (if dksq is not null) and the 
-      * representative image (if image is not null, see 
-      * shiftToMinimumNyquist), for a wavevector with a Nyquist index.
-      */
-      template <int D>
-      double ksqNyquistImpl(IntVec<D> const & v, IntVec<D> const & d,
-                            UnitCell<D> const & cell, double* dksq,
-                            IntVec<D>* image)
-      {
-         IntVec<D> u;
-         bool isNyquist[D];
-         int nNyquist = reduceComponents<D>(v, d, u, isNyquist);
-         UTIL_CHECK(nNyquist > 0);
-         int nParam = cell.nParameter();
-
-         // Nyquist directions and directions of nonzero indices (masks)
-         int nyquistMask = 0;
-         int nonzeroMask = 0;
-         int nonzero[D];
-         int nNonzero = 0;
-         for (int i = 0; i < D; ++i) {
-            if (isNyquist[i]) nyquistMask |= (1 << i);
-            if (u[i] != 0) {
-               nonzeroMask |= (1 << i);
-               nonzero[nNonzero] = i;
-               ++nNonzero;
-            }
-         }
-
-         // Pairs of directions of nonzero indices, decoupling weights
-         double s[D][D];
-         double ds[D][D][6];
-         pairSteps<D>(cell, s, dksq ? ds : nullptr);
-         int pairI[3], pairJ[3];
-         int nPair = 0;
-         for (int a = 0; a < nNonzero; ++a) {
-            for (int b = a + 1; b < nNonzero; ++b) {
-               pairI[nPair] = nonzero[a];
-               pairJ[nPair] = nonzero[b];
-               ++nPair;
-            }
-         }
-
-         // Minima of blocks of directions (bit masks), each computed 
-         // once (blocks recur in different configurations)
-         double blockK[1 << D];
-         double blockDK[1 << D][6];
-         IntVec<D> blockR[1 << D];
-         bool hasBlock[1 << D];
-         for (int b = 0; b < (1 << D); ++b) hasBlock[b] = false;
-
-         // Sum over configurations of coupled pairs (bits of c)
-         double value = 0.0;
-         if (dksq) {
-            for (int n = 0; n < nParam; ++n) dksq[n] = 0.0;
-         }
-         double pMax = -1.0;
-         double dK[6];
-         for (int c = 0; c < (1 << nPair); ++c) {
-
-            // Probability of the configuration, factors of the product
-            double f[3];
-            double prob = 1.0;
-            for (int e = 0; e < nPair; ++e) {
-               double se = s[pairI[e]][pairJ[e]];
-               f[e] = ((c >> e) & 1) ? 1.0 - se : se;
-               prob *= f[e];
-            }
-            if (prob == 0.0) continue;
-
-            // Connected components of the nonzero directions (masks)
-            int comp[D];
-            for (int i = 0; i < D; ++i) comp[i] = (1 << i);
-            for (int e = 0; e < nPair; ++e) {
-               if (!((c >> e) & 1)) continue;
-               int merged = comp[pairI[e]] | comp[pairJ[e]];
-               for (int i = 0; i < D; ++i) {
-                  if (merged & (1 << i)) comp[i] = merged;
-               }
-            }
-
-            // Blocks: components of Nyquist indices only (averaged over
-            // their sign), and all other directions (rest). A component
-            // of all nonzero indices is not averaged: reversing all of
-            // them is the isometry k -> -k.
-            int rest = (1 << D) - 1;
-            int blocks[D];
-            int nBlock = 0;
-            for (int a = 0; a < nNonzero; ++a) {
-               int m = comp[nonzero[a]];
-               if ((m & nyquistMask) != m) continue;
-               if (m == nonzeroMask) continue;
-               if (!(rest & m)) continue; // already listed
-               blocks[nBlock] = m;
-               ++nBlock;
-               rest &= ~m;
-            }
-
-            // K of this configuration: minimum over the rest, plus the
-            // minimum of each averaged component
-            int list[D + 1];
-            int nList = 0;
-            if (rest) {
-               list[nList] = rest;
-               ++nList;
-            }
-            for (int b = 0; b < nBlock; ++b) {
-               list[nList] = blocks[b];
-               ++nList;
-            }
-            double K = 0.0;
-            if (dksq) {
-               for (int n = 0; n < nParam; ++n) dK[n] = 0.0;
-            }
-            IntVec<D> img(0);
-            for (int b = 0; b < nList; ++b) {
-               int m = list[b];
-               if (!hasBlock[m]) {
-                  blockK[m] = blockMinimum<D>(u, d, m, cell, blockR[m],
-                                              dksq ? blockDK[m] : nullptr);
-                  hasBlock[m] = true;
-               }
-               K += blockK[m];
-               img += blockR[m];
-               if (dksq) {
-                  for (int n = 0; n < nParam; ++n) dK[n] += blockDK[m][n];
-               }
-            }
-            value += prob*K;
-            if (image && prob > pMax) {
-               pMax = prob;
-               *image = img;
-            }
-
-            // Derivatives: prob*dK + K*d(prob)
-            if (dksq) {
-               for (int n = 0; n < nParam; ++n) {
-                  double dProb = 0.0;
-                  for (int e = 0; e < nPair; ++e) {
-                     double term = ds[pairI[e]][pairJ[e]][n];
-                     if (term == 0.0) continue;
-                     if ((c >> e) & 1) term = -term;
-                     for (int g = 0; g < nPair; ++g) {
-                        if (g != e) term *= f[g];
-                     }
-                     dProb += term;
-                  }
-                  dksq[n] += prob*dK[n] + K*dProb;
-               }
-            }
-         }
-         return value;
       }
 
       /*
@@ -787,19 +646,6 @@ namespace Pscf {
    }
 
    /*
-   * Decoupling weight of directions i and j.
-   */
-   template <int D>
-   double nyquistDecouplingWeight(int i, int j, UnitCell<D> const & cell)
-   {
-      UTIL_CHECK(i >= 0 && i < D);
-      UTIL_CHECK(j >= 0 && j < D);
-      double s[D][D];
-      pairSteps<D>(cell, s, nullptr);
-      return s[i][j];
-   }
-
-   /*
    * Does ksqNyquist average |k|^2 for this wavevector?
    */
    template <int D>
@@ -814,73 +660,157 @@ namespace Pscf {
    }
 
    /*
-   * Square magnitude of a wavevector with Nyquist indices.
-   */
-   template <int D>
-   double ksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
-                     UnitCell<D> const & cell)
-   {
-      if (!hasNyquistIndex(v, d)) {
-         return cell.ksq(shiftToMinimum(v, d, cell));
-      }
-      return ksqNyquistImpl<D>(v, d, cell, nullptr, nullptr);
-   }
-
-   /*
-   * Square magnitude of a wavevector with Nyquist indices, derivatives.
-   */
-   template <int D>
-   double ksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
-                     UnitCell<D> const & cell, double* dksq)
-   {
-      UTIL_CHECK(dksq);
-      if (!hasNyquistIndex(v, d)) {
-         IntVec<D> r = shiftToMinimum(v, d, cell);
-         FSArray<IntVec<D>, 16> tied;
-         collectTies<D>(r, cachedNeighbors<D>(d, cell), cell, tied);
-         averageDKSq<D>(tied, cell, dksq);
-         return cell.ksq(r);
-      }
-      return ksqNyquistImpl<D>(v, d, cell, dksq, nullptr);
-   }
-
-   /*
-   * ksqNyquist, its derivatives and the representative image.
+   * ksqNyquist, its derivatives (if dksq is not null) and the 
+   * representative image.
    */
    template <int D>
    double ksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
                      UnitCell<D> const & cell, double* dksq,
                      IntVec<D>& image)
    {
-      UTIL_CHECK(hasNyquistIndex(v, d));
-      return ksqNyquistImpl<D>(v, d, cell, dksq, &image);
-   }
+      IntVec<D> u;
+      bool isNyquist[D];
+      int nNyquist = reduceComponents<D>(v, d, u, isNyquist);
+      UTIL_CHECK(nNyquist > 0);
+      int nParam = cell.nParameter();
 
-   /*
-   * Derivative of ksqNyquist with respect to cell parameter n.
-   */
-   template <int D>
-   double dksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
-                      UnitCell<D> const & cell, int n)
-   {
-      UTIL_CHECK(n >= 0 && n < cell.nParameter());
-      double dksq[6];
-      ksqNyquist<D>(v, d, cell, dksq);
-      return dksq[n];
-   }
+      // Nyquist directions and directions of nonzero indices (masks)
+      int nyquistMask = 0;
+      int nonzeroMask = 0;
+      int nonzero[D];
+      int nNonzero = 0;
+      for (int i = 0; i < D; ++i) {
+         if (isNyquist[i]) nyquistMask |= (1 << i);
+         if (u[i] != 0) {
+            nonzeroMask |= (1 << i);
+            nonzero[nNonzero] = i;
+            ++nNonzero;
+         }
+      }
 
-   /*
-   * Representative image of v for ksqNyquist.
-   */
-   template <int D>
-   IntVec<D> shiftToMinimumNyquist(IntVec<D> const & v,
-                                   IntVec<D> const & d,
-                                   UnitCell<D> const & cell)
-   {
-      if (!hasNyquistIndex(v, d)) return shiftToMinimum(v, d, cell);
-      IntVec<D> image;
-      ksqNyquistImpl<D>(v, d, cell, nullptr, &image);
-      return image;
+      // Pairs of directions of nonzero indices, decoupling weights
+      double s[D][D];
+      double ds[D][D][6];
+      pairSteps<D>(cell, s, dksq ? ds : nullptr);
+      int pairI[3], pairJ[3];
+      int nPair = 0;
+      for (int a = 0; a < nNonzero; ++a) {
+         for (int b = a + 1; b < nNonzero; ++b) {
+            pairI[nPair] = nonzero[a];
+            pairJ[nPair] = nonzero[b];
+            ++nPair;
+         }
+      }
+
+      // Minima of blocks of directions (bit masks), each computed 
+      // once (blocks recur in different configurations)
+      double blockK[1 << D];
+      double blockDK[1 << D][6];
+      IntVec<D> blockR[1 << D];
+      bool hasBlock[1 << D];
+      for (int b = 0; b < (1 << D); ++b) hasBlock[b] = false;
+
+      // Sum over configurations of coupled pairs (bits of c)
+      double value = 0.0;
+      if (dksq) {
+         for (int n = 0; n < nParam; ++n) dksq[n] = 0.0;
+      }
+      double pMax = -1.0;
+      double dK[6];
+      for (int c = 0; c < (1 << nPair); ++c) {
+
+         // Probability of the configuration, factors of the product
+         double f[3];
+         double prob = 1.0;
+         for (int e = 0; e < nPair; ++e) {
+            double se = s[pairI[e]][pairJ[e]];
+            f[e] = ((c >> e) & 1) ? 1.0 - se : se;
+            prob *= f[e];
+         }
+         if (prob == 0.0) continue;
+
+         // Connected components of the nonzero directions (masks)
+         int comp[D];
+         for (int i = 0; i < D; ++i) comp[i] = (1 << i);
+         for (int e = 0; e < nPair; ++e) {
+            if (!((c >> e) & 1)) continue;
+            int merged = comp[pairI[e]] | comp[pairJ[e]];
+            for (int i = 0; i < D; ++i) {
+               if (merged & (1 << i)) comp[i] = merged;
+            }
+         }
+
+         // Blocks: components of Nyquist indices only (averaged over
+         // their sign), and all other directions (rest). A component
+         // of all nonzero indices is not averaged: reversing all of
+         // them is the isometry k -> -k.
+         int rest = (1 << D) - 1;
+         int blocks[D];
+         int nBlock = 0;
+         for (int a = 0; a < nNonzero; ++a) {
+            int m = comp[nonzero[a]];
+            if ((m & nyquistMask) != m) continue;
+            if (m == nonzeroMask) continue;
+            if (!(rest & m)) continue; // already listed
+            blocks[nBlock] = m;
+            ++nBlock;
+            rest &= ~m;
+         }
+
+         // K of this configuration: minimum over the rest, plus the
+         // minimum of each averaged component
+         int list[D + 1];
+         int nList = 0;
+         if (rest) {
+            list[nList] = rest;
+            ++nList;
+         }
+         for (int b = 0; b < nBlock; ++b) {
+            list[nList] = blocks[b];
+            ++nList;
+         }
+         double K = 0.0;
+         if (dksq) {
+            for (int n = 0; n < nParam; ++n) dK[n] = 0.0;
+         }
+         IntVec<D> img(0);
+         for (int b = 0; b < nList; ++b) {
+            int m = list[b];
+            if (!hasBlock[m]) {
+               blockK[m] = blockMinimum<D>(u, d, m, cell, blockR[m],
+                                           dksq ? blockDK[m] : nullptr);
+               hasBlock[m] = true;
+            }
+            K += blockK[m];
+            img += blockR[m];
+            if (dksq) {
+               for (int n = 0; n < nParam; ++n) dK[n] += blockDK[m][n];
+            }
+         }
+         value += prob*K;
+         if (prob > pMax) {
+            pMax = prob;
+            image = img;
+         }
+
+         // Derivatives: prob*dK + K*d(prob)
+         if (dksq) {
+            for (int n = 0; n < nParam; ++n) {
+               double dProb = 0.0;
+               for (int e = 0; e < nPair; ++e) {
+                  double term = ds[pairI[e]][pairJ[e]][n];
+                  if (term == 0.0) continue;
+                  if ((c >> e) & 1) term = -term;
+                  for (int g = 0; g < nPair; ++g) {
+                     if (g != e) term *= f[g];
+                  }
+                  dProb += term;
+               }
+               dksq[n] += prob*dK[n] + K*dProb;
+            }
+         }
+      }
+      return value;
    }
 
    /*
@@ -946,13 +876,6 @@ namespace Pscf {
    template double tiedImageDKSq<3>(FSArray<IntVec<3>, 16> const &,
                                     UnitCell<3> const &, int);
 
-   template double nyquistDecouplingWeight<1>(int, int, 
-                                              UnitCell<1> const &);
-   template double nyquistDecouplingWeight<2>(int, int, 
-                                              UnitCell<2> const &);
-   template double nyquistDecouplingWeight<3>(int, int, 
-                                              UnitCell<3> const &);
-
    template bool usesNyquistAverage<1>(IntVec<1> const &, 
                                        IntVec<1> const &,
                                        UnitCell<1> const &);
@@ -973,40 +896,9 @@ namespace Pscf {
                                  UnitCell<3> const &, double*, 
                                  IntVec<3>&);
 
-   template double ksqNyquist<1>(IntVec<1> const &, IntVec<1> const &,
-                                 UnitCell<1> const &, double*);
-   template double ksqNyquist<2>(IntVec<2> const &, IntVec<2> const &,
-                                 UnitCell<2> const &, double*);
-   template double ksqNyquist<3>(IntVec<3> const &, IntVec<3> const &,
-                                 UnitCell<3> const &, double*);
-
    template bool hasNyquistIndex<1>(IntVec<1> const &, IntVec<1> const &);
    template bool hasNyquistIndex<2>(IntVec<2> const &, IntVec<2> const &);
    template bool hasNyquistIndex<3>(IntVec<3> const &, IntVec<3> const &);
-
-   template double ksqNyquist<1>(IntVec<1> const &, IntVec<1> const &,
-                                 UnitCell<1> const &);
-   template double ksqNyquist<2>(IntVec<2> const &, IntVec<2> const &,
-                                 UnitCell<2> const &);
-   template double ksqNyquist<3>(IntVec<3> const &, IntVec<3> const &,
-                                 UnitCell<3> const &);
-
-   template double dksqNyquist<1>(IntVec<1> const &, IntVec<1> const &,
-                                  UnitCell<1> const &, int);
-   template double dksqNyquist<2>(IntVec<2> const &, IntVec<2> const &,
-                                  UnitCell<2> const &, int);
-   template double dksqNyquist<3>(IntVec<3> const &, IntVec<3> const &,
-                                  UnitCell<3> const &, int);
-
-   template IntVec<1> shiftToMinimumNyquist<1>(IntVec<1> const &,
-                                              IntVec<1> const &,
-                                              UnitCell<1> const &);
-   template IntVec<2> shiftToMinimumNyquist<2>(IntVec<2> const &,
-                                              IntVec<2> const &,
-                                              UnitCell<2> const &);
-   template IntVec<3> shiftToMinimumNyquist<3>(IntVec<3> const &,
-                                              IntVec<3> const &,
-                                              UnitCell<3> const &);
 
    /*
    * Voronoi-relevant vectors of the lattice of image shifts.
