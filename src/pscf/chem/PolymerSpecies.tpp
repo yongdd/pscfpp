@@ -14,6 +14,7 @@
 #include <util/misc/Log.h>
 
 #include <cmath>
+#include <utility>
 #include <vector>
 
 namespace Pscf
@@ -85,12 +86,26 @@ namespace Pscf
       // acyclic graph. With nBlock edges and nBlock + 1 vertices, an
       // acyclic graph is also connected, i.e., a tree. makePlan() would
       // not terminate for a graph with a cycle.
+      //
+      // Union-find: every vertex starts in its own group, and each block
+      // joins the groups of its two vertices; a block whose vertices are
+      // already in one group closes a loop. The search for the root of a
+      // group halves the path to it, and the smaller group is attached to
+      // the larger one, so each block costs nearly constant time.
       int vertexId0, vertexId1;
       {
          std::vector<int> root(nVertex_);
+         std::vector<int> size(nVertex_, 1);
          for (int i = 0; i < nVertex_; ++i) {
             root[i] = i;
          }
+         auto findRoot = [&root](int v) -> int {
+            while (root[v] != v) {
+               root[v] = root[root[v]];
+               v = root[v];
+            }
+            return v;
+         };
          int r0, r1;
          for (int edgeId = 0; edgeId < nBlock_; ++edgeId) {
             vertexId0 = edge(edgeId).vertexId(0);
@@ -102,17 +117,19 @@ namespace Pscf
                            << ", but nVertex = " << nVertex_ << "\n";
                UTIL_THROW("Vertex id out of range in polymer block");
             }
-            r0 = vertexId0;
-            while (root[r0] != r0) r0 = root[r0];
-            r1 = vertexId1;
-            while (root[r1] != r1) r1 = root[r1];
+            r0 = findRoot(vertexId0);
+            r1 = findRoot(vertexId1);
             if (r0 == r1) {
                Log::file() << "Block " << edgeId << " (vertices "
                            << vertexId0 << ", " << vertexId1
                            << ") closes a loop\n";
                UTIL_THROW("Polymer blocks do not form a tree (cycle)");
             }
+            if (size[r0] < size[r1]) {
+               std::swap(r0, r1);
+            }
             root[r1] = r0;
+            size[r0] += size[r1];
          }
       }
 
