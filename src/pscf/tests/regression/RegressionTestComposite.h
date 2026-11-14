@@ -90,6 +90,8 @@
 
 #include "EdgeOutputModeTest.h"
 
+#include "SortEqualValueTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreBasisTest);
 TEST_COMPOSITE_ADD_UNIT(CoreLuSolverTest);
@@ -153,6 +155,7 @@ TEST_COMPOSITE_ADD_UNIT(FieldArchiveRoundTripTest);
 TEST_COMPOSITE_ADD_UNIT(FftwComplexArrayCopyTest);
 #endif
 TEST_COMPOSITE_ADD_UNIT(EdgeOutputModeTest);
+TEST_COMPOSITE_ADD_UNIT(SortEqualValueTest);
 TEST_COMPOSITE_END
 
 #endif
