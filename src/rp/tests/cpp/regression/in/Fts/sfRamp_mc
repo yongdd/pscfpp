@@ -1,0 +1,28 @@
+McSimulator{
+   seed              1784106389
+   McMoveManager{
+      RealMove{
+         probability   1.0
+         sigma         1.0e-7
+      }
+   }
+   LrAmCompressor{
+      epsilon      1.0e-8
+      maxItr       200
+      maxHist      20
+      verbose      0
+   }
+   LinearRamp{
+      nParameter   1
+      parameters[
+         @PARAMETER@
+      ]
+   }
+   AnalyzerManager{
+      baseInterval    1
+      BinaryStructureFactor{
+         interval          1
+         outputFileName    out/FtsStructureFactorRampMc
+      }
+   }
+}

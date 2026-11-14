@@ -18,6 +18,7 @@
 #include "FtsMcSimulatorTest.h"
 #include "FtsPerturbationTest.h"
 #include "FtsStructureFactorTest.h"
+#include "FtsStructureFactorRampTest.h"
 #include "FtsAnalyzePrefixTest.h"
 #include "FtsAnalyzePrefixLogTest.h"
 #include "ScftParamFileEndTest.h"
@@ -107,6 +108,7 @@ TEST_COMPOSITE_ADD_UNIT(FtsCompressorTest);
 TEST_COMPOSITE_ADD_UNIT(FtsMcSimulatorTest);
 TEST_COMPOSITE_ADD_UNIT(FtsPerturbationTest);
 TEST_COMPOSITE_ADD_UNIT(FtsStructureFactorTest);
+TEST_COMPOSITE_ADD_UNIT(FtsStructureFactorRampTest);
 TEST_COMPOSITE_ADD_UNIT(FtsAnalyzePrefixTest);
 TEST_COMPOSITE_ADD_UNIT(FtsAnalyzePrefixLogTest);
 TEST_COMPOSITE_ADD_UNIT(ScftParamFileEndTest);
