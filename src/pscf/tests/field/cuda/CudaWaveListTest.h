@@ -162,8 +162,10 @@ public:
       iter.setDimensions(kMeshDims2);
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimumNyquist(temp, mesh2.dimensions(), cell2);
-         ksq = ksqNyquist(vec, mesh2.dimensions(), cell2);
+         // Averaged Nyquist wavevectors: see CppWaveListTest, GpuNyquistTest
+         if (usesNyquistAverage(temp, mesh2.dimensions(), cell2)) continue;
+         vec = shiftToMinimum(temp, mesh2.dimensions(), cell2);
+         ksq = cell2.ksq(vec);
          
          TEST_ASSERT(vec[0] == minImages_h[iter.rank()]);
          TEST_ASSERT(vec[1] == minImages_h[iter.rank() + kSize2]);
@@ -193,8 +195,8 @@ public:
       iter.setDimensions(kMeshDims3);
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimumNyquist(temp, mesh3.dimensions(), cell3);
-         ksq = ksqNyquist(vec, mesh3.dimensions(), cell3);
+         vec = shiftToMinimum(temp, mesh3.dimensions(), cell3);
+         ksq = cell3.ksq(vec);
 
          TEST_ASSERT(vec[0] == minImages_h[iter.rank()]);
          TEST_ASSERT(vec[1] == minImages_h[iter.rank() + kSize3]);
@@ -365,8 +367,10 @@ public:
       for (int n = 0; n < cell2.nParameter() ; ++n) {
          for (iter.begin(); !iter.atEnd(); ++iter) {
             temp = iter.position();
-            vec = shiftToMinimumNyquist(temp, mesh2.dimensions(), cell2);
-            dksq = dksqNyquist(vec, mesh2.dimensions(), cell2, n);
+            // Averaged Nyquist wavevectors: see CppWaveListTest
+            if (usesNyquistAverage(temp, mesh2.dimensions(), cell2)) continue;
+            vec = shiftToMinimum(temp, mesh2.dimensions(), cell2);
+            dksq = cell2.dksq(vec, n);
             if (temp[1] != 0) {
                if ( mesh2.dimension(1) - temp[1] > mesh2.dimension(1)/2 ) {
                   dksq *= 2.0;
@@ -401,8 +405,8 @@ public:
       for (int n = 0; n < cell3.nParameter() ; ++n) {
          for (iter.begin(); !iter.atEnd(); ++iter) {
             temp = iter.position();
-            vec = shiftToMinimumNyquist(temp, mesh3.dimensions(), cell3);
-            dksq = dksqNyquist(vec, mesh3.dimensions(), cell3, n);
+            vec = shiftToMinimum(temp, mesh3.dimensions(), cell3);
+            dksq = cell3.dksq(vec, n);
             if (temp[2] != 0) {
                if ( mesh3.dimension(2) - temp[2] > mesh3.dimension(2)/2 ) {
                   dksq *= 2.0;
@@ -526,8 +530,8 @@ public:
       iter.setDimensions(mesh3.dimensions());
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimumNyquist(temp, mesh3.dimensions(), cell3);
-         val = ksqNyquist(vec, mesh3.dimensions(), cell3);
+         vec = shiftToMinimum(temp, mesh3.dimensions(), cell3);
+         val = cell3.ksq(vec);
 
          TEST_ASSERT(vec[0] == minImages_h[iter.rank()]);
          TEST_ASSERT(vec[1] == minImages_h[iter.rank() + meshSize]);
@@ -535,7 +539,7 @@ public:
          TEST_ASSERT(abs(val - ksq_h[iter.rank()]) < tolerance_);
 
          for (int n = 0; n < cell3.nParameter(); n++) {
-            val = dksqNyquist(vec, mesh3.dimensions(), cell3, n);
+            val = cell3.dksq(vec, n);
             TEST_ASSERT(abs(val - dksq_h[n][iter.rank()]) < tolerance_);
          }
       }

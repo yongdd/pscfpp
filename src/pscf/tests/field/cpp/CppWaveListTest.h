@@ -15,6 +15,8 @@
 #include <util/containers/DArray.h>
 #include <util/math/Constants.h>
 
+#include <cmath>
+
 using namespace Util;
 using namespace Pscf;
 
@@ -88,6 +90,79 @@ public:
 
    void tearDown()
    {}
+
+   /*
+   * Reference for a 2D wavevector v whose kSq the WaveList averages
+   * over the sign of its Nyquist index (a lattice system with a variable
+   * angle, an index d/2, two nonzero indices; see ksqNyquist).
+   *
+   * Then kSq = (1 - w)*|k(r)|^2 + w*A, where r is the minimum image, A
+   * is the average of |k|^2 of the image u with indices reduced to
+   * (-d/2, d/2] and of u with the sign of a Nyquist index reversed, and
+   * w is a smooth step of the absolute cosine t of the angle between the
+   * reciprocal basis vectors: 1 for t <= 0.1, 0 for t >= 0.25, and
+   * 1 - x^3 (10 - 15x + 6x^2) with x = (t - 0.1)/0.15 between. The
+   * stored image is u if w >= 1/2, r otherwise. If dksq is not null,
+   * dksq[n] is set to the derivative of kSq with respect to cell 
+   * parameter n (without the factor 2 of implicit wavevectors).
+   *
+   * Returns false and sets nothing if w = 0 or if v has no Nyquist
+   * index or a zero index (kSq is then |k|^2 of the minimum image).
+   */
+   bool nyquistReference(IntVec<2> const & v, IntVec<2> const & d,
+                         UnitCell<2> const & cell, IntVec<2>& image,
+                         double& ksq, double* dksq)
+   {
+      // Reduced indices u, and u2 = u with a Nyquist index reversed
+      IntVec<2> u, u2;
+      int nyquist = -1;
+      for (int i = 0; i < 2; ++i) {
+         u[i] = ((v[i] % d[i]) + d[i]) % d[i];
+         if (2*u[i] > d[i]) u[i] -= d[i];
+         if (2*u[i] == d[i]) nyquist = i;
+      }
+      if (nyquist < 0 || u[0] == 0 || u[1] == 0) return false;
+      u2 = u;
+      u2[nyquist] = -u[nyquist];
+
+      // Weight w, and its derivative dw with respect to t
+      double g[2][2];
+      for (int i = 0; i < 2; ++i) {
+         for (int j = 0; j < 2; ++j) {
+            g[i][j] = cell.kBasis(i)[0]*cell.kBasis(j)[0]
+                    + cell.kBasis(i)[1]*cell.kBasis(j)[1];
+         }
+      }
+      double norm = std::sqrt(g[0][0]*g[1][1]);
+      double c = g[0][1]/norm;
+      double t = std::abs(c);
+      if (t >= 0.25) return false;
+      double w = 1.0;
+      double dw = 0.0;
+      if (t > 0.1) {
+         double x = (t - 0.1)/0.15;
+         w = 1.0 - x*x*x*(10.0 - 15.0*x + 6.0*x*x);
+         dw = -30.0*x*x*(1.0 - x)*(1.0 - x)/0.15;
+      }
+
+      IntVec<2> r = shiftToMinimum(v, d, cell);
+      double kMin = cell.ksq(r);
+      double kAverage = 0.5*(cell.ksq(u) + cell.ksq(u2));
+      ksq = (1.0 - w)*kMin + w*kAverage;
+      image = (w >= 0.5) ? u : r;
+      if (dksq) {
+         for (int n = 0; n < cell.nParameter(); ++n) {
+            double dc = cell.dkkBasis(n, 0, 1)/norm
+                      - 0.5*c*( cell.dkkBasis(n, 0, 0)/g[0][0]
+                              + cell.dkkBasis(n, 1, 1)/g[1][1] );
+            double dt = (c < 0.0) ? -dc : dc;
+            dksq[n] = (1.0 - w)*cell.dksq(r, n)
+                    + 0.5*w*(cell.dksq(u, n) + cell.dksq(u2, n))
+                    + (kAverage - kMin)*dw*dt;
+         }
+      }
+      return true;
+   }
 
    void testAllocate()
    {
@@ -176,8 +251,9 @@ public:
       iter.setDimensions(kMeshDims2);
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimumNyquist(temp, mesh2.dimensions(), cell2);
-         val = ksqNyquist(vec, mesh2.dimensions(), cell2);
+         vec = shiftToMinimum(temp, mesh2.dimensions(), cell2);
+         val = cell2.ksq(vec);
+         nyquistReference(temp, mesh2.dimensions(), cell2, vec, val, nullptr);
          
          TEST_ASSERT(vec == minImages[iter.rank()]);
          TEST_ASSERT(abs(val - ksq[iter.rank()]) < tolerance_);
@@ -212,8 +288,8 @@ public:
       iter.setDimensions(kMeshDims3);
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimumNyquist(temp, mesh3.dimensions(), cell3);
-         val = ksqNyquist(vec, mesh3.dimensions(), cell3);
+         vec = shiftToMinimum(temp, mesh3.dimensions(), cell3);
+         val = cell3.ksq(vec);
 
          TEST_ASSERT(vec == minImages[iter.rank()]);
          TEST_ASSERT(abs(val - ksq[iter.rank()]) < tolerance_);
@@ -376,15 +452,19 @@ public:
 
       // compute dKSq locally and compare
       IntVec<2> pos, vec;
-      double val;
+      double val, ksqRef, dksqRef[6];
       MeshIterator<2> iter;
       iter.setDimensions(kMeshDims2);
       for (int n = 0; n < cell2.nParameter() ; ++n) {
          RField<2,CPT> const & dksq = wavelist.dKSq(n);
          for (iter.begin(); !iter.atEnd(); ++iter) {
             pos = iter.position();
-            vec = shiftToMinimumNyquist(pos, mesh2.dimensions(), cell2);
-            val = dksqNyquist(vec, mesh2.dimensions(), cell2, n);
+            vec = shiftToMinimum(pos, mesh2.dimensions(), cell2);
+            val = cell2.dksq(vec, n);
+            if (nyquistReference(pos, mesh2.dimensions(), cell2, vec,
+                                 ksqRef, dksqRef)) {
+               val = dksqRef[n];
+            }
             if (pos[1] != 0) {
                if (mesh2.dimension(1) - pos[1] > mesh2.dimension(1)/2){
                   val *= 2.0;
@@ -412,8 +492,8 @@ public:
          RField<3,CPT> const & dksq = wavelist.dKSq(n);
          for (iter.begin(); !iter.atEnd(); ++iter) {
             pos = iter.position();
-            vec = shiftToMinimumNyquist(pos, mesh3.dimensions(), cell3);
-            val = dksqNyquist(vec, mesh3.dimensions(), cell3, n);
+            vec = shiftToMinimum(pos, mesh3.dimensions(), cell3);
+            val = cell3.dksq(vec, n);
             if (pos[2] != 0) {
                if (mesh3.dimension(2) - pos[2] > mesh3.dimension(2)/2){
                   val *= 2.0;
@@ -528,14 +608,14 @@ public:
       iter.setDimensions(mesh3.dimensions());
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         vec = shiftToMinimumNyquist(temp, mesh3.dimensions(), cell3);
-         val = ksqNyquist(vec, mesh3.dimensions(), cell3);
+         vec = shiftToMinimum(temp, mesh3.dimensions(), cell3);
+         val = cell3.ksq(vec);
 
          TEST_ASSERT(vec == minImages[iter.rank()]);
          TEST_ASSERT(abs(val - ksq[iter.rank()]) < tolerance_);
 
          for (int i = 0; i < cell3.nParameter(); i++) {
-            val = dksqNyquist(vec, mesh3.dimensions(), cell3, i);
+            val = cell3.dksq(vec, i);
             TEST_ASSERT(abs(val - dksq[i][iter.rank()]) < tolerance_);
          }
       }

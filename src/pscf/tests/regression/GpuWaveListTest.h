@@ -5,6 +5,7 @@
 #include <test/UnitTestRunner.h>
 
 #include <pscf/field/cuda/WaveList.h>
+#include <pscf/field/cpp/WaveList.h>
 #include <pscf/backend/cuda/cudaTypes.h>
 #include <pscf/crystal/shiftToMinimum.h>
 #include <pscf/crystal/UnitCell.h>
@@ -48,9 +49,10 @@ public:
 
    /*
    * Compare the device minimum images and kSq with shiftToMinimum and
-   * UnitCell::ksq, for all wavevectors of a mesh (with 
-   * shiftToMinimumNyquist and ksqNyquist for lattice systems with a
-   * variable angle, which differ only for Nyquist wavevectors).
+   * UnitCell::ksq, for all wavevectors of a mesh, except those whose
+   * kSq is averaged over the signs of their Nyquist indices (lattice
+   * systems with a variable angle, see usesNyquistAverage), which are
+   * compared with the image and kSq of the CPU WaveList.
    */
    template <int D>
    void checkMinimumImages(UnitCell<D> const & cell, IntVec<D> const & d)
@@ -68,20 +70,20 @@ public:
       wavelist.computeMinimumImages();
       minImages_h = wavelist.minImages_d();
       ksq_h = wavelist.kSq();
+      WaveList<D,CPT> cpuList;
+      cpuList.allocate(mesh, cell);
+      cpuList.computeMinimumImages();
 
-      // For lattice systems with a variable angle, wavevectors with a
-      // Nyquist index have the image and kSq of shiftToMinimumNyquist
-      // and ksqNyquist (equal to shiftToMinimum and ksq for the others)
-      bool averageNyquist = hasVariableAngle<D>(cell.lattice());
+      bool variableAngle = hasVariableAngle<D>(cell.lattice());
       IntVec<D> temp, vec;
       double ksq;
       MeshIterator<D> iter;
       iter.setDimensions(kDims);
       for (iter.begin(); !iter.atEnd(); ++iter) {
          temp = iter.position();
-         if (averageNyquist) {
-            vec = shiftToMinimumNyquist(temp, d, cell);
-            ksq = ksqNyquist(vec, d, cell);
+         if (variableAngle && usesNyquistAverage(temp, d, cell)) {
+            vec = cpuList.minImages()[iter.rank()];
+            ksq = cpuList.kSq()[iter.rank()];
          } else {
             vec = shiftToMinimum(temp, d, cell);
             ksq = cell.ksq(vec);
