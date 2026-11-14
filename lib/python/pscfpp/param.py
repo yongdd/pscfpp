@@ -948,7 +948,7 @@ class _SymmetricRow(list):
 
 def getValue(v):
 
-   if (v.isdigit() == True) or (v[0] == '-' and v[1:].isdigit() == True):
+   if v.isdigit() or (v[:1] in ('-', '+') and v[1:].isdigit()):
       val = int(v)
    else:
       try:

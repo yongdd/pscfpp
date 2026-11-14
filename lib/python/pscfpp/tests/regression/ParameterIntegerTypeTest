@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Preserve signed integer parameters and native-readable integer tokens."""
+import io
+from pathlib import Path
+import tempfile
+import unittest
+
+from pscfpp.param import Composite, getValue
+
+
+class ParameterIntegerTypeTest(unittest.TestCase):
+    def test_signed_integer_types(self):
+        for token in ('0', '2', '-2', '+0', '-0', '+2', '+002',
+                      '+2147483647', '-2147483648'):
+            with self.subTest(token=token):
+                value = getValue(token)
+                self.assertIs(type(value), int)
+                self.assertEqual(value, int(token))
+
+    def test_scalar_roundtrip(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'param'
+            for token in ('2', '0', '-2', '+2', '+0', '+2147483647'):
+                with self.subTest(token=token):
+                    text = 'value ' + token + '\nmarker 314159\n}\n'
+                    parsed = Composite(io.StringIO(text), label='IntegerParameters')
+                    parsed.write(str(path))
+                    # int() rejects a floating token such as 2.000e+00,
+                    # independently of the PSCF Python parser's inference.
+                    records = path.read_text().splitlines()
+                    self.assertEqual(int(records[1].split()[1]), int(token))
+                    restored = Composite(str(path))
+                    self.assertIs(type(restored.value), int)
+                    self.assertEqual(restored.value, int(token))
+                    self.assertEqual(restored.marker, 314159)
+
+    def test_lists_and_arrays(self):
+        text = ('mesh +2 +3 +4\ncounts[\n+2\n+0\n-3\n]\n}\n')
+        parsed = Composite(io.StringIO(text), label='IntegerParameters')
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'param'
+            parsed.write(str(path))
+            restored = Composite(str(path))
+        self.assertEqual(restored.mesh, [2, 3, 4])
+        self.assertEqual(restored.counts, [2, 0, -3])
+        self.assertTrue(all(type(x) is int for x in restored.mesh + restored.counts))
+
+    def test_float_and_string_controls(self):
+        for token in ('2.0', '+2e0', '-.25', '1e-100'):
+            self.assertIs(type(getValue(token)), float)
+            self.assertEqual(getValue(token), float(token))
+        for token in ('linear', 'I', '+', '-', ''):
+            self.assertEqual(getValue(token), token)
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
