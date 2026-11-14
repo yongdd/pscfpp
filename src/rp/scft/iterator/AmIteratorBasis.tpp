@@ -234,30 +234,33 @@ namespace Rp {
 
    /*
    * Normalize by P(w-h) + mask/sum(chi^-1), the field term compared
-   * with chi*c in the residual. P annihilates common pressure offsets.
-   * Keep the actual open-ensemble state and Anderson history unchanged.
+   * with chi*c in the residual, in every ensemble. P annihilates common
+   * pressure fields, uniform or not: the residual depends on them only
+   * through c, and a diverging iteration can make them arbitrarily
+   * large. Keep the actual state and Anderson history unchanged.
    */
    template <int D, class T>
    double AmIteratorBasis<D,T>::relNormReference(VectorT const & state)
    {
-      if (system().mixture().isCanonical()) {
-         return AmIterTmplT::relNormReference(state);
-      }
       const int nm = system().mixture().nMonomer();
       const int nb = system().domain().basis().nBasis();
       const bool hasH = system().h().hasData();
+      // The homogeneous components of a canonical state are chi<c>,
+      // without <h> (see getCurrent): subtract h only for k > 0.
+      const int hBegin = system().mixture().isCanonical() ? 1 : 0;
       const double shift = 1.0 / interaction_.sumChiInverse();
       double square = 0.0;
       for (int k = 0; k < nb; ++k) {
+         const bool subtractH = hasH && k >= hBegin;
          double anchor = state[(nm-1)*nb + k];
-         if (hasH) anchor -= system().h().basis(nm-1)[k];
+         if (subtractH) anchor -= system().h().basis(nm-1)[k];
          const double mask = system().mask().hasData()
                            ? system().mask().basis()[k] : (k == 0 ? 1.0 : 0.0);
          for (int i = 0; i < nm; ++i) {
             double value = shift*mask;
             for (int j = 0; j < nm; ++j) {
                double effective = state[j*nb + k];
-               if (hasH) effective -= system().h().basis(j)[k];
+               if (subtractH) effective -= system().h().basis(j)[k];
                // Subtract before projection to avoid cancellation of
                // large common pressure terms in the matrix product.
                value += interaction_.p(i,j)*(effective-anchor);

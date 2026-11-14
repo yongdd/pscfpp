@@ -157,6 +157,28 @@ density times the monomer reference volume) in units in which
 \f$ kT = 1 \f$, while \f$S\f$ is an arbitrary prefactor whose value is 
 given by the parameter scaleStress, which is set to 10.0 by default.
 
+\section rp_AmIteratorGrid_relNorm_sec Reference field of the relNorm error
+
+If errorType == relNorm (the default), the scalar error is the ratio
+\f$ |{\bf R}|/|{\bf Q}| \f$ of the L2 norms of the residual vector and
+of a reference vector \f$ {\bf Q} \f$, defined as for
+\ref rp_AmIteratorBasis_relNorm_sec "AmIteratorBasis", with values at
+grid points instead of basis function components:
+\f[
+  Q_{i}({\bf r}) = \sum_{j=0}^{N_{\rm m}-1} P_{ij}
+                   \left ( w_{j}({\bf r}) - h_{j}({\bf r}) \right )
+                 + \frac{m({\bf r})}{\epsilon^{T}\chi^{-1}\epsilon}
+  \quad,
+\f]
+where \f$ h_{j} \f$ is the external field of monomer type j and
+\f$ m \f$ is the mask (1 everywhere if there is no mask). This field
+is equal to the interaction field at a solution, and does not depend on
+a common (pressure-like) part of the w fields, which enters the
+residual only through the volume fractions. In a closed system, the
+spatial averages of \f$ w_{j} - h_{j} \f$ are replaced by
+\f$ \sum_{k} \chi_{jk}\bar{\phi}_{k} \f$, where
+\f$ \bar{\phi}_{k} \f$ is the average volume fraction of type k.
+
 */
 
 }

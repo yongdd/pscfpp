@@ -239,19 +239,29 @@ namespace Rp {
    }
 
    /*
-   * The reference P(w-h) + mask/sum(chi^-1) excludes arbitrary external
-   * and common pressure offsets without changing physical fields/history.
+   * The reference P(w-h) + mask/sum(chi^-1), in every ensemble, excludes
+   * external fields and common pressure fields, uniform or not, without
+   * changing physical fields/history. The residual depends on a common
+   * pressure field only through c, and a diverging iteration can make
+   * it arbitrarily large.
    */
    template <int D, class T>
    double AmIteratorGrid<D,T>::relNormReference(VectorT const & state)
    {
-      if (system().mixture().isCanonical()) {
-         return AmIterTmplT::relNormReference(state);
-      }
       const int nm = system().mixture().nMonomer();
       const int nx = system().domain().mesh().size();
       const bool hasH = system().h().hasData();
       const RealT shift = 1.0 / interaction_.sumChiInverse();
+      // The mean of a canonical state is chi<c>, without <h> (see
+      // getCurrent): subtract only h - <h> in this case.
+      DArray<RealT> hMean;
+      hMean.allocate(nm);
+      for (int j = 0; j < nm; ++j) {
+         hMean[j] = 0.0;
+         if (hasH && system().mixture().isCanonical()) {
+            hMean[j] = Reduce::sum(system().h().rgrid(j)) / RealT(nx);
+         }
+      }
       if (referenceWork_.isAllocated()
           && referenceWork_.capacity() != state.capacity()) {
          referenceWork_.deallocate();
@@ -268,7 +278,10 @@ namespace Rp {
       // Retain any scaled lattice-parameter entries at the end.
       VecOp::eqV(referenceWork_, state);
       VecOp::eqV(anchorWork_, state, 0, (nm-1)*nx, nx);
-      if (hasH) VecOp::subEqV(anchorWork_, system().h().rgrid(nm-1));
+      if (hasH) {
+         VecOp::subEqV(anchorWork_, system().h().rgrid(nm-1));
+         VecOp::addEqS(anchorWork_, hMean[nm-1]);
+      }
       VectorT slice;
       for (int i = 0; i < nm; ++i) {
          slice.associate(referenceWork_, i*nx, nx);
@@ -280,7 +293,10 @@ namespace Rp {
          }
          for (int j = 0; j < nm; ++j) {
             VecOp::eqV(effectiveFieldWork_, state, 0, j*nx, nx);
-            if (hasH) VecOp::subEqV(effectiveFieldWork_, system().h().rgrid(j));
+            if (hasH) {
+               VecOp::subEqV(effectiveFieldWork_, system().h().rgrid(j));
+               VecOp::addEqS(effectiveFieldWork_, hMean[j]);
+            }
             VecOp::subEqV(effectiveFieldWork_, anchorWork_);
             VecOp::addEqVc(slice, effectiveFieldWork_, interaction_.p(i,j));
          }

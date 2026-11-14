@@ -259,10 +259,11 @@ string parameter named "errorType":
     vanishes). Classes whose state vector is not a field, such as the
     compressors used in field theoretic simulations, divide by the
     norm of another reference vector, as described on their pages.
-    The 1D iterator (\ref r1_AmIterator_page "R1::AmIterator") divides
-    by the norm of a reference field that excludes the pressure-like
-    part of the w fields and is equal to the interaction field at a
-    solution.
+    The SCFT iterators (\ref r1_AmIterator_page "R1::AmIterator",
+    \ref rp_AmIteratorBasis_page "AmIteratorBasis" and
+    \ref rp_AmIteratorGrid_page "AmIteratorGrid") divide by the norm
+    of a reference field that excludes the pressure-like part of the
+    w fields and is equal to the interaction field at a solution.
 
 An iteration algorithm successfully converges if it terminates with
 \f$ e({\bf R}) < \epsilon \f$ in fewer than the maximum allowed number

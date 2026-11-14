@@ -205,6 +205,35 @@ which \f$ kT = 1 \f$, while \f$S\f$ is an arbitrary prefactor
 whose value is given by the parameter scaleStress. (The factor
 \f$S\f$ is set to 10.0 by default).
 
+\section rp_AmIteratorBasis_relNorm_sec Reference field of the relNorm error
+
+If errorType == relNorm (the default), the scalar error is the ratio
+\f$ |{\bf R}|/|{\bf Q}| \f$ of the L2 norms of the residual vector and
+of a reference vector \f$ {\bf Q} \f$. The field elements of
+\f$ {\bf Q} \f$ are the components of the field
+\f[
+  Q_{ai} = \sum_{j=0}^{N_{m}-1} P_{ij}(w_{aj} - h_{aj})
+         + \frac{m_{a}}{\epsilon^{T}\chi^{-1}\epsilon}
+  \quad,
+\f]
+in which \f$ h_{aj} \f$ and \f$ m_{a} \f$ are the components of the
+external field of monomer type j and of the mask (\f$ m_{a} \f$ is 1
+for a = 0 and 0 otherwise if there is no mask). This is the field that
+the residual (with any external field and mask) compares with the
+interaction field \f$ \sum_{j} \chi_{ij}\phi_{aj} \f$, to which it is
+equal at a solution. If the unit cell is flexible, \f$ {\bf Q} \f$
+also contains the scaled flexible unit cell parameters, as the state
+vector does. Because \f$ P\epsilon = 0 \f$, \f$ {\bf Q} \f$ does not
+depend on a field added to the w fields of all monomer types, which
+plays the role of a pressure field and enters the residual only through
+the volume fractions. A ratio to the norm of the w fields could fall
+below epsilon at a state that is far from a solution if this part
+diverges. In a closed system, the homogeneous components
+\f$ w_{0j} - h_{0j} \f$ are replaced by
+\f$ \sum_{k} \chi_{jk}\phi_{0k} \f$, their values in the convention
+described below, so that \f$ {\bf Q} \f$ does not depend on constant
+offsets of the input fields.
+
 \section rp_AmIteratorBasis_closed_sec Closed systems (canonical ensemble)
 
 A slight modification of the residual definition is required in the case 
