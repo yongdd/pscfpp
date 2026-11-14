@@ -454,6 +454,17 @@ namespace Pscf {
                         DArray<double> coeffs);
 
       /**
+      * Call evaluate(), and report a NanException as a failure.
+      *
+      * A NanException thrown by evaluate() (e.g., by a solver whose
+      * result is not representable) is caught and logged, and is
+      * treated by solve() as a failure to converge, like a NaN error.
+      *
+      * \return true if evaluate() returned normally, false otherwise
+      */
+      bool tryEvaluate();
+
+      /**
       * Norm of a residual relative to relNormReference(state).
       *
       * Returns 0 if normRes is 0 (an exact solution), also if the

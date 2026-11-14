@@ -15,6 +15,7 @@
 #include <pscf/backend/Reduce.h>
 #include <pscf/solvers/PolymerTmpl.tpp>
 #include <pscf/chem/PolymerModel.h>
+#include <pscf/iterator/NanException.h>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -115,7 +116,10 @@ namespace Rp {
          }
          if (!(qShifted() >= 1.0/qLimit && qShifted() <= qLimit)
              || !std::isfinite(PolymerTmplT::lnQ()) || !std::isfinite(phi())) {
-            UTIL_THROW("Bead polymer normalization exceeds floating-point range");
+            // A NanException: iterators treat it as a failed solve
+            throw NanException(UTIL_FUNC,
+                  "Bead polymer normalization exceeds floating-point range",
+                  __FILE__, __LINE__);
          }
       }
 
@@ -139,7 +143,9 @@ namespace Rp {
             }
             Block<D,T> const& current = block(i);
             if (!std::isfinite(Reduce::sum(current.cField()))) {
-               UTIL_THROW("Bead polymer concentration exceeds floating-point range");
+               throw NanException(UTIL_FUNC,
+                     "Bead polymer concentration exceeds floating-point range",
+                     __FILE__, __LINE__);
             }
          }
       }
@@ -164,7 +170,9 @@ namespace Rp {
       } else {
          prefactor = phi() / qShifted() / (double)nBead();
          if (!std::isfinite(prefactor)) {
-            UTIL_THROW("Bead polymer stress normalization exceeds floating-point range");
+            throw NanException(UTIL_FUNC,
+               "Bead polymer stress normalization exceeds floating-point range",
+               __FILE__, __LINE__);
          }
          for (int i = 0; i < nBlock(); ++i) {
             block(i).computeStressBead(prefactor);
@@ -182,7 +190,9 @@ namespace Rp {
          for (int j = 0; j < nParam_; ++j){
             stress_[j] += block(i).stress(j);
             if (PolymerModel::isBead() && !std::isfinite(stress_[j])) {
-               UTIL_THROW("Bead polymer stress exceeds floating-point range");
+               throw NanException(UTIL_FUNC,
+                     "Bead polymer stress exceeds floating-point range",
+                     __FILE__, __LINE__);
             }
          }
       }

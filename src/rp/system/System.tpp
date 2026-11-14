@@ -1042,12 +1042,14 @@ namespace Rp {
          }
       }
 
-      // Call iterator (return 0 for convergence, 1 for failure)
+      // Call iterator (return 0 for convergence, 1 for failure). After
+      // a failure, c fields may be missing (if a solver result was not
+      // representable) or not finite.
       int error = iterator().solve(isContinuation);
-      UTIL_CHECK(c().hasData());
 
       // If converged, compute related thermodynamic properties
       if (!error) {
+         UTIL_CHECK(c().hasData());
          scft().compute();
          scft().write(Log::file());
          if (!iterator().isFlexible()) {

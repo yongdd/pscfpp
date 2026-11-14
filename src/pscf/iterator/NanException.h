@@ -22,10 +22,13 @@ namespace Pscf {
    * value of NaN. This may happen, for instance, as a result of dividing
    * by zero. A NanException is used rather than a generic Exception in 
    * these instances so that the NanException can be caught by a try-catch
-   * block.
+   * block. It is also thrown, with a specific message, when a solver
+   * result is not representable in floating point. Iterators catch it
+   * and report a failure to converge, as for a NaN error.
    * 
    * A NanException behaves identically to a generic Exception, but with a
-   * pre-defined error message rather than a user-specified message. There 
+   * pre-defined error message rather than a user-specified message (except
+   * for the constructor with a message parameter). There 
    * is no preprocessor macro to throw a NanException, so they must be thrown
    * using the constructor. This will typically assume the following syntax,
    * where values of the file and line parameters are given by the built-in 
@@ -64,6 +67,21 @@ namespace Pscf {
       * \param echo     if echo, then echo to std out when constructed. 
       */
       NanException(const char *file, int line, int echo = 1);
+
+      /**
+      * Constructor with a specific message.
+      *
+      * Used for a result that is not finite or not representable, for
+      * which the message describes the quantity.
+      *
+      * \param function name of the function from which the Exception was thrown
+      * \param message  message describing the nature of the error
+      * \param file     name of the file from which the Exception was thrown
+      * \param line     line number in file
+      * \param echo     if echo, then echo to Log::file() when constructed. 
+      */
+      NanException(const char *function, const char *message,
+                   const char *file, int line, int echo = 1);
 
       /**
       * Destructor

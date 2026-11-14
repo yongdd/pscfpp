@@ -171,16 +171,13 @@ namespace Rp {
       timerTotal_.start();
 
       // Solve MDE
-      timerMDE_.start();
-      system().compute();
-      ++Compressor<D,T>::mdeCounter_;
-      timerMDE_.stop();
+      bool isComputed = tryCompute();
 
       // Intramolecular correlation for the current parameters and cell
-      updateIntraCorrelation();
+      if (isComputed) updateIntraCorrelation();
 
-      // Iterative loop
-      for (itr_ = 0; itr_ < maxItr_; ++itr_) {
+      // Iterative loop (exits after a failed MDE solution)
+      for (itr_ = 0; isComputed && itr_ < maxItr_; ++itr_) {
 
          if (verbose_ > 2) {
             Log::file() << "------------------------------- \n";
@@ -228,24 +225,41 @@ namespace Rp {
 
             // Not yet converged.
             updateWFields();
-            timerMDE_.start();
-            system().compute();
-            ++Compressor<D,T>::mdeCounter_;
-            timerMDE_.stop();
+            isComputed = tryCompute();
 
             // Refresh the correlation if open-species phi changed
-            updateIntraCorrelation();
+            if (isComputed) updateIntraCorrelation();
 
          }
 
       }
 
       // Failure: Iteration counter itr reached maxItr without converging
-      // or if loop breaks because of NaN error
+      // or if loop breaks because of NaN error or a failed MDE solution
 
       timerTotal_.stop();
       Log::file() << "Iterator failed to converge.\n";
       return 1;
+   }
+
+   /*
+   * Solve the MDE, catching a NanException.
+   */
+   template <int D, class T>
+   bool LrCompressor<D,T>::tryCompute()
+   {
+      timerMDE_.start();
+      try {
+         system().compute();
+      } catch (NanException const &) {
+         // The exception has written its message to the log file.
+         // Stop the timer, so that a later compress can restart it.
+         timerMDE_.stop();
+         return false;
+      }
+      ++Compressor<D,T>::mdeCounter_;
+      timerMDE_.stop();
+      return true;
    }
 
    /*

@@ -108,15 +108,17 @@ namespace Rp {
       // Call compressor to modify pressure-like fields
       compressorTimer_.start();
       int compress = simulator().compressor().compress();
-      UTIL_CHECK(system().c().hasData()); 
       compressorTimer_.stop();
 
+      // A failed compressor need not leave c fields (e.g., after a
+      // solver result that is not representable)
       bool isConverged = false;
       if (compress != 0){
          incrementNFail();
          simulator().restoreState();
       } else {
          isConverged = true;
+         UTIL_CHECK(system().c().hasData()); 
 
          // Compute eigenvector components of the current fields
          componentTimer_.start();

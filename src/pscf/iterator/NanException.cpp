@@ -31,6 +31,14 @@ namespace Pscf
    {}
 
    /*
+   * Constructor, with function name and a specific message.
+   */
+   NanException::NanException(const char *function, const char *message,
+                              const char *file, int line, int echo) 
+    : Exception(function, message, file, line, echo)
+   {}
+
+   /*
    * Destructor.
    */
    NanException::~NanException()

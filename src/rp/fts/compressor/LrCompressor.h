@@ -181,6 +181,17 @@ namespace Rp {
       // Private member functions
 
       /**
+      * Solve the MDE, and report a NanException as a failure.
+      *
+      * A NanException thrown by the solver (a result that is not
+      * representable) is caught and logged, and is treated by
+      * compress() as a failure to converge, like a NaN error.
+      *
+      * \return true if the MDE was solved, false otherwise
+      */
+      bool tryCompute();
+
+      /**
       * Compute the residual vector.
       */
       void computeResidual();

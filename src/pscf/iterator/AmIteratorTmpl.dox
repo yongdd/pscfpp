@@ -270,6 +270,12 @@ of iterations.  The choice of an appopriate value for the error
 threshhold \f$ \epsilon \f$ (or "epsilon") may depends on both the way 
 that the residual vector is defined and the choice of an error type.
 
+The loop also ends with a failure to converge if the error is NaN, or
+if the computation for a trial state gives a result that is not
+representable (e.g., a partition function beyond the floating-point
+range). A command or sweep that calls the iterator can then handle the
+failure, e.g., by trying a smaller sweep step.
+
 \section pscf_AmIteratorTmpl_Param_sec Algorithmic parameters
 
 The parameter file formats for Iterator and compressor classes that 

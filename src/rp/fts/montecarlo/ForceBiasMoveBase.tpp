@@ -168,9 +168,10 @@ namespace Rp {
       // Call compressor
       McMove<D,T>::compressorTimer_.start();
       int compress = simulator().compressor().compress();
-      UTIL_CHECK(system().c().hasData());
       McMove<D,T>::compressorTimer_.stop();
 
+      // A failed compressor need not leave c fields (e.g., after a
+      // solver result that is not representable)
       bool isConverged = false;
       if (compress != 0){
          McMove<D,T>::incrementNFail();

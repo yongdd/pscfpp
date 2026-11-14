@@ -102,13 +102,11 @@ namespace Pscf
       timerTotal_.start();
 
       // Solve MDE for initial state
-      timerMDE_.start();
-      evaluate();
-      timerMDE_.stop();
+      bool isEvaluated = tryEvaluate();
 
-      // Iterative loop
+      // Iterative loop (exits after a failed evaluation)
       nBasis_ = stateBasis_.size();
-      for (itr_ = 0; itr_ < maxItr_; ++itr_) {
+      for (itr_ = 0; isEvaluated && itr_ < maxItr_; ++itr_) {
 
          // Append current state to stateHistory_ ringbuffer
          getCurrent(temp_);
@@ -217,15 +215,13 @@ namespace Pscf
 
             // Perform the main calculation of the parent system -
             // Solve MDEs, compute phi's, compute stress if needed
-            timerMDE_.start();
-            evaluate();
-            timerMDE_.stop();
+            isEvaluated = tryEvaluate();
          }
 
       }
 
       // Failure: Counter itr_ reached maxItr_ without converging,
-      // or loop was exited because of NaN error
+      // or loop was exited because of NaN error or a failed evaluation
 
       // Discard the history and basis vectors of the failed solve. A
       // caller that retries (e.g., a sweep that backtracks with
@@ -766,6 +762,25 @@ namespace Pscf
       }
 
       return error;
+   }
+
+   /*
+   * Evaluate the current state, catching a NanException.
+   */
+   template <class Iterator, class T>
+   bool AmIteratorTmpl<Iterator,T>::tryEvaluate()
+   {
+      timerMDE_.start();
+      try {
+         evaluate();
+      } catch (NanException const &) {
+         // The exception has written its message to the log file.
+         // Stop the timer, so that a later solve can restart it.
+         timerMDE_.stop();
+         return false;
+      }
+      timerMDE_.stop();
+      return true;
    }
 
    /*
