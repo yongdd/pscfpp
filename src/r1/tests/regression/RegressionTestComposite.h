@@ -33,6 +33,8 @@
 
 #include "SolventNormalizationTest.h"
 
+#include "DomainDefaultModeTest.h"
+
 TEST_COMPOSITE_BEGIN(RegressionTestComposite)
 TEST_COMPOSITE_ADD_UNIT(CoreMixtureTest);
 TEST_COMPOSITE_ADD_UNIT(R1IteratorTest);
@@ -54,6 +56,7 @@ TEST_COMPOSITE_ADD_UNIT(DerivedOutputValidityTest);
 TEST_COMPOSITE_ADD_UNIT(MeshTransformBoundsTest);
 TEST_COMPOSITE_ADD_UNIT(DomainResizeTest);
 TEST_COMPOSITE_ADD_UNIT(SolventNormalizationTest);
+TEST_COMPOSITE_ADD_UNIT(DomainDefaultModeTest);
 TEST_COMPOSITE_END
 
 #endif
