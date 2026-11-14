@@ -305,8 +305,9 @@ namespace Rp {
       UTIL_CHECK(Gsq_.capacity() == kSize_);
 
       // Compute Gsq_, equal to kSq of the WaveList used by the MDE
-      // solver: for a wavevector with a Nyquist index, averaged over
-      // the signs of the Nyquist indices if the WaveList does so (see
+      // solver: for a wavevector with a Nyquist index, ksqNyquist (an
+      // average over the signs of the Nyquist indices near orthogonal
+      // geometries) if the WaveList uses it (see 
       // WaveList::allowNyquistAverage), otherwise |k|^2 of the minimum
       // image.
       UnitCell<D> const & unitCell = system().domain().unitCell();
@@ -318,8 +319,7 @@ namespace Rp {
       for (iter.begin(); !iter.atEnd(); ++iter) {
          G = iter.position();
          if (averageNyquist && hasNyquistIndex(G, meshDimensions_)) {
-            Gmin = shiftToMinimumNyquist(G, meshDimensions_, unitCell);
-            Gsq_[iter.rank()] = ksqNyquist(Gmin, meshDimensions_, unitCell);
+            Gsq_[iter.rank()] = ksqNyquist(G, meshDimensions_, unitCell);
          } else {
             Gmin = shiftToMinimum(G, meshDimensions_, unitCell);
             Gsq_[iter.rank()] = unitCell.ksq(Gmin);

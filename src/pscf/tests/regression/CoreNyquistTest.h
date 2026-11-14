@@ -27,10 +27,11 @@ using namespace Pscf;
 * Wavevectors with Nyquist indices (even meshes) in the CPU WaveList.
 *
 * For lattice systems with a variable angle, kSq of such a wavevector
-* is |k|^2 averaged over the signs of its Nyquist indices, so that kSq
-* and the free energy are smooth where an angle passes through 90
-* degrees, and dKSq is the derivative of kSq. Other lattice systems
-* keep the minimum-image |k|^2.
+* is |k|^2 averaged over the signs of its Nyquist indices near 
+* orthogonal geometries, so that kSq and the free energy are smooth 
+* where an angle passes through 90 degrees, and the minimum-image |k|^2
+* far from them (see ksqNyquist); dKSq is the derivative of kSq. Other
+* lattice systems keep the minimum-image |k|^2.
 */
 class CoreNyquistTest : public UnitTest
 {
@@ -67,35 +68,6 @@ public:
       int r = u % n;
       if (r < 0) r += n;
       return (2*r == n);
-   }
-
-   /*
-   * |k|^2 averaged over the 2^m images obtained by reversing the signs
-   * of any subset of the m Nyquist indices of u (reference value, 
-   * computed directly from this definition).
-   */
-   template <int D>
-   double averagedKSq(IntVec<D> const & u, IntVec<D> const & d,
-                      UnitCell<D> const & cell)
-   {
-      int nyquist[D];
-      int m = 0;
-      for (int i = 0; i < D; ++i) {
-         if (isNyquist(u[i], d[i])) {
-            nyquist[m] = i;
-            ++m;
-         }
-      }
-      double sum = 0.0;
-      int nImage = 1 << m;
-      for (int s = 0; s < nImage; ++s) {
-         IntVec<D> w = u;
-         for (int j = 0; j < m; ++j) {
-            if (s & (1 << j)) w[nyquist[j]] = -w[nyquist[j]];
-         }
-         sum += cell.ksq(w);
-      }
-      return sum/double(nImage);
    }
 
    /*
@@ -279,9 +251,12 @@ public:
 
    /*
    * Skewed cells: dKSq equals the finite difference of kSq, except at
-   * image switches, and the stored images and kSq are those that
-   * minimize the average over the signs of the Nyquist indices (checked
-   * by a search over many images).
+   * image switches, and kSq is the minimum over images of |k|^2 
+   * averaged over the sign reversals of the components of Nyquist
+   * indices that are decoupled from the other nonzero indices (see
+   * ksqNyquist), e.g. the index normal to the others in the monoclinic
+   * cell, otherwise the minimum-image |k|^2 (checked by a search over 
+   * many images).
    */
    void testSkewedCells()
    {
@@ -318,10 +293,86 @@ public:
    }
 
    /*
-   * Search over images v + s*d with |s[i]| <= 3: the WaveList kSq is
-   * the minimum of |k|^2 averaged over the signs of the Nyquist indices
-   * (the minimum |k|^2 for waves without a Nyquist index), and equal to
-   * the value of the stored image.
+   * |k|^2 of u averaged over the reversals of the signs of the indices
+   * of the components comps[c] (bit masks of directions; all indices of
+   * a component are reversed together).
+   */
+   template <int D>
+   double groupAveragedKSq(IntVec<D> const & u, int const * comps, 
+                           int nComp, UnitCell<D> const & cell)
+   {
+      double sum = 0.0;
+      int nImage = 1 << nComp;
+      for (int s = 0; s < nImage; ++s) {
+         IntVec<D> w = u;
+         for (int c = 0; c < nComp; ++c) {
+            if (!(s & (1 << c))) continue;
+            for (int i = 0; i < D; ++i) {
+               if (comps[c] & (1 << i)) w[i] = -w[i];
+            }
+         }
+         sum += cell.ksq(w);
+      }
+      return sum/double(nImage);
+   }
+
+   /*
+   * Components averaged by ksqNyquist, for a cell whose decoupling 
+   * weights (nyquistDecouplingWeight) are all 0 or 1: the connected
+   * components of the directions of nonzero indices of v, with the 
+   * pairs of weight 0 as edges, whose indices are all Nyquist indices,
+   * except a component of all nonzero indices. Returns their number and
+   * sets their bit masks in comps.
+   */
+   template <int D>
+   int averagedComponents(IntVec<D> const & v, IntVec<D> const & d,
+                          UnitCell<D> const & cell, int* comps)
+   {
+      int comp[D];
+      for (int i = 0; i < D; ++i) comp[i] = (1 << i);
+      for (int i = 0; i < D; ++i) {
+         if (v[i] % d[i] == 0) continue;
+         for (int j = i + 1; j < D; ++j) {
+            if (v[j] % d[j] == 0) continue;
+            double w = nyquistDecouplingWeight<D>(i, j, cell);
+            TEST_ASSERT(w == 0.0 || w == 1.0);
+            if (w == 0.0) {
+               int merged = comp[i] | comp[j];
+               for (int k = 0; k < D; ++k) {
+                  if (merged & (1 << k)) comp[k] = merged;
+               }
+            }
+         }
+      }
+      int nonzero = 0;
+      for (int i = 0; i < D; ++i) {
+         if (v[i] % d[i] != 0) nonzero |= (1 << i);
+      }
+      int nComp = 0;
+      int listed = 0;
+      for (int i = 0; i < D; ++i) {
+         if (v[i] % d[i] == 0 || (listed & comp[i])) continue;
+         bool allNyquist = (comp[i] != nonzero);
+         for (int k = 0; k < D; ++k) {
+            if ((comp[i] & (1 << k)) && !isNyquist(v[k], d[k])) {
+               allNyquist = false;
+            }
+         }
+         listed |= comp[i];
+         if (allNyquist) {
+            comps[nComp] = comp[i];
+            ++nComp;
+         }
+      }
+      return nComp;
+   }
+
+   /*
+   * Search over images v + s*d with |s[i]| <= 3, for a cell whose
+   * decoupling weights are 0 or 1: the WaveList kSq is the minimum of
+   * |k|^2 averaged over the sign reversals of the averaged components
+   * (the minimum |k|^2 for waves without a Nyquist index), and equal 
+   * to the value of the stored image.
    */
    template <int D>
    void checkSearch(UnitCell<D> const & cell, IntVec<D> const & d)
@@ -338,14 +389,19 @@ public:
          for (int i = 0; i < D; ++i) {
             if (isNyquist(v[i], d[i])) hasNyquist = true;
          }
-         if (hasNyquist) ++nNyquist;
+         int comps[D];
+         int nComp = 0;
+         if (hasNyquist) {
+            ++nNyquist;
+            nComp = averagedComponents<D>(v, d, cell, comps);
+         }
          double best = -1.0;
          IntVec<D> s(-3);
          bool done = false;
          while (!done) {
             IntVec<D> u;
             for (int i = 0; i < D; ++i) u[i] = v[i] + s[i]*d[i];
-            double g = averagedKSq<D>(u, d, cell);
+            double g = groupAveragedKSq<D>(u, comps, nComp, cell);
             if (best < 0.0 || g < best) best = g;
             // Next shift vector
             int i = 0;
@@ -363,7 +419,7 @@ public:
          double kSq = waveList.kSq()[rank];
          TEST_ASSERT(std::abs(kSq - best) < 1.0E-10*(1.0 + best));
          IntVec<D> const & image = waveList.minImages()[rank];
-         double g = averagedKSq<D>(image, d, cell);
+         double g = groupAveragedKSq<D>(image, comps, nComp, cell);
          TEST_ASSERT(std::abs(kSq - g) < 1.0E-10*(1.0 + best));
          for (int i = 0; i < D; ++i) {
             TEST_ASSERT((image[i] - v[i]) % d[i] == 0);

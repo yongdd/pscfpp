@@ -65,14 +65,18 @@ namespace Pscf {
    * thus must be recalculated before the next use.
    *
    * Nyquist planes: for a lattice system with a variable angle, kSq of a
-   * wavevector with a Nyquist index is the average of |k|^2 over the 
-   * images that differ only in the signs of the Nyquist indices, and its
-   * stored image is the one that minimizes this average, as in the CPU 
-   * class WaveList<D,CPT> (see its documentation). These images are 
-   * computed on the host (shiftToMinimumNyquist) and copied to the 
-   * device. The average is not used if it has been forbidden by
-   * allowNyquistAverage(false), as is done for space groups with 3- or
-   * 6-fold rotations in a hexagonal setting (see allowNyquistAverage).
+   * wavevector with a Nyquist index is given by ksqNyquist (an average
+   * over the signs of the Nyquist indices near orthogonal geometries, 
+   * the minimum-image |k|^2 far from them), and its stored image by 
+   * shiftToMinimumNyquist, as in the CPU class WaveList<D,CPT> (see its
+   * documentation). For wavevectors for which ksqNyquist averages 
+   * |k|^2 (see usesNyquistAverage), these images, kSq and dKSq are
+   * computed on the host, once per cell, and copied to the device; for
+   * all others ksqNyquist is the minimum-image |k|^2, computed by the 
+   * kernels. The average is not used if it has been
+   * forbidden by allowNyquistAverage(false), as is done for space groups
+   * with 3- or 6-fold rotations in a hexagonal setting (see 
+   * allowNyquistAverage).
    *
    * \ingroup Pscf_Field_Cuda_Module
    */
@@ -124,12 +128,13 @@ namespace Pscf {
       * Allow or forbid averaging kSq over the signs of Nyquist indices.
       *
       * By default, kSq of a wavevector with a Nyquist index is averaged
-      * over the signs of its Nyquist indices if the lattice system has a
-      * variable angle. The average is invariant only under symmetry
-      * operations whose rotation matrices are signed permutations; the
-      * owner of a space group with other operations should therefore
-      * forbid it. kSq is then the minimum-image |k|^2 for all
-      * wavevectors. See WaveList<D,CPT>::allowNyquistAverage.
+      * over the signs of its Nyquist indices near orthogonal geometries
+      * if the lattice system has a variable angle (see ksqNyquist). The
+      * average is invariant only under symmetry operations whose 
+      * rotation matrices are signed permutations; the owner of a space 
+      * group with other operations should therefore forbid it. kSq is 
+      * then the minimum-image |k|^2 for all wavevectors. See 
+      * WaveList<D,CPT>::allowNyquistAverage.
       *
       * If this changes whether kSq is averaged, minimum images, kSq,
       * dKSq and the sorted waves are marked as outdated.
@@ -371,7 +376,7 @@ namespace Pscf {
       {  return isRealField_; }
 
       /**
-      * Is kSq averaged over the signs of Nyquist indices?
+      * Is kSq of wavevectors with Nyquist indices given by ksqNyquist?
       *
       * True if the lattice system has a variable angle and averaging
       * has not been forbidden (see allowNyquistAverage).
@@ -459,37 +464,74 @@ namespace Pscf {
       DArray<bool> implicitInverse_h_;
 
       /**
-      * Ranks of the wavevectors that have a Nyquist index (device).
+      * Wavevectors that have a Nyquist index, as k-grid positions (host).
       *
       * Allocated, with capacity nNyquist_, only if the lattice system
       * has a variable angle and nNyquist_ > 0.
       */
-      BackendArray<int,CUT> nyquistRanks_d_;
-
-      /**
-      * Wavevectors that have a Nyquist index, as k-grid positions (host).
-      *
-      * Allocated, with capacity nNyquist_, only if the lattice system
-      * has a variable angle and nNyquist_ > 0. Element i corresponds to
-      * rank nyquistRanks_d_[i].
-      */
       DArray< IntVec<D> > nyquistWaves_h_;
 
       /**
-      * Images of the wavevectors with a Nyquist index (host buffer).
+      * Ranks of the wavevectors in nyquistWaves_h_ (host).
       *
-      * Allocated with nyquistRanks_d_, with capacity D*nNyquist_.
-      * Component j of the image of wavevector i is element
-      * i + j*nNyquist_.
+      * Allocated with nyquistWaves_h_.
       */
-      HostSendArray<int,CUT> nyquistImages_h_;
+      DArray<int> nyquistRanks_h_;
 
       /**
-      * Images of the wavevectors with a Nyquist index (device).
+      * Ranks of the wavevectors whose kSq is given by ksqNyquist (host).
       *
-      * Allocated with nyquistRanks_d_, same layout as nyquistImages_h_.
+      * Wavevectors with a Nyquist index for which ksqNyquist averages 
+      * |k|^2 (see usesNyquistAverage), found by
+      * computeMinimumImages; the first nAverage_ elements are used.
+      * Allocated with nyquistWaves_h_, with capacity nNyquist_.
       */
-      BackendArray<int,CUT> nyquistImages_d_;
+      HostSendArray<int,CUT> averageRanks_h_;
+
+      /**
+      * Device copy of averageRanks_h_.
+      */
+      BackendArray<int,CUT> averageRanks_d_;
+
+      /**
+      * Images of the wavevectors in averageRanks_h_ (host).
+      *
+      * Component j of the image of wavevector i is element 
+      * i + j*nNyquist_. Capacity D*nNyquist_.
+      */
+      HostSendArray<int,CUT> averageImages_h_;
+
+      /**
+      * Device copy of averageImages_h_.
+      */
+      BackendArray<int,CUT> averageImages_d_;
+
+      /**
+      * kSq (ksqNyquist) of the wavevectors in averageRanks_h_ (host).
+      *
+      * Capacity nNyquist_.
+      */
+      HostSendArray<cudaReal,CUT> averageKSq_h_;
+
+      /**
+      * Device copy of averageKSq_h_.
+      */
+      BackendArray<cudaReal,CUT> averageKSq_d_;
+
+      /**
+      * dKSq of the wavevectors in averageRanks_h_ (host).
+      *
+      * The derivative of wavevector i with respect to cell parameter n
+      * is element i + n*nNyquist_, including the factor 2 of wavevectors
+      * with an implicit inverse. Capacity nParam*nNyquist_, with nParam
+      * the number of cell parameters.
+      */
+      HostSendArray<cudaReal,CUT> averageDKSq_h_;
+
+      /**
+      * Device copy of averageDKSq_h_.
+      */
+      BackendArray<cudaReal,CUT> averageDKSq_d_;
 
       /**
       * Wavevector ranks, sorted in ascending wavevector magnitude.
@@ -575,8 +617,12 @@ namespace Pscf {
       /// Number of wavevectors with a Nyquist index (variable angles).
       int nNyquist_;
 
+      /// Number of wavevectors whose kSq is given by ksqNyquist.
+      int nAverage_;
+
       /// Average kSq over the signs of Nyquist indices (variable angles)?
       bool averageNyquist_;
+
 
       /// Pointer to associated UnitCell<D> object.
       UnitCell<D> const * unitCellPtr_;

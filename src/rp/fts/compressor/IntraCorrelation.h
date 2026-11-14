@@ -126,10 +126,10 @@ namespace Rp {
       *
       * The values are those of the kSq array of the WaveList, which
       * the MDE solver uses: |k|^2 of the minimum image, or, for a
-      * wavevector with a Nyquist index, its average over the signs of
-      * the Nyquist indices if the WaveList uses this average (see
-      * WaveList::hasNyquistAverage). Results are stored in a private
-      * member variable.
+      * wavevector with a Nyquist index, ksqNyquist (an average over the
+      * signs of the Nyquist indices near orthogonal geometries) if the
+      * WaveList uses it (see WaveList::hasNyquistAverage). Results are
+      * stored in a private member variable.
       */
       void computeGsq();
 

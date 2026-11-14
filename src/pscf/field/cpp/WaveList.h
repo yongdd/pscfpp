@@ -17,6 +17,8 @@
 
 #include <util/global.h>              // inline functions
 
+#include <vector>
+
 // Forward declarations
 namespace Pscf {
    template <int D> class Mesh;
@@ -64,19 +66,21 @@ namespace Pscf {
    *
    * Nyquist planes: for a lattice system with a variable angle, kSq of a
    * wavevector with a Nyquist index (an index d/2 along a direction with
-   * an even number d of grid points) is the average of |k|^2 over the 
-   * images that differ only in the signs of the Nyquist indices (see 
-   * ksqNyquist), and the image stored in minImages() is the one that 
-   * minimizes this average (see shiftToMinimumNyquist). The minimum 
-   * |k|^2 of such a wavevector, used otherwise, switches between these
-   * images where a cell angle passes through 90 degrees, so that kSq and
-   * the free energy would have a kink there. With the average, kSq is 
-   * smooth there, and dKSq is its derivative. For all other wavevectors, 
-   * and for all wavevectors of other lattice systems, kSq is |k|^2 of 
-   * the minimum image. The average is not invariant under 3- or 6-fold
-   * rotations in a hexagonal setting, so that it is not used if it has
-   * been forbidden by allowNyquistAverage(false), as is done for space
-   * groups with such operations (see allowNyquistAverage).
+   * an even number d of grid points) is given by ksqNyquist, and the
+   * image stored in minImages() by shiftToMinimumNyquist. The minimum
+   * |k|^2 of such a wavevector switches between the images that differ
+   * in the sign of a Nyquist index where a cell angle passes through 90
+   * degrees, so that kSq and the free energy would have a kink there.
+   * Near such orthogonal geometries, ksqNyquist is therefore |k|^2
+   * averaged over these signs, which is smooth there, and far from them
+   * (where the average would break the symmetry of, e.g., a hexagonal
+   * cell at 120 degrees) the minimum-image |k|^2, with a smooth
+   * transition between (see ksqNyquist). dKSq is the
+   * derivative of kSq. For all other wavevectors, and for all
+   * wavevectors of other lattice systems, kSq is |k|^2 of the minimum
+   * image. The average is not used at all if it has been forbidden by
+   * allowNyquistAverage(false), as is done for space groups with 3- or
+   * 6-fold rotations in a hexagonal setting (see allowNyquistAverage).
    *
    * \ingroup Pscf_Field_Cpp_Module
    */
@@ -129,20 +133,22 @@ namespace Pscf {
       * Allow or forbid averaging kSq over the signs of Nyquist indices.
       *
       * By default, kSq of a wavevector with a Nyquist index is averaged
-      * over the signs of its Nyquist indices if the lattice system has a
-      * variable angle (see class documentation). This average is
-      * invariant under a crystal symmetry operation only if the rotation
-      * matrix of the operation is a signed permutation, which maps
-      * Nyquist indices onto Nyquist indices. The 3- and 6-fold rotations
-      * of a hexagonal setting, which can be used with a variable-angle
-      * lattice (e.g., rhombic or triclinic) with an angle of 120 degrees,
-      * are not: the average would then give different kSq values to the
-      * waves of one star, so that the solution of the modified diffusion
-      * equation would break the symmetry of the group. The owner of a
-      * space group should therefore forbid averaging for a group with
-      * such operations (see SpaceGroup::isSignedPermutationGroup). kSq
-      * is then the minimum-image |k|^2 for all wavevectors, which is
-      * invariant under every operation of the group.
+      * over the signs of its Nyquist indices near orthogonal geometries
+      * if the lattice system has a variable angle (see class
+      * documentation and ksqNyquist). This average is invariant under a
+      * crystal symmetry operation only if the rotation matrix of the
+      * operation is a signed permutation, which maps Nyquist indices
+      * onto Nyquist indices. The 3- and 6-fold rotations of a hexagonal
+      * setting, which can be used with a variable-angle lattice (e.g.,
+      * rhombic or triclinic) with an angle of 120 degrees, are not: the
+      * average would give different kSq values to the waves of one
+      * star, so that the solution of the modified diffusion equation
+      * would break the symmetry of the group. ksqNyquist does not use
+      * the average at such an angle (see ksqNyquist), but the
+      * owner of a space group with such operations should forbid it 
+      * (see SpaceGroup::isSignedPermutationGroup), so that kSq is the
+      * minimum-image |k|^2 for all wavevectors and all cell parameters,
+      * which is invariant under every operation of the group.
       *
       * If this changes whether kSq is averaged, minimum images, kSq,
       * dKSq and the sorted waves are marked as outdated.
@@ -376,7 +382,7 @@ namespace Pscf {
       {  return isRealField_; }
 
       /**
-      * Is kSq averaged over the signs of Nyquist indices?
+      * Is kSq of wavevectors with Nyquist indices given by ksqNyquist?
       *
       * True if the lattice system has a variable angle and averaging
       * has not been forbidden (see allowNyquistAverage).
@@ -398,6 +404,24 @@ namespace Pscf {
       * Array of minimum images for each wave, indexed by wave rank.
       */
       DArray< IntVec<D> > minImages_;
+
+      /**
+      * Ranks of wavevectors whose kSq is given by ksqNyquist.
+      *
+      * Wavevectors with a Nyquist index for which ksqNyquist averages 
+      * |k|^2 (see usesNyquistAverage), found by
+      * computeMinimumImages if averageNyquist_ is true.
+      */
+      std::vector<int> nyquistRanks_;
+
+      /**
+      * Derivatives of ksqNyquist of the wavevectors in nyquistRanks_.
+      *
+      * Element k*nParam + n is the derivative of wavevector k of 
+      * nyquistRanks_ with respect to cell parameter n (nParam the 
+      * number of cell parameters), computed with the minimum images.
+      */
+      std::vector<double> nyquistDKSq_;
 
       /**
       * Array of square-magnitude values for wavevectors.
@@ -490,6 +514,7 @@ namespace Pscf {
 
       /// Average kSq over the signs of Nyquist indices (variable angles)?
       bool averageNyquist_;
+
 
       /// Pointer to associated UnitCell<D> object
       UnitCell<D> const * unitCellPtr_;

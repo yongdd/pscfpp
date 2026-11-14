@@ -115,11 +115,13 @@ public:
    }
 
    /*
-   * Rhombic cell at 120 degrees on an 8x8 mesh: kSq of the Nyquist wave
-   * (4,1) is the average 17 a*^2 by default, that of its p_6_m_m star
-   * partner (-1,-3) is 13 a*^2. With allowNyquistAverage(false), kSq
-   * and dKSq are the minimum-image values, and the stars of p_6_m_m
-   * have equal kSq; allowing it again restores the average.
+   * Rhombic cell near 90 degrees on an 8x8 mesh: kSq of the Nyquist
+   * wave (4,1) is the average 17 a*^2 by default. With
+   * allowNyquistAverage(false), kSq and dKSq are the minimum-image 
+   * values; allowing it again restores the average. At 120 degrees, 
+   * the average is not used (see ksqNyquist): (4,1) and its 
+   * p_6_m_m star partner (-1,-3) both have kSq 13 a*^2, and the stars 
+   * of p_6_m_m have equal kSq, whether averaging is allowed or not.
    */
    void testAllowNyquistAverage()
    {
@@ -127,7 +129,7 @@ public:
 
       FSArray<double, 6> p;
       p.append(2.0);
-      p.append(2.0*Constants::Pi/3.0);
+      p.append(0.5*Constants::Pi + 0.08);
       UnitCell<2> cell;
       cell.set(UnitCell<2>::Rhombic, p);
       IntVec<2> d(8);
@@ -142,7 +144,7 @@ public:
          averaged[i] = waveList.kSq()[i];
       }
 
-      // Wave (4,1) and its star partner (-1,-3) = (7,5)
+      // Wave (4,1): average over the sign of its Nyquist index
       IntVec<2> a, b;
       a[0] = 4; a[1] = 1;
       b[0] = 7; b[1] = 5;
@@ -150,9 +152,7 @@ public:
       e0[0] = 1;
       double aStarSq = cell.ksq(e0);
       double kSqA = waveList.kSq()[mesh.rank(a)];
-      double kSqB = waveList.kSq()[mesh.rank(b)];
       TEST_ASSERT(std::abs(kSqA - 17.0*aStarSq) < 1.0E-10*kSqA);
-      TEST_ASSERT(std::abs(kSqB - 13.0*aStarSq) < 1.0E-10*kSqB);
 
       // Forbid averaging: minimum-image values
       waveList.allowNyquistAverage(false);
@@ -172,24 +172,7 @@ public:
          }
       }
       kSqA = waveList.kSq()[mesh.rank(a)];
-      kSqB = waveList.kSq()[mesh.rank(b)];
-      TEST_ASSERT(std::abs(kSqA - kSqB) < 1.0E-10*kSqA);
-
-      // Stars of p_6_m_m have equal kSq
-      SpaceGroup<2> group;
-      readGroup("p_6_m_m", group);
-      TEST_ASSERT(!group.isSignedPermutationGroup());
-      Basis<2> basis;
-      basis.makeBasis(mesh, cell, group);
-      for (int is = 0; is < basis.nStar(); ++is) {
-         Basis<2>::Star const & star = basis.star(is);
-         int r0 = mesh.rank(basis.wave(star.beginId).indicesStd);
-         for (int iw = star.beginId; iw < star.endId; ++iw) {
-            int r = mesh.rank(basis.wave(iw).indicesStd);
-            TEST_ASSERT(std::abs(waveList.kSq()[r] - waveList.kSq()[r0])
-                        < 1.0E-10*(1.0 + waveList.kSq()[r0]));
-         }
-      }
+      TEST_ASSERT(kSqA < 17.0*aStarSq*(1.0 - 1.0E-3));
 
       // Allow again: averaged values are restored
       waveList.allowNyquistAverage(true);
@@ -199,16 +182,49 @@ public:
          TEST_ASSERT(waveList.kSq()[i] == averaged[i]);
       }
 
+      // Rhombic cell at 120 degrees, averaging allowed and forbidden
+      p[1] = 2.0*Constants::Pi/3.0;
+      UnitCell<2> hexCell;
+      hexCell.set(UnitCell<2>::Rhombic, p);
+      SpaceGroup<2> group;
+      readGroup("p_6_m_m", group);
+      TEST_ASSERT(!group.isSignedPermutationGroup());
+      Basis<2> basis;
+      basis.makeBasis(mesh, hexCell, group);
+      for (int allow = 1; allow >= 0; --allow) {
+         WaveList<2,CPT> hexList(false);
+         hexList.allocate(mesh, hexCell);
+         hexList.allowNyquistAverage(allow);
+         TEST_ASSERT(hexList.hasNyquistAverage() == (bool) allow);
+         hexList.computeKSq();
+         double hexStarSq = hexCell.ksq(e0);
+         double hexA = hexList.kSq()[mesh.rank(a)];
+         double hexB = hexList.kSq()[mesh.rank(b)];
+         TEST_ASSERT(std::abs(hexA - 13.0*hexStarSq) < 1.0E-10*hexA);
+         TEST_ASSERT(std::abs(hexB - 13.0*hexStarSq) < 1.0E-10*hexB);
+
+         // Stars of p_6_m_m have equal kSq
+         for (int is = 0; is < basis.nStar(); ++is) {
+            Basis<2>::Star const & star = basis.star(is);
+            int r0 = mesh.rank(basis.wave(star.beginId).indicesStd);
+            for (int iw = star.beginId; iw < star.endId; ++iw) {
+               int r = mesh.rank(basis.wave(iw).indicesStd);
+               TEST_ASSERT(std::abs(hexList.kSq()[r] - hexList.kSq()[r0])
+                           < 1.0E-10*(1.0 + hexList.kSq()[r0]));
+            }
+         }
+      }
+
       // A lattice without a variable angle never averages
       UnitCell<2> hex;
       FSArray<double, 6> ph;
       ph.append(2.0);
       hex.set(UnitCell<2>::Hexagonal, ph);
-      WaveList<2,CPT> hexList(true);
-      hexList.allocate(mesh, hex);
-      TEST_ASSERT(!hexList.hasNyquistAverage());
-      hexList.allowNyquistAverage(true);
-      TEST_ASSERT(!hexList.hasNyquistAverage());
+      WaveList<2,CPT> fixedList(true);
+      fixedList.allocate(mesh, hex);
+      TEST_ASSERT(!fixedList.hasNyquistAverage());
+      fixedList.allowNyquistAverage(true);
+      TEST_ASSERT(!fixedList.hasNyquistAverage());
    }
 
 };

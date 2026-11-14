@@ -59,82 +59,56 @@ namespace Pscf {
       }
 
       /*
-      * Mesh dimensions, passed to kernels by value.
-      */
-      struct GridDims
-      {
-         int n[3];
-      };
-
-      /*
-      * Is the wave index u on a Nyquist plane of mesh dimension n?
-      */
-      __device__ inline bool _isNyquist(int u, int n)
-      {
-         if (n % 2 != 0) return false;
-         int r = u % n;
-         if (r < 0) r += n;
-         return (2*r == n);
-      }
-
-      /*
-      * Square magnitude of the wavevector img, averaged over the signs
-      * of its Nyquist indices (see ksqNyquist in shiftToMinimum.h):
-      * |k|^2 of the other components plus |k|^2 of each Nyquist one.
-      */
-      template <int D>
-      __device__ cudaReal _kSqNyquist(int const * img, int const * dims,
-                                      cudaReal const * kBasis)
-      {
-         cudaReal kSq = 0.0;
-         for (int c = 0; c < D; ++c) {
-            cudaReal kVec = 0.0;
-            for (int k = 0; k < D; ++k) {
-               if (!_isNyquist(img[k], dims[k])) {
-                  kVec += kBasis[D*k + c] * img[k];
-               }
-            }
-            kSq += kVec*kVec;
-         }
-         for (int k = 0; k < D; ++k) {
-            if (_isNyquist(img[k], dims[k])) {
-               for (int c = 0; c < D; ++c) {
-                  cudaReal kVec = kBasis[D*k + c] * img[k];
-                  kSq += kVec*kVec;
-               }
-            }
-         }
-         return kSq;
-      }
-
-      /*
-      * Store the images of the wavevectors that have a Nyquist index, 
-      * and set their kSq to the average over the signs of the Nyquist
-      * indices.
+      * Store the images and kSq of wavevectors with a Nyquist index,
+      * computed on the host (see ksqNyquist).
       *
-      * Wavevector i of the list has rank ranks[i], and its image has
-      * components images[i + j*nNyquist], j = 0, ..., D-1.
+      * Wavevector i < n of the list has rank ranks[i], its image has
+      * components images[i + j*stride], j = 0, ..., D-1, and its kSq 
+      * is kSqValues[i].
       */
       template <int D> __global__
       void _setNyquistImages(int* minImages,
                              cudaReal* kSq,
-                             cudaReal const * kBasis,
                              int const * ranks,
                              int const * images,
-                             int const nNyquist,
-                             int const kSize,
-                             GridDims const dims)
+                             cudaReal const * kSqValues,
+                             int const n,
+                             int const stride,
+                             int const kSize)
       {
          int nThreads = blockDim.x * gridDim.x;
          int startID = blockIdx.x * blockDim.x + threadIdx.x;
-         int img[D];
-         for (int i = startID; i < nNyquist; i += nThreads) {
+         for (int i = startID; i < n; i += nThreads) {
             int rank = ranks[i];
             for (int j = 0; j < D; ++j) {
-               img[j] = images[i + j*nNyquist];
-               minImages[rank + j*kSize] = img[j];
+               minImages[rank + j*kSize] = images[i + j*stride];
             }
-            kSq[rank] = _kSqNyquist<D>(img, dims.n, kBasis);
+            kSq[rank] = kSqValues[i];
+         }
+      }
+
+      /*
+      * Store values computed on the host for wavevectors with a Nyquist
+      * index: out[ranks[i] + p*kSize] = values[i + p*stride] for i < n
+      * and p < nSlice (kSq: nSlice = 1; dKSq: nSlice = number of unit 
+      * cell parameters).
+      */
+      __global__
+      void _setNyquistValues(cudaReal* out,
+                             int const * ranks,
+                             cudaReal const * values,
+                             int const n,
+                             int const stride,
+                             int const nSlice,
+                             int const kSize)
+      {
+         int nThreads = blockDim.x * gridDim.x;
+         int startID = blockIdx.x * blockDim.x + threadIdx.x;
+         for (int i = startID; i < n; i += nThreads) {
+            int rank = ranks[i];
+            for (int p = 0; p < nSlice; ++p) {
+               out[rank + p*kSize] = values[i + p*stride];
+            }
          }
       }
 
@@ -549,9 +523,7 @@ namespace Pscf {
                        int const * waveBz,
                        cudaReal const * kBasis,
                        int const nParams, 
-                       int const kSize,
-                       GridDims const dims,
-                       bool const averageNyquist)
+                       int const kSize)
       {
          int nThreads = blockDim.x * gridDim.x;
          int startID = blockIdx.x * blockDim.x + threadIdx.x;
@@ -573,20 +545,6 @@ namespace Pscf {
 
          // Loop through array
          for (i = startID; i < kSize; i += nThreads) {
-
-            // Wavevectors with a Nyquist index, if averaged
-            if (averageNyquist) {
-               int img[D];
-               bool hasNyquist = false;
-               for (j = 0; j < D; ++j) {
-                  img[j] = waveBz[i + (j * kSize)];
-                  if (_isNyquist(img[j], dims.n[j])) hasNyquist = true;
-               }
-               if (hasNyquist) {
-                  kSq[i] = _kSqNyquist<D>(img, dims.n, kBasis_);
-                  continue;
-               }
-            }
 
             // initialize kVec to 0
             for (j = 0; j < D; ++j) {
@@ -626,9 +584,7 @@ namespace Pscf {
                         bool const * implicitInverse,
                         int const nParams, 
                         int const kSize,
-                        bool isRealField,
-                        GridDims const dims,
-                        bool const averageNyquist)
+                        bool isRealField)
       {
          // Size of dKSq is kSize * nParams
          // Each thread does nParams calculations
@@ -654,23 +610,15 @@ namespace Pscf {
                // initialize to 0
                dKSqVal = 0.0;
 
-               // Load waveBz to local memory, find Nyquist indices
-               bool isNyquist[D];
+               // Load waveBz to local memory
                for (j = 0; j < D; ++j) {
                   waveBz_[j] = waveBz[i + (j * kSize)];
-                  isNyquist[j] = averageNyquist
-                                 && _isNyquist(waveBz_[j], dims.n[j]);
                }
 
                // Compute dKSq (in floating point, because the product
-               // of two wave indices can overflow int). Cross terms 
-               // with a Nyquist index are omitted if Nyquist indices are
-               // averaged (derivative of _kSqNyquist).
+               // of two wave indices can overflow int)
                for (j = 0; j < D; ++j) {
                   for (k = 0; k < D; ++k) {
-                     if (j != k && (isNyquist[j] || isNyquist[k])) {
-                        continue;
-                     }
                      dKSqVal += cudaReal(waveBz_[j]) * cudaReal(waveBz_[k])
                                 * dkkBasis_[k + (j * D) + (param * D * D)];
                   } // D
@@ -708,6 +656,7 @@ namespace Pscf {
       isSorted_(false),
       isRealField_(isRealField),
       nNyquist_(0),
+      nAverage_(0),
       averageNyquist_(false),
       unitCellPtr_(nullptr),
       meshPtr_(nullptr)
@@ -812,20 +761,24 @@ namespace Pscf {
          }
          if (nNyquist_ > 0) {
             nyquistWaves_h_.allocate(nNyquist_);
-            HostSendArray<int,CUT> ranks(nNyquist_);
+            nyquistRanks_h_.allocate(nNyquist_);
             int i = 0;
             for (kItr.begin(); !kItr.atEnd(); ++kItr) {
                if (hasNyquistIndex(kItr.position(), meshDimensions)) {
                   nyquistWaves_h_[i] = kItr.position();
-                  ranks[i] = kItr.rank();
+                  nyquistRanks_h_[i] = kItr.rank();
                   ++i;
                }
             }
             UTIL_CHECK(i == nNyquist_);
-            nyquistRanks_d_.allocate(nNyquist_);
-            nyquistRanks_d_ = ranks; // copy to device memory
-            nyquistImages_h_.allocate(D*nNyquist_);
-            nyquistImages_d_.allocate(D*nNyquist_);
+            averageRanks_h_.allocate(nNyquist_);
+            averageRanks_d_.allocate(nNyquist_);
+            averageImages_h_.allocate(D*nNyquist_);
+            averageImages_d_.allocate(D*nNyquist_);
+            averageKSq_h_.allocate(nNyquist_);
+            averageKSq_d_.allocate(nNyquist_);
+            averageDKSq_h_.allocate(nParams*nNyquist_);
+            averageDKSq_d_.allocate(nParams*nNyquist_);
          }
       }
 
@@ -969,29 +922,47 @@ namespace Pscf {
          cudaErrorCheck( cudaGetLastError() );
       }
 
-      // Images and kSq of wavevectors with a Nyquist index, if averaged
+      // Wavevectors with a Nyquist index for which ksqNyquist averages
+      // |k|^2 (see usesNyquistAverage): kSq, image and dKSq
+      // from ksqNyquist on the host, in one evaluation, copied to the
+      // device; dKSq is kept for computedKSq. Otherwise ksqNyquist is
+      // the minimum-image |k|^2 computed by the kernels.
+      nAverage_ = 0;
       if (averageNyquist_ && nNyquist_ > 0) {
          IntVec<D> const & d = mesh().dimensions();
+         int nParams = unitCell().nParameter();
+         double dk[6];
          IntVec<D> image;
          for (int i = 0; i < nNyquist_; ++i) {
-            image = shiftToMinimumNyquist(nyquistWaves_h_[i], d, 
-                                          unitCell());
+            IntVec<D> const & v = nyquistWaves_h_[i];
+            if (!usesNyquistAverage(v, d, unitCell())) continue;
+            int k = nAverage_;
+            int rank = nyquistRanks_h_[i];
+            averageRanks_h_[k] = rank;
+            averageKSq_h_[k] = ksqNyquist(v, d, unitCell(), dk, image);
             for (int j = 0; j < D; ++j) {
-               nyquistImages_h_[i + j*nNyquist_] = image[j];
+               averageImages_h_[k + j*nNyquist_] = image[j];
             }
+            double factor = 1.0;
+            if (isRealField_ && implicitInverse_h_[rank]) factor = 2.0;
+            for (int n = 0; n < nParams; ++n) {
+               averageDKSq_h_[k + n*nNyquist_] = factor*dk[n];
+            }
+            ++nAverage_;
          }
-         nyquistImages_d_ = nyquistImages_h_; // copy to device memory
-         GridDims dims;
-         for (int j = 0; j < 3; ++j) {
-            dims.n[j] = (j < D) ? d[j] : 1;
+         if (nAverage_ > 0) {
+            averageRanks_d_ = averageRanks_h_; // copy to device memory
+            averageImages_d_ = averageImages_h_;
+            averageKSq_d_ = averageKSq_h_;
+            averageDKSq_d_ = averageDKSq_h_;
+            int nBlocksN, nThreadsN;
+            ThreadArray::setThreadsLogical(nAverage_, nBlocksN, nThreadsN);
+            _setNyquistImages<D><<<nBlocksN, nThreadsN>>>
+               (minImages_.cArray(), kSq_.cArray(),
+                averageRanks_d_.cArray(), averageImages_d_.cArray(),
+                averageKSq_d_.cArray(), nAverage_, nNyquist_, kSize_);
+            cudaErrorCheck( cudaGetLastError() );
          }
-         int nBlocksN, nThreadsN;
-         ThreadArray::setThreadsLogical(nNyquist_, nBlocksN, nThreadsN);
-         _setNyquistImages<D><<<nBlocksN, nThreadsN>>>
-            (minImages_.cArray(), kSq_.cArray(), kBasis.cArray(),
-             nyquistRanks_d_.cArray(), nyquistImages_d_.cArray(),
-             nNyquist_, kSize_, dims);
-         cudaErrorCheck( cudaGetLastError() );
       }
 
       hasMinImages_ = true;
@@ -1040,13 +1011,21 @@ namespace Pscf {
       // Launch kernel to calculate kSq on device
       UTIL_CHECK(kSq_.isAllocated());
       UTIL_CHECK(minImages_.isAllocated());
-      GridDims dims;
-      for (int j = 0; j < 3; ++j) {
-         dims.n[j] = (j < D) ? mesh().dimension(j) : 1;
-      }
       _computeKSq<D><<<nBlocks, nThreads>>>
             (kSq_.cArray(), minImages_.cArray(), kBasis.cArray(),
-             unitCell().nParameter(), kSize_, dims, averageNyquist_);
+             unitCell().nParameter(), kSize_);
+      cudaErrorCheck( cudaGetLastError() );
+
+      // Wavevectors with a Nyquist index whose kSq is given by 
+      // ksqNyquist: values from computeMinimumImages (same cell)
+      if (nAverage_ > 0) {
+         int nBlocksN, nThreadsN;
+         ThreadArray::setThreadsLogical(nAverage_, nBlocksN, nThreadsN);
+         _setNyquistValues<<<nBlocksN, nThreadsN>>>
+            (kSq_.cArray(), averageRanks_d_.cArray(), 
+             averageKSq_d_.cArray(), nAverage_, nNyquist_, 1, kSize_);
+         cudaErrorCheck( cudaGetLastError() );
+      }
 
       hasKSq_ = true;
    }
@@ -1102,15 +1081,24 @@ namespace Pscf {
       }
 
       // Launch kernel to calculate dKSq on device
-      GridDims dims;
-      for (int j = 0; j < 3; ++j) {
-         dims.n[j] = (j < D) ? mesh().dimension(j) : 1;
-      }
       size_t sz = sizeof(cudaReal)*dkkBasis.capacity();
       _computedKSq<D><<<nBlocks, nThreads, sz>>>
          (dKSq_.cArray(), minImages_.cArray(), dkkBasis.cArray(),
           implicitInversePtr, unitCell().nParameter(), kSize_,
-          isRealField_, dims, averageNyquist_);
+          isRealField_);
+      cudaErrorCheck( cudaGetLastError() );
+
+      // Wavevectors with a Nyquist index whose kSq is given by 
+      // ksqNyquist: derivatives from computeMinimumImages (same cell)
+      if (nAverage_ > 0) {
+         int nBlocksN, nThreadsN;
+         ThreadArray::setThreadsLogical(nAverage_, nBlocksN, nThreadsN);
+         _setNyquistValues<<<nBlocksN, nThreadsN>>>
+            (dKSq_.cArray(), averageRanks_d_.cArray(), 
+             averageDKSq_d_.cArray(), nAverage_, nNyquist_, 
+             unitCell().nParameter(), kSize_);
+         cudaErrorCheck( cudaGetLastError() );
+      }
 
       hasdKSq_ = true;
    }

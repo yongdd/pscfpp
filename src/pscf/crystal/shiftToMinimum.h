@@ -80,19 +80,99 @@ namespace Pscf {
    bool hasNyquistIndex(IntVec<D> const & v, IntVec<D> const & d);
 
    /**
-   * Square magnitude |k|^2, averaged over the signs of Nyquist indices.
+   * Absolute cosine below which two directions are fully decoupled.
    *
-   * Returns the average of |k|^2 over the images of v obtained by 
-   * reversing the signs of any subset of its Nyquist indices (see
-   * hasNyquistIndex). This treats each Nyquist component symmetrically,
-   * as a standing wave: the cross terms of |k|^2 that contain a Nyquist
-   * index cancel. The result is equal for all these images, and equal 
-   * to UnitCell::ksq(v) if v has no Nyquist index or if the reciprocal 
-   * basis vectors of the Nyquist directions are orthogonal to the others.
+   * See nyquistDecouplingWeight.
+   *
+   * \ingroup Pscf_Crystal_Module
+   */
+   const double NyquistAverageCosineMin = 0.1;
+
+   /**
+   * Absolute cosine above which two directions are fully coupled.
+   *
+   * See nyquistDecouplingWeight.
+   *
+   * \ingroup Pscf_Crystal_Module
+   */
+   const double NyquistAverageCosineMax = 0.25;
+
+   /**
+   * Decoupling weight of two directions for the Nyquist sign average.
+   *
+   * Returns a smooth step function of t = |b_i.b_j|/(|b_i||b_j|), where
+   * b_i are the reciprocal basis vectors: 1 for t <= 
+   * NyquistAverageCosineMin (an angle within about 5.7 degrees of 90
+   * degrees), 0 for t >= NyquistAverageCosineMax (about 14.5 degrees), 
+   * and 1 - x^3 (10 - 15x + 6x^2) in between, with x the fractional 
+   * position of t between these bounds, so that it has continuous first
+   * and second derivatives (see ksqNyquist).
    *
    * \ingroup Pscf_Crystal_Module
    *
-   * \param v  integer indices of a wavevector
+   * \param i  index of a direction (0 <= i < D)
+   * \param j  index of another direction (0 <= j < D, j != i)
+   * \param cell  UnitCell
+   */
+   template <int D>
+   double nyquistDecouplingWeight(int i, int j, UnitCell<D> const & cell);
+
+   /**
+   * Square magnitude |k|^2 of a wavevector with Nyquist indices.
+   *
+   * Reversing the signs of a set F of the Nyquist indices of a 
+   * wavevector v (see hasNyquistIndex) changes |k|^2 only through the 
+   * cross terms 2 v[i] v[j] b_i.b_j with i in F and j not in F, where
+   * b_i are the reciprocal basis vectors. Where all these b_i.b_j with
+   * v[j] != 0 vanish, the images that differ by such a reversal have
+   * equal |k|^2, and where the angles pass through 90 degrees they 
+   * exchange as minimum image, so that the minimum |k|^2 has a kink 
+   * there. Near such geometries, kSq is therefore averaged over these
+   * reversals, which is smooth there, and far from them the minimum
+   * image is used: the average is invariant only under symmetry 
+   * operations that map Nyquist indices onto Nyquist indices (signed
+   * permutations of the basis vectors), and breaks the symmetry of 
+   * cells whose metric has other operations, e.g. of a rhombic cell at
+   * 120 degrees (hexagonal lattice) or a rhombohedral cell at 60 or 
+   * 109.47 degrees (fcc or bcc lattice), whereas the minimum image has
+   * the symmetry of every lattice.
+   *
+   * Precisely: each pair of directions i, j with nonzero indices of v
+   * (modulo d) is coupled with probability 1 - w_ij, where w_ij = 
+   * nyquistDecouplingWeight(i, j, cell), and decoupled otherwise. For
+   * each configuration of coupled pairs, the connected components of
+   * the directions with nonzero indices whose indices are all Nyquist
+   * indices are averaged over their sign, except a component of all 
+   * nonzero indices (whose reversal is the isometry k -> -k): their 
+   * cross terms with the other directions are dropped, |k|^2 of each 
+   * such component is minimized over the shifts of its directions, and
+   * |k|^2 of all other directions (including those with a zero index)
+   * over the shifts of these. This function returns the sum of these 
+   * values weighted by the probabilities of the configurations 
+   * (products of w_ij and 1 - w_ij). Near orthogonal geometries (all 
+   * weights 1), this is the average of |k|^2 over the signs of all 
+   * Nyquist indices (if v has another nonzero index); where the weights
+   * of all pairs of nonzero indices are 0, and for a wavevector with
+   * only one nonzero index, it is the minimum-image |k|^2. The 
+   * result depends only on the class of v (v modulo d), is continuous 
+   * with continuous first and second derivatives where the weights 
+   * change, and is smooth where an angle between directions with 
+   * nonzero indices passes through 90 degrees whatever the other angles
+   * are. For a wavevector v with no Nyquist index, this returns |k|^2 
+   * of its minimum image.
+   *
+   * The cosines of the symmetric geometries named above (1/2 for 
+   * hexagonal and bcc, 1/3 for fcc) lie in the range where the weights
+   * are 0, so that kSq has the symmetry of these cells, as it has for
+   * operations that are signed permutations. A lattice whose symmetry
+   * operations include others that are not signed permutations at 
+   * angles closer to 90 degrees (e.g. a centered rectangular lattice in
+   * a primitive oblique cell with very unequal sides) is not treated
+   * symmetrically by the average.
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param v  integer indices of a wavevector (any image)
    * \param d  dimensions of the discrete Fourier transform grid
    * \param cell  UnitCell
    */
@@ -101,11 +181,69 @@ namespace Pscf {
                      UnitCell<D> const & cell);
 
    /**
-   * Derivative of ksqNyquist with respect to a unit cell parameter.
+   * Does ksqNyquist average |k|^2 for this wavevector?
+   *
+   * Returns true if v has a Nyquist index and some pair of directions
+   * with nonzero indices has a positive decoupling weight, so that some
+   * configuration of coupled pairs with a positive probability may have
+   * an averaged component (see ksqNyquist). If it returns false, 
+   * ksqNyquist is the minimum-image |k|^2.
    *
    * \ingroup Pscf_Crystal_Module
    *
    * \param v  integer indices of a wavevector
+   * \param d  dimensions of the discrete Fourier transform grid
+   * \param cell  UnitCell
+   */
+   template <int D>
+   bool usesNyquistAverage(IntVec<D> const & v, IntVec<D> const & d,
+                           UnitCell<D> const & cell);
+
+   /**
+   * Square magnitude of a wavevector with Nyquist indices, derivatives.
+   *
+   * Returns ksqNyquist(v, d, cell), and sets dksq[n] to its derivative
+   * with respect to unit cell parameter n, for all parameters.
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param v  integer indices of a wavevector (any image)
+   * \param d  dimensions of the discrete Fourier transform grid
+   * \param cell  UnitCell
+   * \param dksq  output, array of cell.nParameter() derivatives
+   */
+   template <int D>
+   double ksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
+                     UnitCell<D> const & cell, double* dksq);
+
+   /**
+   * Square magnitude, derivatives and image of a Nyquist wavevector.
+   *
+   * Returns ksqNyquist(v, d, cell), sets dksq[n] to its derivatives if
+   * dksq is not null, and sets image to shiftToMinimumNyquist(v, d, 
+   * cell), all in one evaluation.
+   *
+   * \pre v has a Nyquist index (see hasNyquistIndex)
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param v  integer indices of a wavevector (any image)
+   * \param d  dimensions of the discrete Fourier transform grid
+   * \param cell  UnitCell
+   * \param dksq  output, array of cell.nParameter() derivatives, or null
+   * \param image  output, the representative image
+   */
+   template <int D>
+   double ksqNyquist(IntVec<D> const & v, IntVec<D> const & d,
+                     UnitCell<D> const & cell, double* dksq,
+                     IntVec<D>& image);
+
+   /**
+   * Derivative of ksqNyquist with respect to a unit cell parameter.
+   *
+   * \ingroup Pscf_Crystal_Module
+   *
+   * \param v  integer indices of a wavevector (any image)
    * \param d  dimensions of the discrete Fourier transform grid
    * \param cell  UnitCell
    * \param n  index of the unit cell parameter
@@ -115,13 +253,16 @@ namespace Pscf {
                       UnitCell<D> const & cell, int n);
 
    /**
-   * Returns the image of a DFT wavevector that minimizes ksqNyquist.
+   * Returns a representative image of a DFT wavevector for ksqNyquist.
    *
    * If v has no Nyquist index, this is shiftToMinimum(v, d, cell). 
-   * Otherwise, the Nyquist indices are set to +d[i]/2, and the other 
-   * indices to the (largest) minimum image of their components in the
-   * lattice of image shifts of their own directions, on which 
-   * ksqNyquist then depends.
+   * Otherwise it is the image of the configuration of coupled pairs of
+   * the largest probability (see ksqNyquist): the minimizing images of
+   * its averaged components (Nyquist indices at +d[i]/2 for a component
+   * of one direction) and of the other directions. Where all weights 
+   * are 1, ksqNyquist is the average of |k|^2 of this image over the 
+   * signs of its Nyquist indices; where ksqNyquist is the minimum-image
+   * |k|^2, it is the (largest) minimum image.
    *
    * \ingroup Pscf_Crystal_Module
    *
@@ -131,7 +272,7 @@ namespace Pscf {
    * \return  integer indices of the image
    */
    template <int D>
-   IntVec<D> shiftToMinimumNyquist(IntVec<D> const & v, 
+   IntVec<D> shiftToMinimumNyquist(IntVec<D> const & v,
                                    IntVec<D> const & d,
                                    UnitCell<D> const & cell);
 

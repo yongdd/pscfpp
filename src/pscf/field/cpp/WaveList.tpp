@@ -156,19 +156,36 @@ namespace Pscf {
       UTIL_CHECK(minImages_.capacity() == kSize_);
 
       IntVec<D> const & d = mesh().dimensions();
+      int const nParam = unitCell().nParameter();
+
+      // Wavevectors with a Nyquist index for which ksqNyquist averages
+      // |k|^2 (see usesNyquistAverage): kSq, image and dKSq
+      // from ksqNyquist, in one evaluation; dKSq is kept for 
+      // computedKSq. Otherwise ksqNyquist is the minimum-image |k|^2, 
+      // and these wavevectors are treated as all others.
+      nyquistRanks_.clear();
+      nyquistDKSq_.clear();
+      double dk[6];
+      IntVec<D> image;
+
       MeshIterator<D> kItr(kMeshDimensions_);
       int rank;
       for (kItr.begin(); !kItr.atEnd(); ++kItr) {
          rank = kItr.rank();
-         if (averageNyquist_ && hasNyquistIndex(kItr.position(), d)) {
-            minImages_[rank] = shiftToMinimumNyquist(kItr.position(), 
-                                                     d, unitCell());
-            kSq_[rank] = ksqNyquist(minImages_[rank], d, unitCell());
-         } else {
-            minImages_[rank] = shiftToMinimum(kItr.position(), 
-                                              d, unitCell());
-            kSq_[rank] = unitCell().ksq(minImages_[rank]);
+         IntVec<D> const & v = kItr.position();
+         if (averageNyquist_ && hasNyquistIndex(v, d)) {
+            if (usesNyquistAverage(v, d, unitCell())) {
+               kSq_[rank] = ksqNyquist(v, d, unitCell(), dk, image);
+               minImages_[rank] = image;
+               nyquistRanks_.push_back(rank);
+               for (int n = 0; n < nParam; ++n) {
+                  nyquistDKSq_.push_back(dk[n]);
+               }
+               continue;
+            }
          }
+         minImages_[rank] = shiftToMinimum(v, d, unitCell());
+         kSq_[rank] = unitCell().ksq(minImages_[rank]);
       }
 
       hasMinImages_ = true;
@@ -196,17 +213,15 @@ namespace Pscf {
       UTIL_CHECK(unitCell().lattice() != UnitCell<D>::Null);
       UTIL_CHECK(unitCell().isInitialized());
 
-      // Compute kSq_
+      // Compute kSq_ (ksqNyquist for the wavevectors in nyquistRanks_)
       IntVec<D> const & d = mesh().dimensions();
-      MeshIterator<D> kItr(kMeshDimensions_);
-      int rank;
-      for (kItr.begin(); !kItr.atEnd(); ++kItr) {
-         rank = kItr.rank();
-         if (averageNyquist_ && hasNyquistIndex(minImages_[rank], d)) {
-            kSq_[rank] = ksqNyquist(minImages_[rank], d, unitCell());
-         } else {
-            kSq_[rank] = unitCell().ksq(minImages_[rank]);
-         }
+      for (int rank = 0; rank < kSize_; ++rank) {
+         kSq_[rank] = unitCell().ksq(minImages_[rank]);
+      }
+      int nNyquist = nyquistRanks_.size();
+      for (int k = 0; k < nNyquist; ++k) {
+         int rank = nyquistRanks_[k];
+         kSq_[rank] = ksqNyquist(minImages_[rank], d, unitCell());
       }
       
       hasKSq_ = true;
@@ -231,18 +246,14 @@ namespace Pscf {
       UTIL_CHECK(unitCell().lattice() != UnitCell<D>::Null);
       UTIL_CHECK(unitCell().isInitialized());
 
-      IntVec<D> const & d = mesh().dimensions();
+      int const nParam = unitCell().nParameter();
       MeshIterator<D> kItr(kMeshDimensions_);
       int i, rank;
-      for (i = 0 ; i < unitCell().nParameter(); ++i) {
+      for (i = 0 ; i < nParam; ++i) {
          RField<D,CPT>& dksq = dKSq_[i];
          for (kItr.begin(); !kItr.atEnd(); ++kItr) {
             rank = kItr.rank();
-            if (averageNyquist_ && hasNyquistIndex(minImages_[rank], d)) {
-               dksq[rank] = dksqNyquist(minImages_[rank], d, unitCell(), i);
-            } else {
-               dksq[rank] = unitCell().dksq(minImages_[rank], i);
-            }
+            dksq[rank] = unitCell().dksq(minImages_[rank], i);
             if (isRealField_) {
                if (implicitInverse_[rank]) {
                   dksq[rank] *= 2.0;
@@ -250,7 +261,23 @@ namespace Pscf {
             }
          }
       }
-      
+
+      // Wavevectors in nyquistRanks_: derivatives of ksqNyquist, from
+      // computeMinimumImages (for the same cell)
+      int nNyquist = nyquistRanks_.size();
+      UTIL_CHECK((int) nyquistDKSq_.size() == nNyquist*nParam);
+      for (int k = 0; k < nNyquist; ++k) {
+         rank = nyquistRanks_[k];
+         for (i = 0; i < nParam; ++i) {
+            dKSq_[i][rank] = nyquistDKSq_[k*nParam + i];
+            if (isRealField_) {
+               if (implicitInverse_[rank]) {
+                  dKSq_[i][rank] *= 2.0;
+               }
+            }
+         }
+      }
+
       hasdKSq_ = true;
    }
 
