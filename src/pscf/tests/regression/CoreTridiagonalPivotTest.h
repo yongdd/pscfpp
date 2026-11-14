@@ -1,5 +1,5 @@
-#ifndef PSCF_TRIDIAGONAL_PIVOT_TEST_H
-#define PSCF_TRIDIAGONAL_PIVOT_TEST_H
+#ifndef PSCF_CORE_TRIDIAGONAL_PIVOT_TEST_H
+#define PSCF_CORE_TRIDIAGONAL_PIVOT_TEST_H
 
 #include <test/UnitTest.h>
 #include <test/UnitTestRunner.h>
@@ -12,7 +12,12 @@
 using namespace Pscf;
 using namespace Util;
 
-class TridiagonalPivotTest : public UnitTest
+/*
+* TridiagonalSolver with partial pivoting: invertible matrices with zero
+* or small elimination pivots, consecutive row swaps, small dimensions,
+* scaling, reuse of a factorization and singular matrices.
+*/
+class CoreTridiagonalPivotTest : public UnitTest
 {
 public:
    void setUp() {}
@@ -119,10 +124,10 @@ public:
    }
 };
 
-TEST_BEGIN(TridiagonalPivotTest)
-TEST_ADD(TridiagonalPivotTest, testZeroAndSmallPivots)
-TEST_ADD(TridiagonalPivotTest, testConsecutiveRowSwaps)
-TEST_ADD(TridiagonalPivotTest, testSmallDimensionsAndScaling)
-TEST_ADD(TridiagonalPivotTest, testSingularFailureAndReuse)
-TEST_END(TridiagonalPivotTest)
+TEST_BEGIN(CoreTridiagonalPivotTest)
+TEST_ADD(CoreTridiagonalPivotTest, testZeroAndSmallPivots)
+TEST_ADD(CoreTridiagonalPivotTest, testConsecutiveRowSwaps)
+TEST_ADD(CoreTridiagonalPivotTest, testSmallDimensionsAndScaling)
+TEST_ADD(CoreTridiagonalPivotTest, testSingularFailureAndReuse)
+TEST_END(CoreTridiagonalPivotTest)
 #endif
