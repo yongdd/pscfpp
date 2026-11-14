@@ -106,6 +106,16 @@ namespace Rp {
       {}
 
       /**
+      * Does this analyzer require the same unit cell for all samples?
+      *
+      * A simulation in which a ramp changes the unit cell is rejected
+      * before it starts if any analyzer returns true. The default
+      * implementation returns false.
+      */
+      virtual bool requiresFixedUnitCell() const
+      {  return false; }
+
+      /**
       * Get the interval value.
       */
       int interval() const;

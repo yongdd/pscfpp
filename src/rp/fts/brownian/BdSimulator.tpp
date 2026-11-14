@@ -155,6 +155,13 @@ namespace Rp {
    {
       UTIL_CHECK((Simulator<D,T>::system().w().hasData()));
 
+      // Reject analyzers that require a fixed unit cell if the ramp
+      // changes the unit cell, before anything is computed.
+      if (isSimulation && Simulator<D,T>::hasRamp()
+          && Simulator<D,T>::ramp().changesUnitCell()) {
+         analyzerManager().checkVariableUnitCell();
+      }
+
       // Eigenanalysis of the projected chi matrix.
       Simulator<D,T>::analyzeChi();
 

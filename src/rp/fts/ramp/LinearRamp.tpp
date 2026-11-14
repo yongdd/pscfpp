@@ -103,6 +103,17 @@ namespace Rp {
    }
 
    template <int D, class T>
+   bool LinearRamp<D,T>::changesUnitCell() const
+   {
+      for (int i = 0; i < nParameter_; ++i) {
+         if (parameters_[i].type() == "cell_param" &&
+             parameters_[i].change() != 0.0)
+         {  return true; }
+      }
+      return false;
+   }
+
+   template <int D, class T>
    void LinearRamp<D,T>::output()
    {
       for (int i = 0; i < nParameter_; ++i) {

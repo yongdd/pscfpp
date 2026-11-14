@@ -80,6 +80,14 @@ namespace Rp {
       */
       void output() override;
 
+      /**
+      * Does this ramp change the unit cell?
+      *
+      * Returns true if any parameter is a cell_param with a nonzero
+      * change.
+      */
+      bool changesUnitCell() const override;
+
    protected:
 
       using RampT = Ramp<D,T>;

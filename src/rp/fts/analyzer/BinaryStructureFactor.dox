@@ -13,11 +13,14 @@ output structure factors for all individual wavevectors.
 
 All sampled configurations in one accumulation must have the same unit cell,
 so that each reported wavevector and spherical average has a fixed physical
-meaning. During trajectory analysis the cell may change before the first
-sample (for example, on frames skipped by the sampling interval). The first
-sample defines the wavevector groups. A cell change at a later sampled frame
-raises an error; analyze fixed-cell ranges separately. A new analysis or
-simulation setup clears the accumulators and may use a different cell.
+meaning. A simulation with a LinearRamp that changes a lattice parameter
+(cell_param) therefore cannot use this analyzer: the SIMULATE command stops
+with an error before the first step. During trajectory analysis the cell may
+change before the first sample (for example, on frames skipped by the
+sampling interval). The first sample defines the wavevector groups. A cell
+change at a later sampled frame raises an error; analyze fixed-cell ranges
+separately. A new analysis or simulation setup clears the accumulators and
+may use a different cell.
 
 \see BinaryStructureFactor (class API)
 

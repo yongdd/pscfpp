@@ -90,6 +90,15 @@ namespace Rp {
       */
       void output();
 
+      /**
+      * Check that no Analyzer requires a fixed unit cell.
+      *
+      * Throws an Exception if the requiresFixedUnitCell() function of
+      * any analyzer returns true. This function is called before a
+      * simulation in which a ramp changes the unit cell.
+      */
+      void checkVariableUnitCell() const;
+
    private:
 
       using AnalyzerT = Analyzer<D,T>;

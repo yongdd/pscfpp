@@ -79,6 +79,24 @@ namespace Rp {
       }
    }
 
+   /*
+   * Check that no analyzer requires a fixed unit cell.
+   */
+   template <int D, class T>
+   void AnalyzerManager<D,T>::checkVariableUnitCell() const
+   {
+      for (int i = 0; i < Base::size(); ++i) {
+         if ((*this)[i].requiresFixedUnitCell()) {
+            std::string message = "Analyzer ";
+            message += (*this)[i].className();
+            message += " requires a fixed unit cell and cannot be used"
+                       " with a ramp that changes the unit cell"
+                       " (cell_param)";
+            UTIL_THROW(message.c_str());
+         }
+      }
+   }
+
 }
 }
 #endif

@@ -101,6 +101,15 @@ namespace Rp {
       */
       void output() override;
 
+      /**
+      * Does this analyzer require a fixed unit cell? (returns true).
+      *
+      * All samples must have the same unit cell, which defines the
+      * wavevectors and wavevector bunches.
+      */
+      bool requiresFixedUnitCell() const override
+      {  return true; }
+
    private:
 
       /// Alias for complex number type

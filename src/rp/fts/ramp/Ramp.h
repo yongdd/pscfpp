@@ -83,6 +83,15 @@ namespace Rp {
       {}
 
       /**
+      * Does this ramp change the unit cell?
+      *
+      * The default implementation returns false. A ramp that can change
+      * unit cell parameters must override it.
+      */
+      virtual bool changesUnitCell() const
+      {  return false; }
+
+      /**
       * Get parent Simulator<D,T> by const reference.
       */
       Simulator<D,T> const & simulator() const;
