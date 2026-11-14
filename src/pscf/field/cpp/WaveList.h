@@ -386,7 +386,9 @@ namespace Pscf {
       *
       * Element k*nParam + n is the derivative of wavevector k of 
       * nyquistRanks_ with respect to cell parameter n (nParam the 
-      * number of cell parameters), computed with the minimum images.
+      * number of cell parameters), computed by computeMinimumImages
+      * for the current cell (see ksqNyquist), without the factor 2 of
+      * wavevectors with an implicit inverse.
       */
       std::vector<double> nyquistDKSq_;
 
@@ -498,7 +500,6 @@ namespace Pscf {
 
       /// Average kSq over the signs of Nyquist indices (variable angles)?
       bool averageNyquist_;
-
 
       /// Pointer to associated UnitCell<D> object
       UnitCell<D> const * unitCellPtr_;

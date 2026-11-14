@@ -88,10 +88,9 @@ namespace Pscf {
       }
 
       /*
-      * Store values computed on the host for wavevectors with a Nyquist
-      * index: out[ranks[i] + p*kSize] = values[i + p*stride] for i < n
-      * and p < nSlice (kSq: nSlice = 1; dKSq: nSlice = number of unit 
-      * cell parameters).
+      * Store derivatives dKSq computed on the host for wavevectors with
+      * a Nyquist index: out[ranks[i] + p*kSize] = values[i + p*stride]
+      * for i < n and p < nSlice (the number of unit cell parameters).
       */
       __global__
       void _setNyquistValues(cudaReal* out,
@@ -1045,6 +1044,12 @@ namespace Pscf {
       UTIL_CHECK(unitCell().isInitialized());
       UTIL_CHECK(isAllocated_);
 
+      // Wavevectors whose kSq is given by ksqNyquist exist only for
+      // lattice systems with a variable angle, for which
+      // clearUnitCellData also clears the minimum images: their kSq is
+      // computed by computeMinimumImages
+      UTIL_CHECK(nAverage_ == 0);
+
       // Get kBasis and store on device
       HostSendArray<cudaReal,CUT> kBasis_h(D*D);
       BackendArray<cudaReal,CUT> kBasis(D*D);
@@ -1068,17 +1073,6 @@ namespace Pscf {
             (kSq_.cArray(), minImages_.cArray(), kBasis.cArray(),
              unitCell().nParameter(), kSize_);
       cudaErrorCheck( cudaGetLastError() );
-
-      // Wavevectors with a Nyquist index whose kSq is given by 
-      // ksqNyquist: values from computeMinimumImages (same cell)
-      if (nAverage_ > 0) {
-         int nBlocksN, nThreadsN;
-         ThreadArray::setThreadsLogical(nAverage_, nBlocksN, nThreadsN);
-         _setNyquistValues<<<nBlocksN, nThreadsN>>>
-            (kSq_.cArray(), averageRanks_d_.cArray(), 
-             averageKSq_d_.cArray(), nAverage_, nNyquist_, 1, kSize_);
-         cudaErrorCheck( cudaGetLastError() );
-      }
 
       hasKSq_ = true;
    }

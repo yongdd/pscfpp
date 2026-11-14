@@ -595,7 +595,6 @@ namespace Pscf {
       /// Average kSq over the signs of Nyquist indices (variable angles)?
       bool averageNyquist_;
 
-
       /// Pointer to associated UnitCell<D> object.
       UnitCell<D> const * unitCellPtr_;
 

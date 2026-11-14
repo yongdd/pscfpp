@@ -210,15 +210,18 @@ namespace Pscf {
       UTIL_CHECK(unitCell().lattice() != UnitCell<D>::Null);
       UTIL_CHECK(unitCell().isInitialized());
 
-      // Compute kSq_ (ksqNyquist for the wavevectors in nyquistRanks_)
-      IntVec<D> const & d = mesh().dimensions();
-      for (int rank = 0; rank < kSize_; ++rank) {
+      // Wavevectors whose kSq is given by ksqNyquist (nyquistRanks_)
+      // exist only for lattice systems with a variable angle, for which
+      // clearUnitCellData also clears the minimum images: their kSq is
+      // computed by computeMinimumImages
+      UTIL_CHECK(nyquistRanks_.empty());
+
+      // Compute kSq_
+      MeshIterator<D> kItr(kMeshDimensions_);
+      int rank;
+      for (kItr.begin(); !kItr.atEnd(); ++kItr) {
+         rank = kItr.rank();
          kSq_[rank] = unitCell().ksq(minImages_[rank]);
-      }
-      int nNyquist = nyquistRanks_.size();
-      for (int k = 0; k < nNyquist; ++k) {
-         int rank = nyquistRanks_[k];
-         kSq_[rank] = ksqNyquist(minImages_[rank], d, unitCell());
       }
       
       hasKSq_ = true;
