@@ -102,6 +102,25 @@ namespace Rp {
       }
    }
 
+   /*
+   * Must the fields be compressed again after a change of parameters?
+   */
+   template <int D, class T>
+   bool LinearRamp<D,T>::needsCompression() const
+   {
+      // The c fields for given w fields, and hence the compression, do
+      // not depend on chi or on the perturbation parameter lambda, nor
+      // do the data that compressors cache (the intramolecular
+      // correlation of the LR compressors).
+      for (int i = 0; i < nParameter_; ++i) {
+         std::string const type = parameters_[i].type();
+         if (type != "chi" && type != "lambda_pert") {
+            return true;
+         }
+      }
+      return false;
+   }
+
    template <int D, class T>
    bool LinearRamp<D,T>::changesUnitCell() const
    {

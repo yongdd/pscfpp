@@ -209,18 +209,24 @@ namespace Rp {
    template <int D, class T>
    void BdSimulator<D,T>::updateState()
    {
-      // The stored c fields, field components, derivatives and
-      // Hamiltonian refer to the old parameter values. Recompute them
-      // as setup() does, so that the next step uses the new forces.
-      Simulator<D,T>::system().compute();
-      Simulator<D,T>::compressor().clearCache();
-      int compress = Simulator<D,T>::compressor().compress();
-      if (compress != 0) {
-         Simulator<D,T>::clearData();
-         Simulator<D,T>::system().clearCFields();
-         UTIL_THROW("Compression failed after a ramp step; simulation cannot continue");
-      }
-      if (!Simulator<D,T>::system().c().hasData()) {
+      // The stored field components, derivatives and Hamiltonian refer
+      // to the old parameter values. Recompute them as setup() does, so
+      // that the next step uses the new forces.
+      if (Simulator<D,T>::ramp().needsCompression()) {
+         // The ramp may have changed the c fields of the current w
+         // fields, or data cached by the compressor: discard the data
+         // and compress (every compressor first solves the MDE).
+         Simulator<D,T>::compressor().clearCache();
+         int compress = Simulator<D,T>::compressor().compress();
+         if (compress != 0) {
+            Simulator<D,T>::clearData();
+            Simulator<D,T>::system().clearCFields();
+            UTIL_THROW("Compression failed after a ramp step; simulation cannot continue");
+         }
+      } else if (!Simulator<D,T>::system().c().hasData()) {
+         // The w fields remain compressed for the new parameters.
+         // After a failed step, which restores w but not c, compute
+         // the c fields of w.
          Simulator<D,T>::system().compute();
       }
       Simulator<D,T>::clearData();
