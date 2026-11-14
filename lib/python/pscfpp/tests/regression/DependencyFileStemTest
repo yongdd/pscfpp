@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Header edits rebuild sources whose basenames contain multiple dots.
+
+Uses the product make rules and dependency commands in temporary source trees.
+The CUDA helper uses NVCC when configured; otherwise g++ processes the tiny
+host-only .cu fixture, exercising .du/.ou dependency naming without a GPU.
+"""
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[5]
+
+
+class DependencyFileStemTest(unittest.TestCase):
+    def run_command(self, args, cwd, expected=(0,)):
+        result = subprocess.run(args, cwd=cwd, text=True, capture_output=True,
+                                timeout=30)
+        self.assertIn(result.returncode, expected,
+                      '\n'.join([str(args), result.stdout, result.stderr]))
+        return result.returncode
+
+    def check(self, cuda):
+        cxx = shutil.which(os.environ.get('CXX', 'g++'))
+        make = shutil.which('make')
+        if not cxx or not make:
+            self.skipTest('A C++ compiler and make are required')
+        nvcc = os.environ.get('NVCC') if cuda else None
+        if nvcc:
+            self.assertIsNotNone(shutil.which(nvcc))
+        compiler = nvcc or cxx
+        compile_options = ' -x c++' if cuda and not nvcc else ''
+        suffix, obj_suffix, dep_suffix = (('.cu', '.ou', '.du') if cuda else
+                                         ('.cpp', '.o', '.d'))
+        driver = 'makeDepCuda' if cuda else 'makeDepCpp'
+        dependency_command = (compiler + compile_options + ' -M' if cuda else
+                              cxx + ' -MM -MF')
+        with tempfile.TemporaryDirectory(prefix='dependency-stem-') as folder:
+            for case_id, stem in enumerate(('Ordinary', 'sub/Ordinary',
+                                             'Part.one', 'sub/Part.one')):
+                with self.subTest(cuda=cuda, source=stem):
+                    case = Path(folder) / str(case_id)
+                    source_root, build_root = case/'src', case/'bld'
+                    source = source_root/(stem + suffix)
+                    header = source.parent/'Value.h'
+                    obj = build_root/(stem + obj_suffix)
+                    dependency = build_root/(stem + dep_suffix)
+                    source.parent.mkdir(parents=True)
+                    build_root.mkdir()
+                    source.write_text('#include "Value.h"\nint main() { return VALUE; }\n')
+                    header.write_text('#define VALUE 1\n')
+                    config = build_root/'config.mk'
+                    config.write_text('# Independent fixture\n')
+                    timestamp = time.time() - 20
+                    for path in (source, header, config):
+                        os.utime(path, (timestamp, timestamp))
+                    makefile = case/'makefile'
+                    makefile.write_text(
+                        f'SRC_DIR := {source_root}\nBLD_DIR := {build_root}\n'
+                        f'CXX := {cxx}\nNVXX := {compiler}{compile_options}\n'
+                        f'MAKEDEP := {sys.executable} {ROOT}/lib/bash/{driver}\n'
+                        f'MAKEDEP_CMD := "-C{dependency_command}"\n'
+                        'MAKEDEP_CUDA := $(MAKEDEP)\n'
+                        'MAKEDEP_CUDA_CMD := $(MAKEDEP_CMD)\n'
+                        f'all: {obj}\n'
+                        f'include {ROOT}/src/pscf/patterns.mk\n'
+                        f'-include {dependency}\n')
+                    command = [make, '--no-print-directory', '-j1',
+                               '-f', str(makefile)]
+                    self.run_command(command + ['all'], build_root)
+                    self.assertTrue(dependency.exists(), str(dependency))
+                    text = dependency.read_text()
+                    self.assertIn(str(obj) + ':', text)
+                    self.assertIn(str(header), text)
+                    program = build_root/'program'
+                    # Like the product CUDA test makefiles, give nvcc a
+                    # conventional .o suffix at link time; it rejects .ou.
+                    link_object = obj.with_suffix('.o') if cuda else obj
+                    if cuda:
+                        shutil.copyfile(obj, link_object)
+                    self.run_command([compiler, str(link_object), '-o', str(program)], build_root)
+                    self.run_command([str(program)], build_root, (1,))
+                    # Deterministic ordering, all in the past: the edited
+                    # header is newer than the object but source/config older.
+                    os.utime(obj, (timestamp+2, timestamp+2))
+                    header.write_text('#define VALUE 2\n')
+                    os.utime(header, (timestamp+4, timestamp+4))
+                    self.run_command(command + ['-q', str(obj)], build_root, (1,))
+                    self.run_command(command + ['all'], build_root)
+                    if cuda:
+                        shutil.copyfile(obj, link_object)
+                    self.run_command([compiler, str(link_object), '-o', str(program)], build_root)
+                    self.run_command([str(program)], build_root, (2,))
+
+    def test_cpp_dependencies(self):
+        self.check(False)
+
+    def test_cuda_dependencies(self):
+        self.check(True)
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
