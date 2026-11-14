@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Replace symmetric chi matrices without restricting their diagonal."""
+import io
+from pathlib import Path
+import tempfile
+import unittest
+
+from pscfpp.param import Composite
+
+
+def interaction(matrix):
+    rows = ''.join('%d %d %.17g\n' % (i, j, matrix[i][j])
+                   for i in range(len(matrix)) for j in range(i+1))
+    return Composite(io.StringIO('chi(\n' + rows + ')\n}\n'),
+                     label='Interaction')
+
+
+class MatrixDiagonalReplacementTest(unittest.TestCase):
+    def test_whole_replacement(self):
+        for expected in ([[3]], [[0, 2], [2, 0]], [[1, 2], [2, 3]],
+                         [[-1, 2], [2, .5]],
+                         [[1, 2, 3], [2, -4, 5], [3, 5, .25]]):
+            with self.subTest(matrix=expected):
+                parsed = interaction(expected)
+                parsed.chi = [list(row) for row in parsed.chi]
+                self.assertEqual(parsed.chi, expected)
+                # Also replace different values of the same dimension.
+                replacement = [[2*x for x in row] for row in expected]
+                parsed.chi = replacement
+                self.assertEqual(parsed.chi, replacement)
+                with tempfile.TemporaryDirectory() as folder:
+                    path = Path(folder) / 'param'
+                    parsed.write(str(path))
+                    self.assertEqual(Composite(str(path)).chi, replacement)
+
+    def test_equivalent_edits_and_symmetry(self):
+        expected = [[-1, 2], [2, .5]]
+        full = interaction([[0, 2], [2, 0]])
+        pair = interaction([[0, 2], [2, 0]])
+        indexed = interaction([[0, 2], [2, 0]])
+        full.chi = expected
+        for i in range(2):
+            pair.chi = [i, i, expected[i][i]]
+            indexed.chi[i][i] = expected[i][i]
+        self.assertEqual(full.chi, pair.chi)
+        self.assertEqual(full.chi, indexed.chi)
+        full.chi[0][1] = 7
+        self.assertEqual(full.chi, [[-1, 7], [7, .5]])
+        self.assertEqual(expected, [[-1, 2], [2, .5]])
+
+    def test_invalid_shape_and_symmetry(self):
+        original = [[1, 2], [2, 3]]
+        parsed = interaction(original)
+        for invalid in ([[1, 2, 3], [2, 3, 4]], [[1, 2], [4, 3]]):
+            with self.assertRaises(Exception):
+                parsed.chi = invalid
+            self.assertEqual(parsed.chi, original)
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
