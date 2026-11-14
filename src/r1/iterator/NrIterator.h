@@ -136,6 +136,21 @@ namespace R1
                            Array<double>& residual);
 
       /**
+      * Solve the MDE for given fields and compute the residual.
+      *
+      * A result that is not representable (a NanException from the
+      * solver) gives a residual with infinite elements, as a NaN did
+      * before, so that the step is rejected.
+      *
+      * \param wFields monomer chemical potential fields (input)
+      * \param cFields monomer concentration fields (output)
+      * \param residual vector of residuals (errors) (output)
+      */
+      void computeTrial(DArray<FieldT> const & wFields,
+                        DArray<FieldT> & cFields,
+                        Array<double>& residual);
+
+      /**
       * Compute and return norm of a residual vector.
       *
       * \param residual vector of residuals (errors) (input)

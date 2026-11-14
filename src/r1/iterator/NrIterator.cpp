@@ -12,6 +12,7 @@
 #include <r1/solvers/Solvent.h>
 #include <pscf/interaction/Interaction.h>
 #include <pscf/chem/Ensemble.h>
+#include <pscf/iterator/NanException.h>
 #include <util/misc/Log.h>
 
 #include <math.h>
@@ -173,8 +174,7 @@ namespace R1
       for (i = 0; i < nm; ++i) {
          for (j = 0; j < nx; ++j) {
             wFieldsNew_[i][j] += delta;
-            system().mixture().compute(wFieldsNew_, cFieldsNew_);
-            computeResidual(wFieldsNew_, cFieldsNew_, residualNew_);
+            computeTrial(wFieldsNew_, cFieldsNew_, residualNew_);
             for (jr = 0; jr < nr; ++jr) {
                jacobian_(jr, jc) =
                     (residualNew_[jr] - residual_[jr])/delta;
@@ -217,6 +217,25 @@ namespace R1
          }
       }
 
+   }
+
+   /*
+   * Solve the MDE for given fields and compute the residual.
+   */
+   void NrIterator::computeTrial(DArray<FieldT> const & wFields,
+                                 DArray<FieldT> & cFields,
+                                 Array<double>& residual)
+   {
+      try {
+         system().mixture().compute(wFields, cFields);
+      } catch (NanException const &) {
+         // The exception has written its message to the log file
+         for (int ir = 0; ir < residual.capacity(); ++ir) {
+            residual[ir] = std::numeric_limits<double>::infinity();
+         }
+         return;
+      }
+      computeResidual(wFields, cFields, residual);
    }
 
    double NrIterator::residualNorm(Array<double> const & residual) const
@@ -297,9 +316,12 @@ namespace R1
       }
 
       // Compute initial residual vector and norm
-      system().mixture().compute(system().wFields(), system().cFields());
-      computeResidual(system().wFields(), system().cFields(), residual_);
+      computeTrial(system().wFields(), system().cFields(), residual_);
       double norm = residualNorm(residual_);
+      if (!std::isfinite(norm)) {
+         Log::file() << "Non-finite initial residual" << std::endl;
+         return 1;
+      }
 
       // Set Jacobian status
       newJacobian_ = false;
@@ -348,8 +370,7 @@ namespace R1
 
          // Try full Newton-Raphson update
          incrementWFields(system().wFields(), dOmega_, wFieldsNew_);
-         system().mixture().compute(wFieldsNew_, cFieldsNew_);
-         computeResidual(wFieldsNew_, cFieldsNew_, residualNew_);
+         computeTrial(wFieldsNew_, cFieldsNew_, residualNew_);
          normNew = residualNorm(residualNew_);
 
          // Decrease increment if necessary
@@ -362,8 +383,7 @@ namespace R1
                dOmega_[k] *= 0.66666666;
             }
             incrementWFields(system().wFields(), dOmega_, wFieldsNew_);
-            system().mixture().compute(wFieldsNew_, cFieldsNew_);
-            computeResidual(wFieldsNew_, cFieldsNew_, residualNew_);
+            computeTrial(wFieldsNew_, cFieldsNew_, residualNew_);
             normNew = residualNorm(residualNew_);
             ++j;
          }
@@ -377,8 +397,7 @@ namespace R1
                dOmega_[k] *= -1.000;
             }
             incrementWFields(system().wFields(), dOmega_, wFieldsNew_);
-            system().mixture().compute(wFieldsNew_, cFieldsNew_);
-            computeResidual(wFieldsNew_, cFieldsNew_, residualNew_);
+            computeTrial(wFieldsNew_, cFieldsNew_, residualNew_);
             normNew = residualNorm(residualNew_);
          }
 

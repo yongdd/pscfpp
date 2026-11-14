@@ -32,7 +32,7 @@ public:
    * fractions, which the Crank-Nicolson solver keeps bounded for large
    * fields. A diverged AM iteration of this system (maxHist 50) blew it
    * up to |xi| ~ 1e8 and stopped with "Converged" and fHelmholtz 3.9e4
-   * (correct 3.78), because the relNorm error |R|/|w| is about 2e-9 for
+   * (correct 3.79), because the relNorm error |R|/|w| is about 2e-9 for
    * A = 1e10. With maxItr = 1, solve() returns 0 only if the error of
    * the given state is below epsilon (1e-7).
    */
@@ -47,7 +47,7 @@ public:
       // The solution itself is converged (ITERATE computes the free
       // energy only after convergence)
       runCommands(sys, "READ_W in/R1/am_lam.w\nITERATE\nFINISH\n");
-      TEST_ASSERT(std::abs(sys.fHelmholtz() - 3.7812266) < 1.0E-6);
+      TEST_ASSERT(std::abs(sys.fHelmholtz() - 3.7910820) < 1.0E-6);
 
       const int nx = sys.domain().nx();
       const double pi = std::acos(-1.0);

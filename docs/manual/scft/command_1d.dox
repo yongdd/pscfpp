@@ -394,19 +394,45 @@ accessible slice may be identified by a integer contour step index
 originates, and increases with increasing distance \f$ s \f$ from that
 vertex.
 
-The MDE for each block is solved in the field of its monomer type minus
-the spatial average \f$ \bar{w}_{i} \f$ of that field. This constant
-shift multiplies each propagator by a known factor, which is removed
+The MDE for each block is solved in the field \f$ w_{i} \f$ of its
+monomer type \f$ i \f$ minus a constant shift
+\f[
+   \hat{w}_{i} = -\frac{1}{N} \ln \langle e^{-N w_{i}} \rangle \; ,
+\f]
+in which \f$ \langle \cdots \rangle \f$ denotes a spatial (volume)
+average over the domain and \f$ N \f$ is the total length of the
+polymer. This is the free energy per monomer of a molecule of that
+polymer held with all its monomers at a single point. It lies between
+the minimum and the spatial average of \f$ w_{i} \f$, and is close to
+the minimum in strong fields and to the average in weak ones. The shift
+multiplies each propagator by a known factor, which is removed
 analytically from the logarithm of the molecular partition function,
 so that concentrations, free energies and chemical potentials are
-those of the unshifted fields, while the propagators of long chains
-remain within the range of floating point numbers. The propagators
-written by the commands described below are those of the shifted
-fields. Within a block of monomer type \f$ i \f$, the propagator of
-the unshifted field is the written one multiplied by
-\f$ \exp(-s \bar{w}_{i}) \f$, where \f$ s \f$ is the contour distance
-from the start of the block, and by the corresponding factors of all
-blocks that precede it along the propagation direction.
+those of the unshifted fields, while the propagators remain within the
+range of floating point numbers. Because the shift follows any constant
+added to all fields, the results do not depend on that constant, and
+because it is close to the field where the molecules are, it keeps the
+error of the Crank-Nicolson contour steps small. If the partition
+function of the shifted propagators is nevertheless smaller than about
+\f$ 10^{-294} \f$ (a long chain in a field that varies strongly over
+distances that the chain cannot follow), the shifts are raised so
+that this partition function is one: first the shift of each block
+separately, until the propagator of that block, started from a uniform
+value, keeps its spatial average, and then the shifts of all blocks of
+that polymer by a common constant; if that result is not representable
+(as for many blocks whose chain is confined to a small part of the
+domain), the shifts of all blocks are instead raised by a common
+constant only. An error is reported if the result is still not
+representable.
+
+The propagators written by the commands described below are those of
+the shifted fields. Within a block of monomer type \f$ i \f$, the
+propagator of the unshifted field is the written one multiplied by
+\f$ \exp(-s \hat{w}_{i}) \f$, where \f$ \hat{w}_{i} \f$ is the shift
+actually applied (including a raise as described above, in which
+case the written propagators have a partition function of one) and \f$ s \f$ is the contour
+distance from the start of the block, and by the corresponding factors
+of all blocks that precede it along the propagation direction.
 
 The pscf_1d programs accept several commands that output propagators
 and propagator slices to one or more files. The names for these commands
@@ -495,10 +521,10 @@ numerical error. Because the propagators are those of the shifted
 fields described above, this average is the molecular partition function
 of the shifted fields, which is equal to the molecular partitition
 function \f$ Q \f$ for a molecule of type \f$ ip \f$ multiplied by
-\f$ \exp(\sum_{b} L_{b} \bar{w}_{b}) \f$, where the sum is taken over
+\f$ \exp(\sum_{b} L_{b} \hat{w}_{b}) \f$, where the sum is taken over
 all blocks of the molecule, \f$ L_{b} \f$ is the length of block
-\f$ b \f$ and \f$ \bar{w}_{b} \f$ is the spatial average of the w field
-of its monomer type.
+\f$ b \f$ and \f$ \hat{w}_{b} \f$ is the field shift of that block
+described above.
 
 \anchor scft_command_1d_writeq_sub
 <b> WRITE_Q </b>:

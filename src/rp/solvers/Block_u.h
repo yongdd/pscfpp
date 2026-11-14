@@ -169,7 +169,7 @@ namespace Rp {
       * This function is called by Polymer<D>::compute.
       *
       * The solver uses the field w - wShift, in which wShift is a
-      * constant (Polymer::compute passes the spatial average of w).
+      * constant (Polymer::compute passes the shift described there).
       * This multiplies each propagator by exp(wShift*s) along the
       * block (thread model) or by exp(wShift) per bead (bead model),
       * which PolymerTmpl::solve removes from ln q. The value is stored

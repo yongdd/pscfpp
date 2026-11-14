@@ -147,6 +147,23 @@ namespace R1
                      double & dWNorm);
      
       /**
+      * Solve the MDE for given fields and compute the increments.
+      *
+      * A result that is not representable (a NanException from the
+      * solver) gives an infinite dWNorm, so that the step is rejected.
+      *
+      * \param wFields  chemical potential fields (input)
+      * \param cFields  monomer concentration fields (output)
+      * \param dW  change of w fields (output)
+      * \param dWNorm scalar residual (output)
+      * \return false if the solver threw a NanException
+      */
+      bool computeTrial(DArray<FieldT> const & wFields,
+                        DArray<FieldT> & cFields,
+                        Array<FieldT> & dW,
+                        double & dWNorm);
+
+      /**
       * Update the chemical potential fields
       *
       * \param wold array of old chemical potential fields (input)

@@ -209,6 +209,8 @@ public:
       check(3, 600.0, 0.0, false, .5);
       check(20, 100.0, 0.0, false, .5);
       check(3, 2000.0, 1000.0, true, .5);
+      // The shifted Q underflows; the shifts are raised until it is one.
+      check(2000, 100.0, 0.0, false, .5);
    }
    void checkBranched()
    {
@@ -223,9 +225,10 @@ public:
    void checkRangeAndRecovery()
    {
       this->openLogFile("out/BeadFieldNormalizationRange.log");
-      for (int mode = 0; mode < 2; ++mode) {
-         // The first case has a shifted Q below the supported range.
-         // The second has finite fields but an unrepresentable log Q.
+      for (int mode = 1; mode < 2; ++mode) {
+         // Finite fields but an unrepresentable log Q. (A shifted Q
+         // below the supported range, 2000 beads in 0|100, is now
+         // computed by raising the shifts; see checkLinear.)
          System<1,T> system;
          std::ostringstream text;
          text << "System{ polymerModel bead Mixture{ nMonomer 2 monomers[ 1 1 ] "

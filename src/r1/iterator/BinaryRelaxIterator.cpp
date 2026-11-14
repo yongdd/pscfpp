@@ -12,9 +12,11 @@
 #include <r1/solvers/Solvent.h>
 #include <pscf/chem/Ensemble.h>
 #include <pscf/interaction/Interaction.h>
+#include <pscf/iterator/NanException.h>
 #include <util/misc/Log.h>
 #include <util/misc/Timer.h>
 #include <math.h>
+#include <limits>
 
 namespace Pscf {
 namespace R1
@@ -148,6 +150,25 @@ namespace R1
 
    }
 
+   /*
+   * Solve the MDE for given fields and compute the increments.
+   */
+   bool BinaryRelaxIterator::computeTrial(DArray<FieldT> const & wFields,
+                                          DArray<FieldT> & cFields,
+                                          Array<FieldT> & dW,
+                                          double & dWNorm)
+   {
+      try {
+         mixture().compute(wFields, cFields);
+      } catch (NanException const &) {
+         // The exception has written its message to the log file
+         dWNorm = std::numeric_limits<double>::infinity();
+         return false;
+      }
+      computeDW(wFields, cFields, dW, dWNorm);
+      return true;
+   }
+
    int BinaryRelaxIterator::solve(bool isContinuation)
    {
       // Start overall timer
@@ -203,8 +224,11 @@ namespace R1
       }
 
       // Compute initial dWNorm.
-      mixture().compute(system().wFields(), system().cFields());
-      computeDW(system().wFields(), system().cFields(), dW_, dWNorm_);
+      if (!computeTrial(system().wFields(), system().cFields(), dW_,
+                        dWNorm_)) {
+         Log::file() << "Non-finite initial residual" << std::endl;
+         return 1;
+      }
 
       // Iterative loop
       int i, j, k;
@@ -235,8 +259,7 @@ namespace R1
 
          // Try full Fd relaxation update
          updateWFields(system().wFields(), dW_, wFieldsNew_);
-         mixture().compute(wFieldsNew_, cFieldsNew_);
-         computeDW(wFieldsNew_, cFieldsNew_, dWNew_, dWNormNew_);
+         computeTrial(wFieldsNew_, cFieldsNew_, dWNew_, dWNormNew_);
 
          // Decrease increment if necessary
          j = 0;
@@ -253,8 +276,7 @@ namespace R1
             computeDW(system().wFields(), system().cFields(),
                       dWNew_, dWNormNew_);
             updateWFields(system().wFields(), dWNew_, wFieldsNew_);
-            mixture().compute(wFieldsNew_, cFieldsNew_);
-            computeDW(wFieldsNew_, cFieldsNew_, dWNew_, dWNormNew_);
+            computeTrial(wFieldsNew_, cFieldsNew_, dWNew_, dWNormNew_);
             ++j;
          }
 

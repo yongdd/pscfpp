@@ -103,8 +103,8 @@ namespace Pscf {
    *
    * Field shift: a Block may solve the MDE in the field w - wShift of
    * its monomer type, where wShift is a constant set by the function
-   * that sets up the solver (usually the spatial average of w). Such
-   * a constant multiplies each propagator q(s) by a known factor,
+   * that sets up the solver (see Polymer::compute of each program).
+   * Such a constant multiplies each propagator q(s) by a known factor,
    * exp(wShift*s) along the block, which PolymerTmpl::solve() removes
    * from ln q analytically. Solving in the shifted field keeps q and
    * the partition function of the solver representable for long

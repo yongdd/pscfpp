@@ -9,6 +9,7 @@
 */
 
 #include <pscf/solvers/PolymerTmpl.h>  // base class template
+#include <pscf/field/RField.h>         // member
 #include <util/containers/FSArray.h>   // member template
 
 #include <pscf/backend/TmplDeclare.h>  // template declaration macros
@@ -18,7 +19,6 @@ namespace Util {
    template <typename T> class DArray;
 }
 namespace Pscf {
-   template <int D, class T> class RField;
    namespace Rp {
       template <int D, class T> class Propagator;
       template <int D, class T> class Block;
@@ -91,17 +91,42 @@ namespace Rp {
       * propagator solutions and block volume fraction fields, while q and
       * phi or mu are set to new values.
       *
-      * Each block solves the MDE in the field of its monomer type minus
-      * the spatial average of that field (see Block::wShift()), so the
-      * stored propagators are those of the shifted fields. Their
-      * partition function is qShifted(); ln q, mu, phi and the block
-      * concentrations do not depend on the shifts.
+      * Each block solves the MDE in the field w of its monomer type
+      * minus a constant shift (see Block::wShift()), so the stored
+      * propagators are those of the shifted fields. Their partition
+      * function is qShifted(); ln q, mu, phi and the block
+      * concentrations do not depend on the shifts. The shift is
+      *
+      *    min(w) - ln < exp(-n (w - min(w))) > / n,
+      *
+      * where < > is a spatial average and n is length() (thread model)
+      * or nBead() (bead model): the free energy per monomer of a whole
+      * molecule held at one point. It lies between the minimum and the
+      * average of w, so that the propagators stay below about the
+      * number of grid points and qShifted() is at most about one. It
+      * follows a constant added to w exactly. If qShifted() is
+      * nevertheless below about 1e-294 (a long chain in a field that
+      * varies strongly on scales it cannot follow), the shifts are
+      * raised so that qShifted() is one. First each block is calibrated
+      * alone: its propagator is solved from a uniform head, and its
+      * shift is raised until the spatial average of the tail is one
+      * (in steps of about 678/l, for a block of length or number of
+      * beads l, while that average is below 1e-294, and then by minus
+      * its logarithm over l). Then all shifts are raised by a common
+      * constant so that qShifted() is one. Raising only the blocks that
+      * need it keeps the propagators of the other blocks bounded. If
+      * that result is not representable (a block whose head in the
+      * polymer is concentrated where the chain sits is raised by up to
+      * the logarithm of the reciprocal occupied volume fraction too
+      * much, which adds up over many junctions), the documented shifts
+      * are instead raised by a common constant only, in the same way.
       * For strong bead fields, concentrations use a pre-field factor to
-      * avoid reciprocal Boltzmann weights. If the mean-shifted partition
-      * function is unrepresentable, minimum shifts are tried instead.
-      * Propagator slices always retain their original, unscaled meaning in
-      * the shifted fields. An exception is thrown if the resulting partition
-      * function still cannot be normalized in floating-point arithmetic.
+      * avoid reciprocal Boltzmann weights. Propagator slices always
+      * retain their unscaled meaning in the shifted fields. A
+      * NanException is thrown if the partition function or the
+      * concentrations are still not representable, except for thread
+      * polymers in fields that are not finite (a shift that is not
+      * finite), which give NaN values as before.
       *
       * The parameter phiTot is only relevant to problems such as thin
       * films in which the material is excluded from part of the unit
@@ -172,6 +197,9 @@ namespace Rp {
 
       /// Number of unit cell parameters
       int nParam_;
+
+      /// Work field for the field shifts (allocated by compute).
+      RField<D,T> wWork_;
 
       // Restrict access to inherited functions
       using PolymerTmplT::solve;

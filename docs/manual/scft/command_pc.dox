@@ -756,19 +756,43 @@ accessible slice may be identified by a integer contour step index
 originates, and increases with increasing distance \f$ s \f$ from that
 vertex.
 
-The MDE for each block is solved in the field of its monomer type minus
-the spatial average \f$ \bar{w}_{i} \f$ of that field. This constant
-shift multiplies each propagator by a known factor, which is removed
-analytically from the logarithm of the molecular partition function,
-so that concentrations, free energies and chemical potentials are
-those of the unshifted fields, while the propagators of long chains
-remain within the range of floating point numbers. The propagators
-written by the commands described below are those of the shifted
-fields. Within a block of monomer type \f$ i \f$, the propagator of
-the unshifted field is the written one multiplied by
-\f$ \exp(-s \bar{w}_{i}) \f$, where \f$ s \f$ is the contour distance
-(or the number of beads) from the start of the block, and by the
-corresponding factors of all blocks that precede it along the
+The MDE for each block is solved in the field \f$ w_{i} \f$ of its
+monomer type \f$ i \f$ minus a constant shift
+\f[
+   \hat{w}_{i} = -\frac{1}{N} \ln \langle e^{-N w_{i}} \rangle \; ,
+\f]
+in which \f$ \langle \cdots \rangle \f$ denotes a spatial average
+over the unit cell and \f$ N \f$ is the total length (thread model)
+or the total number of beads (bead model) of the polymer. This is the
+free energy per monomer of a molecule of that polymer held with all its
+monomers at a single point. It lies between the minimum and the spatial
+average of \f$ w_{i} \f$, and is close to the minimum in strong fields
+and to the average in weak ones. The shift multiplies each propagator by
+a known factor, which is removed analytically from the logarithm of the
+molecular partition function, so that concentrations, free energies and
+chemical potentials are those of the unshifted fields, while the
+propagators remain within the range of floating point numbers: they stay
+below about the number of grid points, and their partition function is
+at most about one. If this partition function is nevertheless smaller
+than about \f$ 10^{-294} \f$ (a long chain in a field that varies
+strongly over distances that the chain cannot follow), the shifts are
+raised so that this partition function is one: first the shift of each
+block separately, until the propagator of that block, started from a
+uniform value, keeps its spatial average, and then the shifts of all
+blocks of that polymer by a common constant; if that result is not
+representable (as for many blocks whose chain is confined to a small
+part of the cell), the shifts of all blocks are instead raised by a
+common constant only. An error is reported if the result is still not
+representable.
+
+The propagators written by the commands described below are those of
+the shifted fields. Within a block of monomer type \f$ i \f$, the
+propagator of the unshifted field is the written one multiplied by
+\f$ \exp(-s \hat{w}_{i}) \f$, where \f$ \hat{w}_{i} \f$ is the shift
+actually applied (including a raise as described above, in which
+case the written propagators have a partition function of one) and \f$ s \f$ is the contour
+distance (or the number of beads) from the start of the block, and by
+the corresponding factors of all blocks that precede it along the
 propagation direction.
 
 The pscf_rp program accepts several commands that output propagators

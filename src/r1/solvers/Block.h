@@ -65,13 +65,13 @@ namespace R1 {
       * Set Crank-Nicholson solver for this block.
       *
       * The solver uses the field w - wShift, in which wShift is a
-      * constant (Polymer::compute passes the spatial average of w).
+      * constant (Polymer::compute passes the shift described there).
       * This multiplies the exact propagator by exp(wShift*s) along the
       * block, which PolymerTmpl::solve removes from ln q. Because the
-      * Crank-Nicholson step is not exact for a constant field, solving
-      * in w minus its average also makes the discretized results
-      * independent of the arbitrary constant of w. The value is stored
-      * and returned by wShift().
+      * Crank-Nicholson step is not exact for a constant field, a shift
+      * that follows a constant added to w also makes the discretized
+      * results independent of the arbitrary constant of w. The value
+      * is stored and returned by wShift().
       *
       * \param w  Chemical potential field (input)
       * \param wShift  constant subtracted from w (default 0)
