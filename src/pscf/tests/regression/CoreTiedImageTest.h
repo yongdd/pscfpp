@@ -117,8 +117,9 @@ public:
    }
 
    /*
-   * Generic cell (no tied images with different derivatives): dKSq is
-   * the derivative of |k|^2 of the stored image, bit for bit.
+   * Generic cell (no tied images with different derivatives, and no
+   * Nyquist average, whose weights vanish far from right angles): dKSq
+   * is the derivative of |k|^2 of the stored image, bit for bit.
    */
    template <int D>
    void checkUnchanged(UnitCell<D> const & cell, IntVec<D> const & d)
@@ -126,7 +127,6 @@ public:
       Mesh<D> mesh(d);
       WaveList<D,CPT> waveList(true);
       waveList.allocate(mesh, cell);
-      waveList.allowNyquistAverage(false);
       waveList.computeMinimumImages();
       waveList.computedKSq();
       DArray<bool> const & implicit = waveList.implicitInverse();

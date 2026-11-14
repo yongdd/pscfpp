@@ -38,9 +38,11 @@ using namespace Pscf;
 * these indices for every variable-angle lattice. These rotations map
 * Nyquist wavevectors onto others, so that waves of one star had
 * different kSq (8x8 mesh: (4,1) and (-1,-3)), and the concentration
-* computed from a symmetric field was not symmetric. For such groups, kSq
-* is now the minimum-image |k|^2. A group whose operations are signed
-* permutations (R_-3_m:R on a rhombohedral lattice) keeps the average.
+* computed from a symmetric field was not symmetric. The average is now
+* used only near right angles (see ksqNyquist), so that kSq is the
+* minimum-image |k|^2 (within rounding) at the metrics of these groups.
+* A group whose operations are signed permutations (R_-3_m:R on a
+* rhombohedral lattice) is also checked.
 */
 class ScftNyquistGroupTest : public LogFileUnitTest
 {
@@ -65,8 +67,9 @@ public:
    * Read a system, set the unit cell, and check kSq and the symmetry
    * of the concentrations computed from a rough symmetric w field.
    *
-   * If average is true, kSq of each wavevector is the average over the
-   * signs of the Nyquist indices; otherwise the minimum-image value.
+   * If average is true, the reference kSq of a wavevector with a
+   * Nyquist index is ksqNyquist; otherwise the reference kSq of every
+   * wavevector is the minimum-image |k|^2.
    */
    template <int D>
    void checkSystem(std::string fname, FSArray<double, 6> const & p,
@@ -180,7 +183,7 @@ public:
 
    /*
    * Rhombohedral lattice with R_-3_m:R (signed permutations): kSq of
-   * Nyquist wavevectors is still averaged, and c is symmetric.
+   * Nyquist wavevectors is ksqNyquist, and c is symmetric.
    */
    void testRhombohedral()
    {

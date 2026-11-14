@@ -123,25 +123,6 @@ namespace Pscf {
    }
 
    /*
-   * Allow or forbid averaging kSq over the signs of Nyquist indices.
-   */
-   template <int D>
-   void WaveList<D,CPT>::allowNyquistAverage(bool allow)
-   {
-      UTIL_CHECK(isAllocated_);
-      bool average = allow && hasVariableAngle<D>(unitCell().lattice());
-      if (average != averageNyquist_) {
-         averageNyquist_ = average;
-         hasMinImages_ = false;
-         hasKSq_ = false;
-         hasdKSq_ = false;
-         isSorted_ = false;
-         sortedBunches_.clear();
-         nBunch_ = 0;
-      }
-   }
-
-   /*
    * Compute minimum image vectors for all wavevectors.
    */
    template <int D>

@@ -73,10 +73,7 @@ namespace Pscf {
    * |k|^2 (see usesNyquistAverage), these images, kSq and dKSq are
    * computed on the host, once per cell, and copied to the device; for
    * all others ksqNyquist is the minimum-image |k|^2, computed by the 
-   * kernels. The average is not used if it has been
-   * forbidden by allowNyquistAverage(false), as is done for space groups
-   * with 3- or 6-fold rotations in a hexagonal setting (see 
-   * allowNyquistAverage).
+   * kernels.
    *
    * Tied images: for a lattice system with a variable angle, dKSq of a
    * wavevector whose minimum image is tied with other images is the
@@ -129,28 +126,6 @@ namespace Pscf {
       * false only if the unit cell type has variable angles.
       */
       void clearUnitCellData();
-
-      /**
-      * Allow or forbid averaging kSq over the signs of Nyquist indices.
-      *
-      * By default, kSq of a wavevector with a Nyquist index is averaged
-      * over the signs of its Nyquist indices near orthogonal geometries
-      * if the lattice system has a variable angle (see ksqNyquist). The
-      * average is invariant only under symmetry operations whose 
-      * rotation matrices are signed permutations; the owner of a space 
-      * group with other operations should therefore forbid it. kSq is 
-      * then the minimum-image |k|^2 for all wavevectors. See 
-      * WaveList<D,CPT>::allowNyquistAverage.
-      *
-      * If this changes whether kSq is averaged, minimum images, kSq,
-      * dKSq and the sorted waves are marked as outdated.
-      *
-      * \pre allocate() must have been called.
-      *
-      * \param allow  allow averaging (used if the lattice has a variable
-      *               angle)?
-      */
-      void allowNyquistAverage(bool allow);
 
       /**
       * Compute minimum images of wavevectors, and also calculate kSq.
@@ -380,15 +355,6 @@ namespace Pscf {
       */
       bool isRealField() const
       {  return isRealField_; }
-
-      /**
-      * Is kSq of wavevectors with Nyquist indices given by ksqNyquist?
-      *
-      * True if the lattice system has a variable angle and averaging
-      * has not been forbidden (see allowNyquistAverage).
-      */
-      bool hasNyquistAverage() const
-      {  return averageNyquist_; }
 
       ///@}
 

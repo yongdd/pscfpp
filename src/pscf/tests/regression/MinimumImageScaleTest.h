@@ -35,7 +35,6 @@ public:
       Mesh<D> mesh(dims);
       WaveList<D,CPT> waves;
       waves.allocate(mesh, scaledCell);
-      waves.allowNyquistAverage(false);
       waves.computeMinimumImages();
       waves.computeKSq();
       TEST_ASSERT(waves.kSq()[0] == 0.0);

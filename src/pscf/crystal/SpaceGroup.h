@@ -91,22 +91,6 @@ namespace Pscf {
       */
       void checkMeshDimensions(IntVec<D> const & dimensions) const;
 
-      /**
-      * Is the rotation matrix of every operation a signed permutation?
-      *
-      * Returns true if the rotation matrix of every symmetry operation
-      * has exactly one nonzero element, equal to +1 or -1, in each row
-      * and each column. Such an operation maps each Bravais basis vector
-      * onto plus or minus a basis vector, and the indices of each
-      * wavevector onto the same indices, permuted and with some signs
-      * reversed. Groups with 3- or 6-fold rotations in a hexagonal
-      * setting (the 2D groups p_3, p_3_m_1, p_3_1_m, p_6 and p_6_m_m,
-      * and the 3D trigonal and hexagonal groups, except the trigonal
-      * groups in a rhombohedral setting, R_...:R) contain other
-      * operations, and this function returns false for them.
-      */
-      bool isSignedPermutationGroup() const;
-
       // Using declarations for some inherited functions
       using SymmetryGroup< SpaceSymmetry <D> >::size;
 

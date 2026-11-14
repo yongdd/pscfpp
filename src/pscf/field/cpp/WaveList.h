@@ -79,9 +79,7 @@ namespace Pscf {
    * transition between (see ksqNyquist). dKSq is the
    * derivative of kSq. For all other wavevectors, and for all
    * wavevectors of other lattice systems, kSq is |k|^2 of the minimum
-   * image. The average is not used at all if it has been forbidden by
-   * allowNyquistAverage(false), as is done for space groups with 3- or
-   * 6-fold rotations in a hexagonal setting (see allowNyquistAverage).
+   * image.
    *
    * Tied images: for a lattice system with a variable angle, dKSq of a 
    * wavevector whose minimum image is tied with other images (which 
@@ -137,37 +135,6 @@ namespace Pscf {
       * false if the unit cell has more than one unit cell parameter.
       */
       void clearUnitCellData();
-
-      /**
-      * Allow or forbid averaging kSq over the signs of Nyquist indices.
-      *
-      * By default, kSq of a wavevector with a Nyquist index is averaged
-      * over the signs of its Nyquist indices near orthogonal geometries
-      * if the lattice system has a variable angle (see class
-      * documentation and ksqNyquist). This average is invariant under a
-      * crystal symmetry operation only if the rotation matrix of the
-      * operation is a signed permutation, which maps Nyquist indices
-      * onto Nyquist indices. The 3- and 6-fold rotations of a hexagonal
-      * setting, which can be used with a variable-angle lattice (e.g.,
-      * rhombic or triclinic) with an angle of 120 degrees, are not: the
-      * average would give different kSq values to the waves of one
-      * star, so that the solution of the modified diffusion equation
-      * would break the symmetry of the group. ksqNyquist does not use
-      * the average at such an angle (see ksqNyquist), but the
-      * owner of a space group with such operations should forbid it 
-      * (see SpaceGroup::isSignedPermutationGroup), so that kSq is the
-      * minimum-image |k|^2 for all wavevectors and all cell parameters,
-      * which is invariant under every operation of the group.
-      *
-      * If this changes whether kSq is averaged, minimum images, kSq,
-      * dKSq and the sorted waves are marked as outdated.
-      *
-      * \pre allocate() must have been called.
-      *
-      * \param allow  allow averaging (used if the lattice has a variable
-      *               angle)?
-      */
-      void allowNyquistAverage(bool allow);
 
       /**
       * Compute minimum images of wavevectors, and also calculates kSq.
@@ -389,15 +356,6 @@ namespace Pscf {
       */
       bool isRealField() const
       {  return isRealField_; }
-
-      /**
-      * Is kSq of wavevectors with Nyquist indices given by ksqNyquist?
-      *
-      * True if the lattice system has a variable angle and averaging
-      * has not been forbidden (see allowNyquistAverage).
-      */
-      bool hasNyquistAverage() const
-      {  return averageNyquist_; }
 
       ///@}
 

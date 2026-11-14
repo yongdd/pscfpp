@@ -118,7 +118,6 @@ namespace Rp {
          // An Exception is thrown if groupName_ string is not recognized
          readGroup(groupName_, *groupPtr_);
          hasGroup_ = true;
-         setNyquistAverage();
       }
 
       isInitialized_ = true;
@@ -178,28 +177,10 @@ namespace Rp {
       if (groupName_ != "") {
          readGroup(groupName_, *groupPtr_);
          hasGroup_ = true;
-         setNyquistAverage();
          basis().makeBasis(mesh_, unitCell_, group());
       }
 
       isInitialized_ = true;
-   }
-
-   /*
-   * Forbid averaging kSq over the signs of Nyquist indices if needed.
-   */
-   template <int D, class T>
-   void Domain<D,T>::setNyquistAverage()
-   {
-      UTIL_CHECK(hasGroup_);
-      UTIL_CHECK(waveList().isAllocated());
-
-      // The average is invariant only under operations whose rotation
-      // matrices are signed permutations (see WaveList). For a group
-      // with other operations (3- or 6-fold rotations in a hexagonal
-      // setting, on a variable-angle lattice at 120 degrees), kSq is
-      // the minimum-image |k|^2, which is invariant under the group.
-      waveList().allowNyquistAverage(group().isSignedPermutationGroup());
    }
 
    /*

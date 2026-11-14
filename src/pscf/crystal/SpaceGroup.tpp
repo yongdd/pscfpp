@@ -149,32 +149,7 @@ namespace Pscf {
             }
          }
       }
-
-   }
-
-   /*
-   * Is the rotation matrix of every operation a signed permutation?
-   */
-   template <int D>
-   bool SpaceGroup<D>::isSignedPermutationGroup() const
-   {
-      int i, j, k, r, nRow, nColumn;
-      for (k = 0; k < size(); ++k) {
-         for (i = 0; i < D; ++i) {
-            nRow = 0;
-            nColumn = 0;
-            for (j = 0; j < D; ++j) {
-               r = (*this)[k].R(i,j);
-               if (r != 0) {
-                  if (r != 1 && r != -1) return false;
-                  ++nRow;
-               }
-               if ((*this)[k].R(j,i) != 0) ++nColumn;
-            }
-            if (nRow != 1 || nColumn != 1) return false;
-         }
-      }
-      return true;
+      
    }
 
    /*
