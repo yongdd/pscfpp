@@ -5,6 +5,9 @@
 * Distributed under the terms of the GNU General Public License.
 */
 
+#include <string>
+#include <iostream>
+
 #include "TridiagonalSolver.h"
 #include <util/global.h>
 #include <algorithm>
@@ -12,14 +15,23 @@
 
 namespace Pscf
 {
-
+  
+   /*
+   * Constructor.
+   */
    TridiagonalSolver::TridiagonalSolver()
     : n_(0), isDecomposed_(false)
    {}
 
+   /*
+   * Destructor.
+   */
    TridiagonalSolver::~TridiagonalSolver()
    {}
 
+   /*
+   * Allocate memory.
+   */
    void TridiagonalSolver::allocate(int n)
    {
       UTIL_CHECK(n > 0);
@@ -35,11 +47,17 @@ namespace Pscf
       n_ = n;
    }
 
-   void TridiagonalSolver::computeLU(const DArray<double>& d,
+   /*
+   * Compute the LU decomposition of a symmetric matrix for later use.
+   */
+   void TridiagonalSolver::computeLU(const DArray<double>& d, 
                                      const DArray<double>& u)
    {  computeLU(d, u, u); }
 
-   void TridiagonalSolver::computeLU(const DArray<double>& d,
+   /*
+   * Compute the LU decomposition of a symmetric matrix for later use.
+   */
+   void TridiagonalSolver::computeLU(const DArray<double>& d, 
                                      const DArray<double>& u,
                                      const DArray<double>& l)
    {
@@ -48,11 +66,13 @@ namespace Pscf
       UTIL_CHECK(d.capacity() >= n_);
       UTIL_CHECK(u.capacity() >= n_-1);
       UTIL_CHECK(l.capacity() >= n_-1);
+
+      // Copy to local arrays
       for (int i = 0; i < n_; ++i) {
          UTIL_CHECK(std::isfinite(d[i]));
          originalD_[i] = d_[i] = d[i];
       }
-      for (int i = 0; i < n_-1; ++i) {
+      for (int i = 0; i < n_ - 1; ++i) {
          UTIL_CHECK(std::isfinite(u[i]));
          UTIL_CHECK(std::isfinite(l[i]));
          originalU_[i] = u_[i] = u[i];
@@ -66,7 +86,8 @@ namespace Pscf
 
    void TridiagonalSolver::gaussElimination()
    {
-      for (int i = 0; i < n_-1; ++i) {
+      // Gauss elimination
+      for (int i = 0; i < n_ - 1; ++i) {
          if (std::abs(d_[i]) >= std::abs(l_[i])) {
             UTIL_CHECK(d_[i] != 0.0);
             double q = l_[i]/d_[i];
@@ -90,8 +111,27 @@ namespace Pscf
          UTIL_CHECK(std::isfinite(d_[i+1]));
       }
       UTIL_CHECK(d_[n_-1] != 0.0);
+
+      #if 0
+      std::cout << "\n";
+      for (int i=0; i < n_; ++i) {
+         std::cout << "  " << d_[i];
+      }
+      std::cout << "\n";
+      for (int i=0; i < n_ - 1; ++i) {
+         std::cout << "  " << u_[i];
+      }
+      std::cout << "\n";
+      for (int i=0; i < n_ - 1; ++i) {
+         std::cout << "  " << l_[i];
+      }
+      std::cout << "\n";
+      #endif
    }
 
+   /*
+   * Compute matrix product Ab = x for x, given known vector b.
+   */
    void TridiagonalSolver::multiply(const DArray<double>& b, DArray<double>& x)
    {
       UTIL_CHECK(isDecomposed_);
@@ -106,6 +146,9 @@ namespace Pscf
       for (int i = 0; i < n_; ++i) x[i] = y_[i];
    }
 
+   /*
+   * Solve Ax = b for x, given known b.
+   */
    void TridiagonalSolver::solve(const DArray<double>& b, DArray<double>& x)
    {
       UTIL_CHECK(isDecomposed_);

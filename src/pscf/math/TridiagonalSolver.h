@@ -85,13 +85,19 @@ namespace Pscf
 
    private:
 
-      // Diagonal and first two upper diagonals of U.
+      // Diagonal elements
       DArray<double> d_;
+
+      // Upper off-diagonal elements (modified by row interchanges)
       DArray<double> u_;
+
+      // Second upper off-diagonal of U (nonzero after row interchanges)
       DArray<double> u2_;
 
-      // Elimination multipliers and adjacent row permutations.
+      // Lower off-diagonal elements (replaced by multipliers)
       DArray<double> l_;
+
+      // Row interchanges: pivot_[i] = i+1 if rows i, i+1 were swapped, else i
       DArray<int> pivot_;
 
       // Original coefficients for multiplication, independent of the LU.
@@ -105,7 +111,8 @@ namespace Pscf
       int n_;
       bool isDecomposed_;
 
-      // Apply Gaussian elimination with adjacent partial pivoting.
+      // Apply Gauss elimination with adjacent partial pivoting to
+      // private arrays d_, u_, u2_, l_, pivot_.
       void gaussElimination();
 
    };
