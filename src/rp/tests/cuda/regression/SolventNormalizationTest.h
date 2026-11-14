@@ -1,7 +1,7 @@
 #ifndef RP_CUT_SOLVENT_NORMALIZATION_TEST_H
 #define RP_CUT_SOLVENT_NORMALIZATION_TEST_H
 
-#include <rp/tests/SolventNormalizationChecks.h>
+#include <rp/tests/cpp/regression/SolventNormalizationChecks.h>
 #include <test/UnitTestRunner.h>
 
 class SolventNormalizationTest

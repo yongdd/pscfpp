@@ -1,7 +1,7 @@
 #ifndef RP_CUT_RAMP_COMPRESSION_FAILURE_TEST_H
 #define RP_CUT_RAMP_COMPRESSION_FAILURE_TEST_H
 
-#include <rp/tests/RampCompressionChecks.h>
+#include <rp/tests/cpp/regression/RampCompressionChecks.h>
 #include <test/UnitTestRunner.h>
 
 class RampCompressionFailureTest

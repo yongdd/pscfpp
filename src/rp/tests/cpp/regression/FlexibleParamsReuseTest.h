@@ -1,6 +1,6 @@
 #ifndef RP_CPT_FLEXIBLE_PARAMS_REUSE_TEST_H
 #define RP_CPT_FLEXIBLE_PARAMS_REUSE_TEST_H
-#include <rp/tests/FlexibleParamsReuseChecks.h>
+#include <rp/tests/cpp/regression/FlexibleParamsReuseChecks.h>
 #include <test/UnitTestRunner.h>
 
 class FlexibleParamsReuseTest

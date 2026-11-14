@@ -5,7 +5,7 @@
 #include <test/UnitTestRunner.h>
 
 #include <rp/system/System.h>
-#include <rp/tests/CompressedInitialState.h>
+#include <rp/tests/cpp/regression/CompressedInitialState.h>
 #include <rp/fts/simulator/Simulator.h>
 #include <rp/fts/brownian/BdSimulator.h>
 #include <rp/fts/montecarlo/McSimulator.h>
