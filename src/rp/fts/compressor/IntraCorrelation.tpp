@@ -22,11 +22,9 @@
 #include <pscf/field/FFT.h>
 #include <pscf/field/RField.h>
 #include <pscf/field/WaveList.h>
-#include <pscf/crystal/shiftToMinimum.h>
-#include <pscf/crystal/UnitCell.h>
+#include <pscf/backend/HostRecvArray.h>
 
 #include <pscf/mesh/Mesh.h>
-#include <pscf/mesh/MeshIterator.h>
 #include <pscf/correlation/Mixture.h>
 #include <pscf/correlation/Polymer.h>
 
@@ -113,8 +111,7 @@ namespace Rp {
    * Constructor.
    */
    template <int D, class T>
-   IntraCorrelation<D,T>::IntraCorrelation(
-                                     System<D,T> const & system)
+   IntraCorrelation<D,T>::IntraCorrelation(System<D,T>& system)
     : systemPtr_(&system),
       correlationMixturePtr_(nullptr),
       kSize_(-1)
@@ -304,26 +301,17 @@ namespace Rp {
       }
       UTIL_CHECK(Gsq_.capacity() == kSize_);
 
-      // Compute Gsq_, equal to kSq of the WaveList used by the MDE
-      // solver: for a wavevector with a Nyquist index, ksqNyquist (an
-      // average over the signs of the Nyquist indices near orthogonal
-      // geometries) if the WaveList uses it (see 
-      // WaveList::allowNyquistAverage), otherwise |k|^2 of the minimum
-      // image.
-      UnitCell<D> const & unitCell = system().domain().unitCell();
-      bool const averageNyquist
-                       = system().domain().waveList().hasNyquistAverage();
-      IntVec<D> G, Gmin;
-      MeshIterator<D> iter;
-      iter.setDimensions(kMeshDimensions_);
-      for (iter.begin(); !iter.atEnd(); ++iter) {
-         G = iter.position();
-         if (averageNyquist && hasNyquistIndex(G, meshDimensions_)) {
-            Gsq_[iter.rank()] = ksqNyquist(G, meshDimensions_, unitCell);
-         } else {
-            Gmin = shiftToMinimum(G, meshDimensions_, unitCell);
-            Gsq_[iter.rank()] = unitCell.ksq(Gmin);
-         }
+      // Copy kSq of the WaveList, which the MDE solver uses. It is
+      // defined on the same k-space mesh (for the DFT of a real field),
+      // with the same ranks.
+      WaveList<D,T>& waveList = systemPtr_->waveList();
+      UTIL_CHECK(waveList.isRealField());
+      UTIL_CHECK(waveList.kSize() == kSize_);
+      UTIL_CHECK(waveList.kMeshDimensions() == kMeshDimensions_);
+      waveList.computeKSq();
+      HostRecvArray<RealT,T> kSq(waveList.kSq());
+      for (int i = 0; i < kSize_; ++i) {
+         Gsq_[i] = kSq[i];
       }
    }
 

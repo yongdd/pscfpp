@@ -11,7 +11,6 @@
 #include <rp/field/WFields.h>
 #include <rp/field/CFields.h>
 
-#include <pscf/correlation/Mixture.h>
 #include <pscf/crystal/shiftToMinimum.h>
 #include <pscf/field/cuda/WaveList.h>
 #include <pscf/field/cuda/FFT.h>
@@ -40,14 +39,11 @@ using namespace Pscf;
 * Intramolecular correlation of the LR compressors at wavevectors with
 * Nyquist indices, in a skewed (triclinic) cell on an even mesh.
 *
-* The WaveList averages kSq of such wavevectors over the signs of their
-* Nyquist indices, and the MDE solver uses this kSq. IntraCorrelation
-* used the minimum-image |k|^2 instead, so that the LR estimate of the
-* Jacobian, vMonomer*omega(k), did not match the response of the solver
-* at these wavevectors. For the bead model, the response of the total
+* The LR estimate of the Jacobian, vMonomer*omega(k), must use the kSq
+* of the WaveList, which the MDE solver uses; IntraCorrelation takes it
+* from the WaveList. For the bead model, the response of the total
 * concentration to a small change of all w fields at one wavevector is
-* exactly -vMonomer*omega(k) (to linear order) with the kSq of the
-* WaveList.
+* exactly -vMonomer*omega(k) (to linear order).
 */
 class FtsLrNyquistTest : public LogFileUnitTest
 {
@@ -124,10 +120,10 @@ public:
    }
 
    /*
-   * Omega of IntraCorrelation equals the correlation for the kSq of
-   * the WaveList at every wavevector, and vMonomer*omega equals the
-   * response of the solver at wavevectors with and without Nyquist
-   * indices.
+   * vMonomer*omega of IntraCorrelation equals the response of the
+   * solver at wavevectors with and without Nyquist indices, including
+   * (0,3,5), whose kSq the WaveList averages over the signs of its
+   * Nyquist indices (by 3.6% above the minimum-image |k|^2).
    */
    void testNyquistOmega()
    {
@@ -141,52 +137,24 @@ public:
       // Omega from IntraCorrelation
       WaveList<3,BT>& waveList = system.waveList();
       IntVec<3> const & kd = waveList.kMeshDimensions();
-      int kSize = waveList.kSize();
       Rp::IntraCorrelation<3,BT> intra(system);
       RField<3,BT> omega;
       omega.allocate(kd);
       intra.computeOmegaTotal(omega);
       HostRecvArray<cudaReal,BT> omegaH(omega);
 
-      // Omega for the kSq of the WaveList
-      waveList.computeKSq();
-      HostRecvArray<cudaReal,BT> kSqH(waveList.kSq());
-      DArray<double> kSq;
-      DArray<double> omegaRef;
-      kSq.allocate(kSize);
-      omegaRef.allocate(kSize);
-      for (int i = 0; i < kSize; ++i) {
-         kSq[i] = kSqH[i];
-      }
-      Correlation::Mixture<double> correlation(system.mixture());
-      correlation.allocate();
-      correlation.setup();
-      correlation.computeOmegaTotal(kSq, omegaRef);
-      double maxError = 0.0;
-      int nNyquist = 0;
-      MeshIterator<3> iter(kd);
-      for (iter.begin(); !iter.atEnd(); ++iter) {
-         int i = iter.rank();
-         if (hasNyquistIndex(iter.position(), d)) ++nNyquist;
-         double error = std::abs(omegaH[i] - omegaRef[i])
-                        / std::abs(omegaRef[i]);
-         maxError = std::max(maxError, error);
-      }
-      Log::file() << "Nyquist waves " << nNyquist
-                  << "  max relative difference of omega "
-                  << maxError << std::endl;
-      TEST_ASSERT(nNyquist > 0);
-      TEST_ASSERT(maxError < 1.0E-10);
-
       // Response of the solver
       double vMonomer = system.mixture().vMonomer();
       Mesh<3> kMesh(kd);
-      int vs[5][3] = {{1, 1, 1}, {4, 1, 2}, {1, 3, 2}, {2, 1, 5},
-                      {4, 3, 1}};
+      int vs[6][3] = {{1, 1, 1}, {4, 1, 2}, {1, 3, 2}, {2, 1, 5},
+                      {4, 3, 1}, {0, 3, 5}};
       double maxResponseError = 0.0;
-      for (int n = 0; n < 5; ++n) {
+      for (int n = 0; n < 6; ++n) {
          IntVec<3> v;
          for (int j = 0; j < 3; ++j) v[j] = vs[n][j];
+         if (n == 5) {
+            TEST_ASSERT(usesNyquistAverage(v, d, system.domain().unitCell()));
+         }
          double r = response(system, v);
          int rank = kMesh.rank(v);
          double lr = vMonomer*omegaH[rank];

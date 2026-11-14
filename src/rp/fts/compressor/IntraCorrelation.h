@@ -45,9 +45,12 @@ namespace Rp {
       /**
       * Constructor.
       *
+      * The system is non-const because computeOmegaTotal updates the
+      * kSq array of its WaveList if needed.
+      *
       * \param system  parent system object
       */
-      IntraCorrelation(System<D,T> const & system);
+      IntraCorrelation(System<D,T>& system);
 
       /**
       * Destructor.
@@ -71,7 +74,7 @@ namespace Rp {
       // Private member variables
 
       /// Pointer to parent system object.
-      System<D,T> const * systemPtr_;
+      System<D,T>* systemPtr_;
 
       /// Pointer to child Correlation::Mixture object.
       Correlation::Mixture<RealT>* correlationMixturePtr_;
@@ -124,12 +127,9 @@ namespace Rp {
       /**
       * Compute array of squared wavevectors.
       *
-      * The values are those of the kSq array of the WaveList, which
-      * the MDE solver uses: |k|^2 of the minimum image, or, for a
-      * wavevector with a Nyquist index, ksqNyquist (an average over the
-      * signs of the Nyquist indices near orthogonal geometries) if the
-      * WaveList uses it (see WaveList::hasNyquistAverage). Results are
-      * stored in a private member variable.
+      * The values are copied from the kSq array of the WaveList of the
+      * system, which the MDE solver uses (computed first if needed).
+      * Results are stored in a private member variable.
       */
       void computeGsq();
 
