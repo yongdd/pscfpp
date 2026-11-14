@@ -46,6 +46,27 @@ public:
       TEST_ASSERT(error != 0);
    }
 
+   void testNrNonfiniteFieldsAndRecovery()
+   {
+      printMethod(TEST_FUNC);
+      openLogFile("out/R1IteratorTestNonfinite.log");
+      System sys;
+      readSystem(sys, "in/R1/planar_nr2.prm");
+      const double infinity = std::numeric_limits<double>::infinity();
+      const double invalid[] = {infinity, -infinity,
+                               std::numeric_limits<double>::quiet_NaN()};
+      for (double value : invalid) {
+         for (int monomer = 0; monomer < 2; ++monomer) {
+            runCommands(sys, "READ_W in/R1/planar.w\nFINISH\n");
+            // Also exercise the canonical gauge reference (last element).
+            sys.wField(monomer)[sys.domain().nx()-1] = value;
+            TEST_ASSERT(sys.iterator().solve() != 0);
+         }
+      }
+      runCommands(sys, "READ_W in/R1/planar.w\nFINISH\n");
+      TEST_ASSERT(sys.iterator().solve() == 0);
+   }
+
    /*
    * BinaryRelaxIterator with a nonzero diagonal chi element.
    */
@@ -115,6 +136,7 @@ public:
 
 TEST_BEGIN(R1IteratorTest)
 TEST_ADD(R1IteratorTest, testNrNan)
+TEST_ADD(R1IteratorTest, testNrNonfiniteFieldsAndRecovery)
 TEST_ADD(R1IteratorTest, testBinaryRelaxDiagonalChi)
 TEST_ADD(R1IteratorTest, testBinaryRelaxLambda)
 TEST_END(R1IteratorTest)
