@@ -115,7 +115,7 @@ namespace Pscf
          // 17 significant digits, so that a length read back is the
          // same double (a length one ulp below a rounding tie of the
          // contour step rule would otherwise get another step count)
-         out.setf(std::ios::scientific);
+         out.setf(std::ios::scientific, std::ios::floatfield);
          out.width(24);
          out.precision(16);
          out << block.length_;
