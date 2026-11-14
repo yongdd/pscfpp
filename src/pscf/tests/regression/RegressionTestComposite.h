@@ -78,6 +78,7 @@
 #endif
 
 #include "EdgeArchiveStateTest.h"
+#include "MonomerArchiveTest.h"
 
 #include "UnitCellArchiveStateTest.h"
 
@@ -139,6 +140,7 @@ TEST_COMPOSITE_ADD_UNIT(GpuComplexExpAliasTest);
 TEST_COMPOSITE_ADD_UNIT(GpuThreadMeshDimensionTest);
 #endif
 TEST_COMPOSITE_ADD_UNIT(EdgeArchiveStateTest);
+TEST_COMPOSITE_ADD_UNIT(MonomerArchiveTest);
 TEST_COMPOSITE_ADD_UNIT(UnitCellArchiveStateTest);
 TEST_COMPOSITE_ADD_UNIT(FieldArchiveRoundTripTest);
 TEST_COMPOSITE_END
