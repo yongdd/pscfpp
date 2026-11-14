@@ -20,6 +20,7 @@
 #include <util/format/Int.h>
 #include <cmath>
 #include <util/format/Dbl.h>
+#include <util/misc/Log.h>
 
 #include <string>
 
@@ -90,11 +91,46 @@ namespace R1
 
       if (mode == 0) {
 
+         // Spatial average volume fractions of the SCFT solution. That
+         // of an open species is computed from the fields, so in a
+         // mixed or grand-canonical ensemble the total is the spatial
+         // average of the total concentration, which is 1 only within
+         // the SCFT error tolerance. The homogeneous reference system
+         // is incompressible: rescale the fractions to a sum of 1.
+         // This keeps absent species (phi = 0) at 0, keeps the relative
+         // precision of dilute species, and does not depend on the
+         // order of the species. (Closed fractions add up to 1 already.)
+         double sum = 0.0;
          for (int i = 0; i < np; ++i) {
             p_[i] = mixture().polymer(i).phi();
+            sum += p_[i];
          }
          for (int i = 0; i < ns; ++i) {
             p_[i + np] = mixture().solvent(i).phi();
+            sum += p_[i + np];
+         }
+         Log::file() << "Sum of species volume fractions = "
+                     << Dbl(sum, 20, 13) << std::endl;
+         if (!(sum > 0.0) || !std::isfinite(sum)) {
+            UTIL_THROW("Species volume fractions of the SCFT solution "
+                       "do not have a positive finite sum");
+         }
+         // A converged solution gives |sum - 1| up to about the iterator
+         // tolerance, below 1e-6 for the tolerances of the examples
+         // (1e-7 to 1e-9). Above 1e-6 (e.g., a loosely converged
+         // solution, or COMPUTE without ITERATE), warn that the
+         // reference composition differs from the averages. This is
+         // not an error: like the other outputs, the comparison does
+         // not require a converged solution.
+         if (std::abs(sum - 1.0) > 1.0E-6) {
+            Log::file() << "Warning: Species volume fractions do not "
+                        << "add up to 1 (SCFT solution not converged?).\n"
+                        << "The homogeneous reference system (mode 0) "
+                        << "uses them rescaled to a sum of 1."
+                        << std::endl;
+         }
+         for (int i = 0; i < nt; ++i) {
+            p_[i] /= sum;
          }
          fhMixture().setComposition(p_);
          double xi = 0.0;

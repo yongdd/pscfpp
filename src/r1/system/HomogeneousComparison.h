@@ -58,6 +58,12 @@ namespace R1 {
       *    - mode = 0   : homogeneous system with same phi's
       *    - mode = 1,2 : homogeneous system with same mu's
       *
+      * In mode 0, the spatial average species volume fractions are
+      * rescaled to a sum of exactly 1: in an open or mixed ensemble,
+      * they add up to 1 only within the SCFT error tolerance. Their
+      * sum is written to the log file, with a warning if it differs
+      * from 1 by more than 1e-6.
+      *
       * The difference between mode indices 1 and 2 is the 
       * initial guess used in the iterative computation of
       * the composition of the homogeneous reference system:

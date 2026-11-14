@@ -18,7 +18,12 @@ system of interest is compared:
   - In mode 0 (i.e., when mode == 0), the pscf_1d program considers a
     homogeneous reference system with the same overall (i.e., spatial
     average) volume fraction for each molecular species as that of the
-    actual system.
+    actual system. If any species is treated in a grand-canonical
+    ensemble, these averages add up to 1 only within the error
+    tolerance of the SCFT solution, and they are rescaled to add up
+    to exactly 1. The sum is written to the log (standard output),
+    with a warning if it differs from 1 by more than 1e-6, e.g., for
+    a solution that is not converged.
 
   - In modes 1 and 2, the program uses a homogeneous reference system in
     which the chemical potentials for all species are equal to those of
