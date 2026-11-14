@@ -22,6 +22,7 @@
 #include "R1AmRelNormTest.h"
 #include "R1CommandStatusTest.h"
 #include "R1SweepCellParamTest.h"
+#include "R1HomogeneousEnsembleTest.h"
 
 #include "FieldReadTransactionTest.h"
 
@@ -52,6 +53,7 @@ TEST_COMPOSITE_ADD_UNIT(R1ContourStepTest);
 TEST_COMPOSITE_ADD_UNIT(R1AmRelNormTest);
 TEST_COMPOSITE_ADD_UNIT(R1CommandStatusTest);
 TEST_COMPOSITE_ADD_UNIT(R1SweepCellParamTest);
+TEST_COMPOSITE_ADD_UNIT(R1HomogeneousEnsembleTest);
 TEST_COMPOSITE_ADD_UNIT(FieldReadTransactionTest);
 TEST_COMPOSITE_ADD_UNIT(DerivedOutputValidityTest);
 TEST_COMPOSITE_ADD_UNIT(MeshTransformBoundsTest);
